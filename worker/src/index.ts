@@ -61,6 +61,15 @@ function jsonError(message: string, status: number): Response {
   });
 }
 
+/** Decode path segment; use raw if invalid (avoids double-encoding and malformed %). */
+function safeDecode(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     // CORS preflight
@@ -105,9 +114,11 @@ export default {
     const path = url.pathname;
 
     // Route: GET /api/account/{gameName}/{tagLine}
+    // Path segments are already encoded (e.g. "John%20Doe"); decode then re-encode so names with spaces work.
     const accountMatch = path.match(/^\/api\/account\/([^/]+)\/([^/]+)$/);
     if (accountMatch) {
-      const [, gameName, tagLine] = accountMatch;
+      const gameName = safeDecode(accountMatch[1]);
+      const tagLine = safeDecode(accountMatch[2]);
       return proxyToRiot(
         `/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`,
         env.RIOT_API_KEY,
@@ -118,7 +129,7 @@ export default {
     // Route: GET /api/matches/{puuid}?count=10&type=ranked&start=0
     const matchesMatch = path.match(/^\/api\/matches\/([^/]+)$/);
     if (matchesMatch) {
-      const [, puuid] = matchesMatch;
+      const puuid = safeDecode(matchesMatch[1]);
       const count = url.searchParams.get("count") ?? "10";
       const start = url.searchParams.get("start") ?? "0";
       const type = url.searchParams.get("type") ?? "ranked";
@@ -132,7 +143,7 @@ export default {
     // Route: GET /api/match/{matchId}/timeline
     const timelineMatch = path.match(/^\/api\/match\/([^/]+)\/timeline$/);
     if (timelineMatch) {
-      const [, matchId] = timelineMatch;
+      const matchId = safeDecode(timelineMatch[1]);
       return proxyToRiot(
         `/lol/match/v5/matches/${encodeURIComponent(matchId)}/timeline`,
         env.RIOT_API_KEY,
@@ -143,7 +154,7 @@ export default {
     // Route: GET /api/match/{matchId}
     const matchDetailMatch = path.match(/^\/api\/match\/([^/]+)$/);
     if (matchDetailMatch) {
-      const [, matchId] = matchDetailMatch;
+      const matchId = safeDecode(matchDetailMatch[1]);
       return proxyToRiot(
         `/lol/match/v5/matches/${encodeURIComponent(matchId)}`,
         env.RIOT_API_KEY,
