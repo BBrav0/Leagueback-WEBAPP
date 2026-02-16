@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis, ReferenceArea, PieChart, Pie, Cell } from "recharts"
 import {
   ChartContainer,
@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { BackendBridge, MatchSummary } from "@/lib/bridge"
 import { cn } from "@/lib/utils"
+import { rateLimiter } from "@/lib/rate-limiter"
 
 
 const chartConfig = {
@@ -239,10 +240,15 @@ export default function Component() {
     return counts;
   });
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [gameName, setGameName] = useState("");
   const [tagLine, setTagLine] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
+  const [currentPuuid, setCurrentPuuid] = useState<string | null>(null);
+  const [hasMoreMatches, setHasMoreMatches] = useState(false);
+  const [matchesStart, setMatchesStart] = useState(0);
+  const [rateLimitStatus, setRateLimitStatus] = useState<{ remaining: number; resetAt: number } | null>(null);
 
   const handleSearch = async () => {
     if (!gameName || !tagLine) {
@@ -250,12 +256,35 @@ export default function Component() {
       return;
     }
 
+    // Check rate limit before starting
+    const rateLimitCheck = rateLimiter.getStatus();
+    if (!rateLimitCheck.allowed) {
+      setError(`Rate limit exceeded. Please wait ${rateLimitCheck.retryAfter} seconds.`);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setHasSearched(true);
+    setMatchesStart(0);
+    setHasMoreMatches(false);
 
     try {
-      const matches = await BackendBridge.getPlayerMatchData(gameName, tagLine, 10);
+      // Get account first to get puuid
+      const account = await BackendBridge.getAccount(gameName, tagLine);
+      if (!account) {
+        throw new Error("Failed to get account information");
+      }
+
+      setCurrentPuuid(account.puuid);
+
+      // Load initial batch of 5 matches
+      const result = await BackendBridge.getPlayerMatchDataBatch(
+        account.puuid,
+        0,
+        5,
+        1500
+      );
 
       const counts: ImpactCounts = {
         impactWins: 0,
@@ -266,7 +295,7 @@ export default function Component() {
 
       const impactCache = loadImpactCache();
 
-      matches.forEach((m) => {
+      result.matches.forEach((m) => {
         const category = classifyMatch(m);
         counts[category]++;
         if (!impactCache[m.id]) {
@@ -288,15 +317,83 @@ export default function Component() {
 
       setLifetimeCounts(newLifetime);
       setImpactCounts(counts);
-      setMatchesData(matches);
-      if (matches.length === 0) {
+      setMatchesData(result.matches);
+      setHasMoreMatches(result.hasMore);
+      setMatchesStart(result.nextStart);
+      setRateLimitStatus({ remaining: rateLimiter.getStatus().remaining, resetAt: rateLimiter.getStatus().resetAt });
+
+      if (result.matches.length === 0) {
         setError("No matches found for this player");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch match data");
       setMatchesData([]);
+      setCurrentPuuid(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLoadMore = async () => {
+    if (!currentPuuid || loadingMore) return;
+
+    // Check rate limit
+    const rateLimitCheck = rateLimiter.checkRateLimit();
+    if (!rateLimitCheck.allowed) {
+      setError(`Rate limit exceeded. Please wait ${rateLimitCheck.retryAfter} seconds.`);
+      return;
+    }
+
+    setLoadingMore(true);
+    setError(null);
+
+    try {
+      const result = await BackendBridge.getPlayerMatchDataBatch(
+        currentPuuid,
+        matchesStart,
+        5,
+        1500
+      );
+
+      if (result.matches.length === 0) {
+        setHasMoreMatches(false);
+        setLoadingMore(false);
+        return;
+      }
+
+      const impactCache = loadImpactCache();
+      const newCounts: ImpactCounts = { ...impactCounts };
+
+      result.matches.forEach((m) => {
+        const category = classifyMatch(m);
+        newCounts[category]++;
+        if (!impactCache[m.id]) {
+          impactCache[m.id] = category;
+        }
+      });
+
+      saveImpactCache(impactCache);
+
+      const newLifetime: ImpactCounts = {
+        impactWins: 0,
+        impactLosses: 0,
+        guaranteedWins: 0,
+        guaranteedLosses: 0,
+      };
+      Object.values(impactCache).forEach((cat) => {
+        newLifetime[cat]++;
+      });
+
+      setLifetimeCounts(newLifetime);
+      setImpactCounts(newCounts);
+      setMatchesData((prev) => [...prev, ...result.matches]);
+      setHasMoreMatches(result.hasMore);
+      setMatchesStart(result.nextStart);
+      setRateLimitStatus({ remaining: rateLimiter.getStatus().remaining, resetAt: rateLimiter.getStatus().resetAt });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load more matches");
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -305,6 +402,24 @@ export default function Component() {
       handleSearch();
     }
   };
+
+  // Update rate limit status periodically
+  useEffect(() => {
+    if (!hasSearched) return;
+
+    const updateRateLimitStatus = () => {
+      const status = rateLimiter.getStatus();
+      setRateLimitStatus({ remaining: status.remaining, resetAt: status.resetAt });
+    };
+
+    // Update immediately
+    updateRateLimitStatus();
+
+    // Update every second
+    const interval = setInterval(updateRateLimitStatus, 1000);
+
+    return () => clearInterval(interval);
+  }, [hasSearched]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-950 via-purple-900 to-blue-900 p-6">
@@ -318,10 +433,29 @@ export default function Component() {
         {/* Search Form */}
         <Card className="bg-slate-800/50 border-slate-600/50">
           <CardHeader>
-            <CardTitle className="text-white">Enter Summoner Information</CardTitle>
-            <CardDescription className="text-slate-300">
-              Enter your Riot ID to analyze your recent ranked matches
-            </CardDescription>
+            <div className="flex justify-between items-start">
+              <div>
+                <CardTitle className="text-white">Enter Summoner Information</CardTitle>
+                <CardDescription className="text-slate-300">
+                  Enter your Riot ID to analyze your recent ranked matches
+                </CardDescription>
+              </div>
+              {rateLimitStatus && (
+                <div className="text-right">
+                  <div className={cn(
+                    "text-sm font-medium",
+                    rateLimitStatus.remaining < 10 ? "text-yellow-400" : "text-slate-400"
+                  )}>
+                    {rateLimitStatus.remaining} requests left
+                  </div>
+                  {rateLimitStatus.remaining < 10 && (
+                    <div className="text-xs text-slate-500 mt-1">
+                      Resets in {Math.ceil((rateLimitStatus.resetAt - Date.now()) / 1000)}s
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="flex gap-4 items-end">
@@ -423,6 +557,29 @@ export default function Component() {
                   </CardContent>
                 </Card>
               ))}
+              
+              {/* Load More Button */}
+              {hasMoreMatches && (
+                <div className="flex flex-col items-center gap-4 pt-4">
+                  {rateLimitStatus && rateLimitStatus.remaining < 10 && (
+                    <Alert className="bg-yellow-900/50 border-yellow-600 max-w-md">
+                      <AlertDescription className="text-yellow-200 text-sm">
+                        Rate limit warning: {rateLimitStatus.remaining} requests remaining
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  <Button
+                    onClick={handleLoadMore}
+                    disabled={loadingMore || !hasMoreMatches}
+                    className="px-8"
+                  >
+                    {loadingMore ? "Loading more matches..." : "Load More Matches"}
+                  </Button>
+                  {loadingMore && (
+                    <div className="text-slate-300 text-sm">Processing matches, please wait...</div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Right side sticky stats */}

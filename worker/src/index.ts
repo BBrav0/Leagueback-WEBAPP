@@ -15,20 +15,29 @@ const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 60; // requests per window
 const RATE_WINDOW_MS = 60_000; // 1 minute
 
-function isRateLimited(ip: string): boolean {
+function getRateLimitStatus(ip: string): { limited: boolean; remaining: number; resetAt: number } {
   const now = Date.now();
   const entry = rateLimitMap.get(ip);
 
   if (!entry || now > entry.resetAt) {
     rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
-    return false;
+    return { limited: false, remaining: RATE_LIMIT - 1, resetAt: now + RATE_WINDOW_MS };
   }
 
   entry.count++;
-  return entry.count > RATE_LIMIT;
+  const remaining = Math.max(0, RATE_LIMIT - entry.count);
+  return { 
+    limited: entry.count > RATE_LIMIT, 
+    remaining, 
+    resetAt: entry.resetAt 
+  };
 }
 
-async function proxyToRiot(riotPath: string, apiKey: string): Promise<Response> {
+async function proxyToRiot(
+  riotPath: string, 
+  apiKey: string, 
+  rateLimitHeaders?: Record<string, string>
+): Promise<Response> {
   const riotUrl = `${RIOT_BASE_URL}${riotPath}`;
   const riotRes = await fetch(riotUrl, {
     headers: { "X-Riot-Token": apiKey },
@@ -39,6 +48,7 @@ async function proxyToRiot(riotPath: string, apiKey: string): Promise<Response> 
     status: riotRes.status,
     headers: {
       ...CORS_HEADERS,
+      ...rateLimitHeaders,
       "Content-Type": riotRes.headers.get("Content-Type") ?? "application/json",
     },
   });
@@ -64,8 +74,27 @@ export default {
 
     // Rate limiting
     const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
-    if (isRateLimited(ip)) {
-      return jsonError("Rate limit exceeded. Try again later.", 429);
+    const rateLimitStatus = getRateLimitStatus(ip);
+    
+    const rateLimitHeaders = {
+      "X-RateLimit-Limit": RATE_LIMIT.toString(),
+      "X-RateLimit-Remaining": rateLimitStatus.remaining.toString(),
+      "X-RateLimit-Reset": Math.ceil(rateLimitStatus.resetAt / 1000).toString(),
+    };
+    
+    if (rateLimitStatus.limited) {
+      return new Response(
+        JSON.stringify({ error: "Rate limit exceeded. Try again later." }),
+        {
+          status: 429,
+          headers: {
+            ...CORS_HEADERS,
+            ...rateLimitHeaders,
+            "Content-Type": "application/json",
+            "Retry-After": Math.ceil((rateLimitStatus.resetAt - Date.now()) / 1000).toString(),
+          },
+        }
+      );
     }
 
     if (!env.RIOT_API_KEY) {
@@ -81,19 +110,22 @@ export default {
       const [, gameName, tagLine] = accountMatch;
       return proxyToRiot(
         `/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`,
-        env.RIOT_API_KEY
+        env.RIOT_API_KEY,
+        rateLimitHeaders
       );
     }
 
-    // Route: GET /api/matches/{puuid}?count=10&type=ranked
+    // Route: GET /api/matches/{puuid}?count=10&type=ranked&start=0
     const matchesMatch = path.match(/^\/api\/matches\/([^/]+)$/);
     if (matchesMatch) {
       const [, puuid] = matchesMatch;
       const count = url.searchParams.get("count") ?? "10";
+      const start = url.searchParams.get("start") ?? "0";
       const type = url.searchParams.get("type") ?? "ranked";
       return proxyToRiot(
-        `/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids?type=${type}&start=0&count=${count}`,
-        env.RIOT_API_KEY
+        `/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids?type=${type}&start=${start}&count=${count}`,
+        env.RIOT_API_KEY,
+        rateLimitHeaders
       );
     }
 
@@ -103,7 +135,8 @@ export default {
       const [, matchId] = timelineMatch;
       return proxyToRiot(
         `/lol/match/v5/matches/${encodeURIComponent(matchId)}/timeline`,
-        env.RIOT_API_KEY
+        env.RIOT_API_KEY,
+        rateLimitHeaders
       );
     }
 
@@ -113,7 +146,8 @@ export default {
       const [, matchId] = matchDetailMatch;
       return proxyToRiot(
         `/lol/match/v5/matches/${encodeURIComponent(matchId)}`,
-        env.RIOT_API_KEY
+        env.RIOT_API_KEY,
+        rateLimitHeaders
       );
     }
 

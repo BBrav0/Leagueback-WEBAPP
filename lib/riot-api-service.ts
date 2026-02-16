@@ -51,11 +51,12 @@ export async function getAccountByRiotId(
 
 export async function getMatchHistory(
   puuid: string,
-  count: number = 10
+  count: number = 10,
+  start: number = 0
 ): Promise<string[]> {
   // Always fetch fresh — new matches may have appeared
   const res = await fetch(
-    `${WORKER_URL}/api/matches/${encodeURIComponent(puuid)}?type=ranked&count=${count}`
+    `${WORKER_URL}/api/matches/${encodeURIComponent(puuid)}?type=ranked&count=${count}&start=${start}`
   );
   if (!res.ok) {
     throw new Error(`Failed to get match history. Status: ${res.status}`);

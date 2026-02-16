@@ -33,11 +33,12 @@ export class BackendBridge {
 
   static async getMatchHistory(
     puuid: string,
-    count: number = 5
+    count: number = 5,
+    start: number = 0
   ): Promise<string[] | null> {
     try {
       const res = await fetch(
-        `/api/match-history?puuid=${encodeURIComponent(puuid)}&count=${count}`
+        `/api/match-history?puuid=${encodeURIComponent(puuid)}&count=${count}&start=${start}`
       );
       if (!res.ok) return null;
       const data = await res.json();
@@ -100,5 +101,45 @@ export class BackendBridge {
     }
 
     return matches;
+  }
+
+  /**
+   * Get player match data in batches with pagination support
+   * Returns matches and whether more matches are available
+   */
+  static async getPlayerMatchDataBatch(
+    puuid: string,
+    start: number = 0,
+    batchSize: number = 5,
+    delayBetweenBatches: number = 1500
+  ): Promise<{ matches: MatchSummary[]; hasMore: boolean; nextStart: number }> {
+    const matches: MatchSummary[] = [];
+
+    // Fetch match IDs for this batch
+    const matchIds = await this.getMatchHistory(puuid, batchSize, start);
+    if (!matchIds || matchIds.length === 0) {
+      return { matches: [], hasMore: false, nextStart: start };
+    }
+
+    // Process matches with a small delay between each to respect rate limits
+    for (let i = 0; i < matchIds.length; i++) {
+      const matchId = matchIds[i];
+      
+      const analysis = await this.analyzeMatchPerformance(matchId, puuid);
+      if (analysis && analysis.success && analysis.matchSummary) {
+        matches.push(analysis.matchSummary);
+      }
+
+      // Add delay between matches (except for the last one)
+      if (i < matchIds.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delayBetweenBatches / matchIds.length));
+      }
+    }
+
+    // If we got fewer matches than requested, there are no more
+    const hasMore = matchIds.length === batchSize;
+    const nextStart = start + matchIds.length;
+
+    return { matches, hasMore, nextStart };
   }
 }
