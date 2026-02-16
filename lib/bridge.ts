@@ -104,31 +104,49 @@ export class BackendBridge {
   }
 
   /**
-   * Get all stored matches for a user from the database
+   * Get paginated stored matches for a user from the database
    */
   static async getStoredMatches(
-    puuid: string
-  ): Promise<{ matches: MatchSummary[]; hasMoreInApi: boolean }> {
+    puuid: string,
+    limit: number = 20,
+    offset: number = 0
+  ): Promise<{ matches: MatchSummary[]; totalCount: number; hasMore: boolean }> {
     try {
       const res = await fetch(
-        `/api/stored-matches?puuid=${encodeURIComponent(puuid)}`
+        `/api/stored-matches?puuid=${encodeURIComponent(puuid)}&limit=${limit}&offset=${offset}`
       );
       if (!res.ok) {
         console.error("Failed to get stored matches");
-        return { matches: [], hasMoreInApi: false };
+        return { matches: [], totalCount: 0, hasMore: false };
       }
       const data = await res.json();
       if (data.error) {
         console.error("Backend error:", data.error);
-        return { matches: [], hasMoreInApi: false };
+        return { matches: [], totalCount: 0, hasMore: false };
       }
       return {
         matches: data.matches || [],
-        hasMoreInApi: data.hasMoreInApi || false,
+        totalCount: data.totalCount || 0,
+        hasMore: data.hasMore || false,
       };
     } catch (error) {
       console.error("Error calling getStoredMatches:", error);
-      return { matches: [], hasMoreInApi: false };
+      return { matches: [], totalCount: 0, hasMore: false };
+    }
+  }
+
+  /**
+   * Lightweight check if Riot API has more matches beyond what's stored
+   */
+  static async checkApiHasMore(
+    puuid: string,
+    startFrom: number
+  ): Promise<boolean> {
+    try {
+      const matchIds = await this.getMatchHistory(puuid, 1, startFrom);
+      return matchIds !== null && matchIds.length > 0;
+    } catch {
+      return false;
     }
   }
 

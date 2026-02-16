@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getImpactCategoriesForUser } from "@/lib/database-queries";
+import { getImpactCategoriesForUser, getRecentImpactCategories } from "@/lib/database-queries";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const puuid = searchParams.get("puuid");
+  const limitParam = searchParams.get("limit");
 
   if (!puuid) {
     return NextResponse.json(
@@ -13,7 +14,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const categories = await getImpactCategoriesForUser(puuid);
+    let categories;
+    if (limitParam) {
+      const limit = parseInt(limitParam, 10);
+      categories = await getRecentImpactCategories(puuid, limit);
+    } else {
+      categories = await getImpactCategoriesForUser(puuid);
+    }
     return NextResponse.json({ categories });
   } catch (error) {
     console.error("Error fetching impact categories:", error);

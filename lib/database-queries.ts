@@ -93,6 +93,64 @@ export async function getImpactCategoriesForUser(
 }
 
 /**
+ * Get paginated stored match IDs for a user
+ */
+export async function getPaginatedMatchIds(
+  puuid: string,
+  limit: number = 20,
+  offset: number = 0
+): Promise<{ matchIds: string[]; totalCount: number }> {
+  const { count: totalCount, error: countError } = await supabase
+    .from("impact_categories")
+    .select("*", { count: "exact", head: true })
+    .eq("puuid", puuid);
+
+  if (countError) {
+    console.error("Error counting stored matches:", countError);
+    return { matchIds: [], totalCount: 0 };
+  }
+
+  const { data, error } = await supabase
+    .from("impact_categories")
+    .select("match_id")
+    .eq("puuid", puuid)
+    .order("match_id", { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (error) {
+    console.error("Error fetching paginated match IDs:", error);
+    return { matchIds: [], totalCount: totalCount || 0 };
+  }
+
+  return {
+    matchIds: data.map((row) => row.match_id),
+    totalCount: totalCount || 0,
+  };
+}
+
+/**
+ * Get impact categories for the last N matches (for pie chart)
+ */
+export async function getRecentImpactCategories(
+  puuid: string,
+  limit: number = 10
+): Promise<ImpactCategory[]> {
+  const { data, error } = await supabase
+    .from("impact_categories")
+    .select("category")
+    .eq("puuid", puuid)
+    .order("match_id", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error("Error fetching recent impact categories:", error);
+    return [];
+  }
+
+  return data.map((row) => row.category as ImpactCategory);
+}
+
+/**
  * Get stored matches with their categories
  */
 export async function getStoredMatchesWithCategories(

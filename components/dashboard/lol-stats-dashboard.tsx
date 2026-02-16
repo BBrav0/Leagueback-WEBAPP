@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis, ReferenceArea, PieChart, Pie, Cell } from "recharts"
 import {
   ChartContainer,
@@ -242,37 +242,44 @@ export default function Component() {
   const [hasMoreMatches, setHasMoreMatches] = useState(false);
   const [matchesStart, setMatchesStart] = useState(0);
   const [rateLimitStatus, setRateLimitStatus] = useState<{ remaining: number; resetAt: number } | null>(null);
+  const [totalDbMatches, setTotalDbMatches] = useState(0);
+  const [loadedDbMatches, setLoadedDbMatches] = useState(0);
+  const [hasMoreDbMatches, setHasMoreDbMatches] = useState(false);
+  const [allDbMatchesLoaded, setAllDbMatchesLoaded] = useState(false);
+  const [loadingDbMatches, setLoadingDbMatches] = useState(false);
+  const scrollSentinelRef = useRef<HTMLDivElement>(null);
 
   const updateLifetimeStatsFromDatabase = async (puuid: string) => {
     try {
-      const res = await fetch(`/api/impact-categories?puuid=${encodeURIComponent(puuid)}`);
-      if (!res.ok) {
-        console.error("Failed to fetch impact categories");
-        return;
-      }
-      const data = await res.json();
-      if (data.error) {
-        console.error("Error fetching impact categories:", data.error);
-        return;
-      }
-      
-      const categories = data.categories || [];
-      const counts: ImpactCounts = {
-        impactWins: 0,
-        impactLosses: 0,
-        guaranteedWins: 0,
-        guaranteedLosses: 0,
-      };
-      categories.forEach((cat: string) => {
-        if (cat in counts) {
-          counts[cat as keyof ImpactCounts]++;
+      // Fetch all categories (lifetime) and last 10 (pie chart) in parallel
+      const [lifetimeRes, pieRes] = await Promise.all([
+        fetch(`/api/impact-categories?puuid=${encodeURIComponent(puuid)}`),
+        fetch(`/api/impact-categories?puuid=${encodeURIComponent(puuid)}&limit=10`),
+      ]);
+
+      if (lifetimeRes.ok) {
+        const lifetimeData = await lifetimeRes.json();
+        if (!lifetimeData.error) {
+          const counts: ImpactCounts = { impactWins: 0, impactLosses: 0, guaranteedWins: 0, guaranteedLosses: 0 };
+          (lifetimeData.categories || []).forEach((cat: string) => {
+            if (cat in counts) counts[cat as keyof ImpactCounts]++;
+          });
+          setLifetimeCounts(counts);
         }
-      });
-      setLifetimeCounts(counts);
-      // Also update impact counts (pie chart) to show all database matches
-      setImpactCounts(counts);
+      }
+
+      if (pieRes.ok) {
+        const pieData = await pieRes.json();
+        if (!pieData.error) {
+          const counts: ImpactCounts = { impactWins: 0, impactLosses: 0, guaranteedWins: 0, guaranteedLosses: 0 };
+          (pieData.categories || []).forEach((cat: string) => {
+            if (cat in counts) counts[cat as keyof ImpactCounts]++;
+          });
+          setImpactCounts(counts);
+        }
+      }
     } catch (error) {
-      console.error("Error updating lifetime stats from database:", error);
+      console.error("Error updating stats from database:", error);
     }
   };
 
@@ -282,7 +289,7 @@ export default function Component() {
       return;
     }
 
-    // Check rate limit before starting
+    // Check rate limit before starting (don't count — search only hits DB)
     const rateLimitCheck = rateLimiter.getStatus();
     if (!rateLimitCheck.allowed) {
       setError(`Rate limit exceeded. Please wait ${rateLimitCheck.retryAfter} seconds.`);
@@ -294,9 +301,12 @@ export default function Component() {
     setHasSearched(true);
     setMatchesStart(0);
     setHasMoreMatches(false);
+    setTotalDbMatches(0);
+    setLoadedDbMatches(0);
+    setHasMoreDbMatches(false);
+    setAllDbMatchesLoaded(false);
 
     try {
-      // Get account first to get puuid
       const account = await BackendBridge.getAccount(gameName, tagLine);
       if (!account) {
         throw new Error("Failed to get account information");
@@ -304,28 +314,39 @@ export default function Component() {
 
       setCurrentPuuid(account.puuid);
 
-      // FIRST: Check database for all stored matches
-      const storedResult = await BackendBridge.getStoredMatches(account.puuid);
-      
-      // Display all stored matches immediately
+      // Fetch first page of stored matches from DB
+      const storedResult = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
+
       setMatchesData(storedResult.matches);
-      
+      setTotalDbMatches(storedResult.totalCount);
+      setLoadedDbMatches(storedResult.matches.length);
+      setHasMoreDbMatches(storedResult.hasMore);
+
+      if (!storedResult.hasMore) {
+        // All DB matches fit on first page (or there are none)
+        setAllDbMatchesLoaded(true);
+        const apiHasMore = await BackendBridge.checkApiHasMore(
+          account.puuid,
+          storedResult.totalCount
+        );
+        setHasMoreMatches(apiHasMore);
+        setMatchesStart(storedResult.totalCount);
+      }
+
       // Update lifetime stats and pie chart from database
       await updateLifetimeStatsFromDatabase(account.puuid);
 
-      // Set hasMoreMatches based on whether API has more matches
-      setHasMoreMatches(storedResult.hasMoreInApi);
-      
-      // Set matchesStart to the number of stored matches (for pagination)
-      setMatchesStart(storedResult.matches.length);
-
-      setRateLimitStatus({ 
-        remaining: rateLimiter.getStatus().remaining, 
-        resetAt: rateLimiter.getStatus().resetAt 
+      setRateLimitStatus({
+        remaining: rateLimiter.getStatus().remaining,
+        resetAt: rateLimiter.getStatus().resetAt,
       });
 
-      if (storedResult.matches.length === 0 && !storedResult.hasMoreInApi) {
-        setError("No matches found for this player");
+      if (storedResult.totalCount === 0 && !hasMoreMatches) {
+        // Check one more time since state may not have updated yet
+        const apiCheck = await BackendBridge.checkApiHasMore(account.puuid, 0);
+        if (!apiCheck) {
+          setError("No matches found for this player");
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch match data");
@@ -337,9 +358,9 @@ export default function Component() {
   };
 
   const handleLoadMore = async () => {
-    if (!currentPuuid || loadingMore) return;
+    if (!currentPuuid || loadingMore || !allDbMatchesLoaded) return;
 
-    // Check rate limit
+    // Check rate limit and COUNT this request (hits Riot API)
     const rateLimitCheck = rateLimiter.checkRateLimit();
     if (!rateLimitCheck.allowed) {
       setError(`Rate limit exceeded. Please wait ${rateLimitCheck.retryAfter} seconds.`);
@@ -350,7 +371,6 @@ export default function Component() {
     setError(null);
 
     try {
-      // Fetch next batch from API (starting from where stored matches end)
       const result = await BackendBridge.getPlayerMatchDataBatch(
         currentPuuid,
         matchesStart,
@@ -364,22 +384,23 @@ export default function Component() {
         return;
       }
 
-      // Append new matches to displayed matches
-      const allDisplayedMatches = [...matchesData, ...result.matches];
-      setMatchesData(allDisplayedMatches);
+      // Append new API matches to display
+      setMatchesData(prev => [...prev, ...result.matches]);
 
-      // Update lifetime stats and pie chart from database (includes newly stored matches)
+      // Newly fetched matches are stored in DB by match-performance route
+      setTotalDbMatches(prev => prev + result.matches.length);
+
+      // Update lifetime stats and pie chart from database
       await updateLifetimeStatsFromDatabase(currentPuuid);
 
-      // Check if there are more matches available
-      // Get next batch to check if more exist
-      const nextBatch = await BackendBridge.getMatchHistory(currentPuuid, 1, result.nextStart);
-      setHasMoreMatches(nextBatch !== null && nextBatch.length > 0);
+      // Check if API has more
+      const apiHasMore = await BackendBridge.checkApiHasMore(currentPuuid, result.nextStart);
+      setHasMoreMatches(apiHasMore);
       setMatchesStart(result.nextStart);
-      
-      setRateLimitStatus({ 
-        remaining: rateLimiter.getStatus().remaining, 
-        resetAt: rateLimiter.getStatus().resetAt 
+
+      setRateLimitStatus({
+        remaining: rateLimiter.getStatus().remaining,
+        resetAt: rateLimiter.getStatus().resetAt,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load more matches");
@@ -411,6 +432,52 @@ export default function Component() {
 
     return () => clearInterval(interval);
   }, [hasSearched]);
+
+  // Infinite scroll: load more DB matches when sentinel is visible
+  const loadMoreDbMatches = useCallback(async () => {
+    if (!currentPuuid || loadingDbMatches || !hasMoreDbMatches || allDbMatchesLoaded) return;
+
+    setLoadingDbMatches(true);
+    try {
+      const result = await BackendBridge.getStoredMatches(currentPuuid, 20, loadedDbMatches);
+
+      setMatchesData(prev => [...prev, ...result.matches]);
+      const newLoaded = loadedDbMatches + result.matches.length;
+      setLoadedDbMatches(newLoaded);
+      setHasMoreDbMatches(result.hasMore);
+
+      if (!result.hasMore) {
+        setAllDbMatchesLoaded(true);
+        const apiHasMore = await BackendBridge.checkApiHasMore(currentPuuid, result.totalCount);
+        setHasMoreMatches(apiHasMore);
+        setMatchesStart(result.totalCount);
+      }
+    } catch (error) {
+      console.error("Error loading more DB matches:", error);
+    } finally {
+      setLoadingDbMatches(false);
+    }
+  }, [currentPuuid, loadingDbMatches, hasMoreDbMatches, allDbMatchesLoaded, loadedDbMatches]);
+
+  useEffect(() => {
+    if (!hasSearched || allDbMatchesLoaded || !hasMoreDbMatches) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMoreDbMatches();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const el = scrollSentinelRef.current;
+    if (el) observer.observe(el);
+
+    return () => {
+      if (el) observer.unobserve(el);
+    };
+  }, [hasSearched, allDbMatchesLoaded, hasMoreDbMatches, loadMoreDbMatches]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-950 via-purple-900 to-blue-900 p-6">
@@ -549,8 +616,19 @@ export default function Component() {
                 </Card>
               ))}
               
-              {/* Load More Button */}
-              {hasMoreMatches && (
+              {/* Infinite scroll sentinel for DB matches */}
+              {hasMoreDbMatches && !allDbMatchesLoaded && (
+                <div ref={scrollSentinelRef} className="flex flex-col items-center py-4">
+                  <div className="text-slate-400 text-sm">
+                    {loadingDbMatches
+                      ? "Loading more matches..."
+                      : `Loaded ${loadedDbMatches} of ${totalDbMatches} stored matches`}
+                  </div>
+                </div>
+              )}
+
+              {/* Load More Button — only after all DB matches are loaded */}
+              {allDbMatchesLoaded && hasMoreMatches && (
                 <div className="flex flex-col items-center gap-4 pt-4">
                   {rateLimitStatus && rateLimitStatus.remaining < 10 && (
                     <Alert className="bg-yellow-900/50 border-yellow-600 max-w-md">
@@ -580,7 +658,7 @@ export default function Component() {
                 <CardHeader>
                   <CardTitle className="text-white">Impact Overview</CardTitle>
                   <CardDescription className="text-slate-300">
-                    {lifetimeCounts.impactWins + lifetimeCounts.impactLosses + lifetimeCounts.guaranteedWins + lifetimeCounts.guaranteedLosses} total matches
+                    Last 10 matches
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex-1 flex items-center justify-center">
