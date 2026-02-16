@@ -8,12 +8,12 @@ export async function getAccountByRiotId(
   gameName: string,
   tagLine: string
 ): Promise<AccountDto> {
-  // Check Supabase cache
+  // Check Supabase cache (case-insensitive — Riot names are case-insensitive)
   const { data: cached } = await supabase
     .from("accounts")
     .select("puuid, game_name, tag_line")
-    .eq("game_name", gameName)
-    .eq("tag_line", tagLine)
+    .ilike("game_name", gameName)
+    .ilike("tag_line", tagLine)
     .single();
 
   if (cached) {

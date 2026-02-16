@@ -6,6 +6,9 @@ export interface AccountDto {
   tagLine: string;
 }
 
+// Alias used by bridge.ts / frontend
+export type AccountData = AccountDto;
+
 export interface MatchDto {
   info: MatchInfo;
 }

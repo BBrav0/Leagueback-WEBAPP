@@ -16,7 +16,8 @@ export class BackendBridge {
         `/api/account?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`
       );
       if (!res.ok) {
-        console.error("Failed to get account");
+        const errBody = await res.json().catch(() => ({}));
+        console.error("Failed to get account:", res.status, errBody.error || "");
         return null;
       }
       const data = await res.json();
