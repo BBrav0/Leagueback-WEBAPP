@@ -286,18 +286,11 @@ export default function Component() {
         1500
       );
 
-      const counts: ImpactCounts = {
-        impactWins: 0,
-        impactLosses: 0,
-        guaranteedWins: 0,
-        guaranteedLosses: 0,
-      };
-
       const impactCache = loadImpactCache();
 
+      // Add new matches to cache
       result.matches.forEach((m) => {
         const category = classifyMatch(m);
-        counts[category]++;
         if (!impactCache[m.id]) {
           impactCache[m.id] = category;
         }
@@ -305,6 +298,19 @@ export default function Component() {
 
       saveImpactCache(impactCache);
 
+      // Calculate counts for all displayed matches
+      const counts: ImpactCounts = {
+        impactWins: 0,
+        impactLosses: 0,
+        guaranteedWins: 0,
+        guaranteedLosses: 0,
+      };
+      result.matches.forEach((m) => {
+        const category = classifyMatch(m);
+        counts[category]++;
+      });
+
+      // Calculate lifetime counts from entire cache
       const newLifetime: ImpactCounts = {
         impactWins: 0,
         impactLosses: 0,
@@ -362,11 +368,10 @@ export default function Component() {
       }
 
       const impactCache = loadImpactCache();
-      const newCounts: ImpactCounts = { ...impactCounts };
 
+      // Add new matches to cache
       result.matches.forEach((m) => {
         const category = classifyMatch(m);
-        newCounts[category]++;
         if (!impactCache[m.id]) {
           impactCache[m.id] = category;
         }
@@ -374,6 +379,20 @@ export default function Component() {
 
       saveImpactCache(impactCache);
 
+      // Calculate counts for ALL displayed matches (previous + new)
+      const allDisplayedMatches = [...matchesData, ...result.matches];
+      const newCounts: ImpactCounts = {
+        impactWins: 0,
+        impactLosses: 0,
+        guaranteedWins: 0,
+        guaranteedLosses: 0,
+      };
+      allDisplayedMatches.forEach((m) => {
+        const category = classifyMatch(m);
+        newCounts[category]++;
+      });
+
+      // Calculate lifetime counts from entire cache
       const newLifetime: ImpactCounts = {
         impactWins: 0,
         impactLosses: 0,
@@ -386,7 +405,7 @@ export default function Component() {
 
       setLifetimeCounts(newLifetime);
       setImpactCounts(newCounts);
-      setMatchesData((prev) => [...prev, ...result.matches]);
+      setMatchesData(allDisplayedMatches);
       setHasMoreMatches(result.hasMore);
       setMatchesStart(result.nextStart);
       setRateLimitStatus({ remaining: rateLimiter.getStatus().remaining, resetAt: rateLimiter.getStatus().resetAt });
