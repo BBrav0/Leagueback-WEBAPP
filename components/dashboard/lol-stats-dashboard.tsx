@@ -706,7 +706,11 @@ export default function Component() {
           <Card className="bg-slate-800/50 border-slate-600/50">
             <CardContent className="p-8 text-center">
               <div className="text-slate-300 text-lg">No match data found</div>
-              <div className="text-slate-400 text-sm mt-2">Try a different summoner name or check your spelling</div>
+              <div className="text-slate-400 text-sm mt-2">
+                {hasMoreMatches
+                  ? "Click \"Load More Matches\" below to fetch from Riot."
+                  : "Try a different summoner name or check your spelling"}
+              </div>
             </CardContent>
           </Card>
         )}

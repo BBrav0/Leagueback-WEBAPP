@@ -29,9 +29,32 @@ export async function getAccountByRiotId(
     `${WORKER_URL}/api/account/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`
   );
   if (!res.ok) {
-    throw new Error(
-      `Failed to get account. Status: ${res.status}`
-    );
+    const bodyText = await res.text();
+    let message: string;
+    if (res.status === 404) {
+      try {
+        const body = JSON.parse(bodyText) as { status?: { message?: string } };
+        message =
+          body?.status?.message?.trim() || "Account not found";
+      } catch {
+        message = "Account not found";
+      }
+      throw new Error(message);
+    }
+    if (res.status === 429) {
+      throw new Error("Rate limit exceeded. Try again later.");
+    }
+    message = `Failed to get account. Status: ${res.status}`;
+    if (bodyText) {
+      try {
+        const body = JSON.parse(bodyText) as { status?: { message?: string }; error?: string };
+        const detail = body?.status?.message ?? body?.error;
+        if (detail) message += ` — ${detail}`;
+      } catch {
+        // keep message as-is
+      }
+    }
+    throw new Error(message);
   }
 
   const account: AccountDto = await res.json();

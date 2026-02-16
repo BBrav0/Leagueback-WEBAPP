@@ -17,16 +17,17 @@ export class BackendBridge {
       );
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
-        console.error("Failed to get account:", res.status, errBody.error || "");
-        return null;
+        const message =
+          (errBody as { error?: string }).error || `Failed to get account (${res.status})`;
+        throw new Error(message);
       }
       const data = await res.json();
       if (data.error) {
-        console.error("Backend error:", data.error);
-        return null;
+        throw new Error((data as { error: string }).error);
       }
       return data as AccountData;
     } catch (error) {
+      if (error instanceof Error) throw error;
       console.error("Error calling getAccount:", error);
       return null;
     }
