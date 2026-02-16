@@ -8,12 +8,12 @@ export async function getAccountByRiotId(
   gameName: string,
   tagLine: string
 ): Promise<AccountDto> {
-  // Check Supabase cache
+  // Check Supabase cache (case-insensitive — Riot names are case-insensitive)
   const { data: cached } = await supabase
     .from("accounts")
     .select("puuid, game_name, tag_line")
-    .eq("game_name", gameName)
-    .eq("tag_line", tagLine)
+    .ilike("game_name", gameName)
+    .ilike("tag_line", tagLine)
     .single();
 
   if (cached) {
@@ -36,26 +36,26 @@ export async function getAccountByRiotId(
 
   const account: AccountDto = await res.json();
 
-  // Cache in Supabase (fire-and-forget)
-  supabase
+  // Cache in Supabase — must await on Vercel serverless
+  await supabase
     .from("accounts")
     .upsert({
       puuid: account.puuid,
       game_name: account.gameName,
       tag_line: account.tagLine,
-    })
-    .then();
+    });
 
   return account;
 }
 
 export async function getMatchHistory(
   puuid: string,
-  count: number = 10
+  count: number = 10,
+  start: number = 0
 ): Promise<string[]> {
   // Always fetch fresh — new matches may have appeared
   const res = await fetch(
-    `${WORKER_URL}/api/matches/${encodeURIComponent(puuid)}?type=ranked&count=${count}`
+    `${WORKER_URL}/api/matches/${encodeURIComponent(puuid)}?type=ranked&count=${count}&start=${start}`
   );
   if (!res.ok) {
     throw new Error(`Failed to get match history. Status: ${res.status}`);
@@ -87,11 +87,10 @@ export async function getMatchDetails(
 
   const matchDto: MatchDto = await res.json();
 
-  // Cache in Supabase (fire-and-forget — completed matches never change)
-  supabase
+  // Cache in Supabase — must await on Vercel serverless
+  await supabase
     .from("match_details")
-    .upsert({ match_id: matchId, match_data: matchDto })
-    .then();
+    .upsert({ match_id: matchId, match_data: matchDto });
 
   return matchDto;
 }
@@ -120,11 +119,10 @@ export async function getMatchTimeline(
 
   const timelineDto: MatchTimelineDto = await res.json();
 
-  // Cache in Supabase (fire-and-forget)
-  supabase
+  // Cache in Supabase — must await on Vercel serverless
+  await supabase
     .from("match_timelines")
-    .upsert({ match_id: matchId, timeline_data: timelineDto })
-    .then();
+    .upsert({ match_id: matchId, timeline_data: timelineDto });
 
   return timelineDto;
 }

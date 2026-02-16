@@ -73,3 +73,5 @@ Thumbs.db
 
 # Old files
 readmeold.md
+.env.example
+/.next

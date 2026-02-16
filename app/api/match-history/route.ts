@@ -5,13 +5,14 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const puuid = searchParams.get("puuid");
   const count = parseInt(searchParams.get("count") ?? "10", 10);
+  const start = parseInt(searchParams.get("start") ?? "0", 10);
 
   if (!puuid) {
     return NextResponse.json({ error: "Missing puuid" }, { status: 400 });
   }
 
   try {
-    const matchIds = await getMatchHistory(puuid, count);
+    const matchIds = await getMatchHistory(puuid, count, start);
     return NextResponse.json(matchIds);
   } catch (error) {
     return NextResponse.json(
