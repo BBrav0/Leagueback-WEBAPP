@@ -326,15 +326,18 @@ export default function Component() {
           <CardContent>
             <div className="flex gap-4 items-end">
               <div className="flex-1">
-                <Label htmlFor="gameName" className="text-white">Game Name</Label>
+                <Label htmlFor="gameName" className="text-white">Riot User</Label>
                 <Input
                   id="gameName"
                   value={gameName}
                   onChange={(e) => setGameName(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Enter game name"
+                  placeholder="Riot User"
                   className="bg-slate-700 border-slate-600 text-white placeholder-slate-400"
                 />
+              </div>
+              <div className="flex items-center justify-center pb-2">
+                <span className="text-white text-xl font-semibold">#</span>
               </div>
               <div className="flex-1">
                 <Label htmlFor="tagLine" className="text-white">Tag Line</Label>
