@@ -104,8 +104,38 @@ export class BackendBridge {
   }
 
   /**
+   * Get all stored matches for a user from the database
+   */
+  static async getStoredMatches(
+    puuid: string
+  ): Promise<{ matches: MatchSummary[]; hasMoreInApi: boolean }> {
+    try {
+      const res = await fetch(
+        `/api/stored-matches?puuid=${encodeURIComponent(puuid)}`
+      );
+      if (!res.ok) {
+        console.error("Failed to get stored matches");
+        return { matches: [], hasMoreInApi: false };
+      }
+      const data = await res.json();
+      if (data.error) {
+        console.error("Backend error:", data.error);
+        return { matches: [], hasMoreInApi: false };
+      }
+      return {
+        matches: data.matches || [],
+        hasMoreInApi: data.hasMoreInApi || false,
+      };
+    } catch (error) {
+      console.error("Error calling getStoredMatches:", error);
+      return { matches: [], hasMoreInApi: false };
+    }
+  }
+
+  /**
    * Get player match data in batches with pagination support
    * Returns matches and whether more matches are available
+   * This is used when loading more matches from API
    */
   static async getPlayerMatchDataBatch(
     puuid: string,

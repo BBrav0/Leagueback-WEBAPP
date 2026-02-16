@@ -18,6 +18,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { BackendBridge, MatchSummary } from "@/lib/bridge"
 import { cn } from "@/lib/utils"
 import { rateLimiter } from "@/lib/rate-limiter"
+import { getImpactCategoriesForUser } from "@/lib/database-queries"
 
 
 const chartConfig = {
@@ -226,18 +227,11 @@ export default function Component() {
     guaranteedWins: 0,
     guaranteedLosses: 0,
   });
-  const [lifetimeCounts, setLifetimeCounts] = useState<ImpactCounts>(() => {
-    const cache = loadImpactCache();
-    const counts: ImpactCounts = {
-      impactWins: 0,
-      impactLosses: 0,
-      guaranteedWins: 0,
-      guaranteedLosses: 0,
-    };
-    Object.values(cache).forEach((cat) => {
-      counts[cat]++;
-    });
-    return counts;
+  const [lifetimeCounts, setLifetimeCounts] = useState<ImpactCounts>({
+    impactWins: 0,
+    impactLosses: 0,
+    guaranteedWins: 0,
+    guaranteedLosses: 0,
   });
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -249,6 +243,26 @@ export default function Component() {
   const [hasMoreMatches, setHasMoreMatches] = useState(false);
   const [matchesStart, setMatchesStart] = useState(0);
   const [rateLimitStatus, setRateLimitStatus] = useState<{ remaining: number; resetAt: number } | null>(null);
+
+  const updateLifetimeStatsFromDatabase = async (puuid: string) => {
+    try {
+      const categories = await getImpactCategoriesForUser(puuid);
+      const counts: ImpactCounts = {
+        impactWins: 0,
+        impactLosses: 0,
+        guaranteedWins: 0,
+        guaranteedLosses: 0,
+      };
+      categories.forEach((cat) => {
+        counts[cat]++;
+      });
+      setLifetimeCounts(counts);
+      // Also update impact counts (pie chart) to show all database matches
+      setImpactCounts(counts);
+    } catch (error) {
+      console.error("Error updating lifetime stats from database:", error);
+    }
+  };
 
   const handleSearch = async () => {
     if (!gameName || !tagLine) {
@@ -278,57 +292,27 @@ export default function Component() {
 
       setCurrentPuuid(account.puuid);
 
-      // Load initial batch of 5 matches
-      const result = await BackendBridge.getPlayerMatchDataBatch(
-        account.puuid,
-        0,
-        5,
-        1500
-      );
+      // FIRST: Check database for all stored matches
+      const storedResult = await BackendBridge.getStoredMatches(account.puuid);
+      
+      // Display all stored matches immediately
+      setMatchesData(storedResult.matches);
+      
+      // Update lifetime stats and pie chart from database
+      await updateLifetimeStatsFromDatabase(account.puuid);
 
-      const impactCache = loadImpactCache();
+      // Set hasMoreMatches based on whether API has more matches
+      setHasMoreMatches(storedResult.hasMoreInApi);
+      
+      // Set matchesStart to the number of stored matches (for pagination)
+      setMatchesStart(storedResult.matches.length);
 
-      // Add new matches to cache
-      result.matches.forEach((m) => {
-        const category = classifyMatch(m);
-        if (!impactCache[m.id]) {
-          impactCache[m.id] = category;
-        }
+      setRateLimitStatus({ 
+        remaining: rateLimiter.getStatus().remaining, 
+        resetAt: rateLimiter.getStatus().resetAt 
       });
 
-      saveImpactCache(impactCache);
-
-      // Calculate counts for all displayed matches
-      const counts: ImpactCounts = {
-        impactWins: 0,
-        impactLosses: 0,
-        guaranteedWins: 0,
-        guaranteedLosses: 0,
-      };
-      result.matches.forEach((m) => {
-        const category = classifyMatch(m);
-        counts[category]++;
-      });
-
-      // Calculate lifetime counts from entire cache
-      const newLifetime: ImpactCounts = {
-        impactWins: 0,
-        impactLosses: 0,
-        guaranteedWins: 0,
-        guaranteedLosses: 0,
-      };
-      Object.values(impactCache).forEach((cat) => {
-        newLifetime[cat]++;
-      });
-
-      setLifetimeCounts(newLifetime);
-      setImpactCounts(counts);
-      setMatchesData(result.matches);
-      setHasMoreMatches(result.hasMore);
-      setMatchesStart(result.nextStart);
-      setRateLimitStatus({ remaining: rateLimiter.getStatus().remaining, resetAt: rateLimiter.getStatus().resetAt });
-
-      if (result.matches.length === 0) {
+      if (storedResult.matches.length === 0 && !storedResult.hasMoreInApi) {
         setError("No matches found for this player");
       }
     } catch (err) {
@@ -354,6 +338,7 @@ export default function Component() {
     setError(null);
 
     try {
+      // Fetch next batch from API (starting from where stored matches end)
       const result = await BackendBridge.getPlayerMatchDataBatch(
         currentPuuid,
         matchesStart,
@@ -367,48 +352,23 @@ export default function Component() {
         return;
       }
 
-      const impactCache = loadImpactCache();
-
-      // Add new matches to cache
-      result.matches.forEach((m) => {
-        const category = classifyMatch(m);
-        if (!impactCache[m.id]) {
-          impactCache[m.id] = category;
-        }
-      });
-
-      saveImpactCache(impactCache);
-
-      // Calculate counts for ALL displayed matches (previous + new)
+      // Append new matches to displayed matches
       const allDisplayedMatches = [...matchesData, ...result.matches];
-      const newCounts: ImpactCounts = {
-        impactWins: 0,
-        impactLosses: 0,
-        guaranteedWins: 0,
-        guaranteedLosses: 0,
-      };
-      allDisplayedMatches.forEach((m) => {
-        const category = classifyMatch(m);
-        newCounts[category]++;
-      });
-
-      // Calculate lifetime counts from entire cache
-      const newLifetime: ImpactCounts = {
-        impactWins: 0,
-        impactLosses: 0,
-        guaranteedWins: 0,
-        guaranteedLosses: 0,
-      };
-      Object.values(impactCache).forEach((cat) => {
-        newLifetime[cat]++;
-      });
-
-      setLifetimeCounts(newLifetime);
-      setImpactCounts(newCounts);
       setMatchesData(allDisplayedMatches);
-      setHasMoreMatches(result.hasMore);
+
+      // Update lifetime stats and pie chart from database (includes newly stored matches)
+      await updateLifetimeStatsFromDatabase(currentPuuid);
+
+      // Check if there are more matches available
+      // Get next batch to check if more exist
+      const nextBatch = await BackendBridge.getMatchHistory(currentPuuid, 1, result.nextStart);
+      setHasMoreMatches(nextBatch !== null && nextBatch.length > 0);
       setMatchesStart(result.nextStart);
-      setRateLimitStatus({ remaining: rateLimiter.getStatus().remaining, resetAt: rateLimiter.getStatus().resetAt });
+      
+      setRateLimitStatus({ 
+        remaining: rateLimiter.getStatus().remaining, 
+        resetAt: rateLimiter.getStatus().resetAt 
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load more matches");
     } finally {
@@ -607,7 +567,9 @@ export default function Component() {
               <Card className="bg-slate-800/50 border-slate-600/50 h-[450px] flex flex-col sticky top-6">
                 <CardHeader>
                   <CardTitle className="text-white">Impact Overview</CardTitle>
-                  <CardDescription className="text-slate-300">Last {matchesData.length} matches</CardDescription>
+                  <CardDescription className="text-slate-300">
+                    {lifetimeCounts.impactWins + lifetimeCounts.impactLosses + lifetimeCounts.guaranteedWins + lifetimeCounts.guaranteedLosses} total matches
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="flex-1 flex items-center justify-center">
                   <ImpactPieChart counts={impactCounts} />
