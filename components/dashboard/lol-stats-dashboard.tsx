@@ -322,15 +322,35 @@ export default function Component() {
       setLoadedDbMatches(storedResult.matches.length);
       setHasMoreDbMatches(storedResult.hasMore);
 
+      let apiHasMore = false;
       if (!storedResult.hasMore) {
         // All DB matches fit on first page (or there are none)
         setAllDbMatchesLoaded(true);
-        const apiHasMore = await BackendBridge.checkApiHasMore(
+        apiHasMore = await BackendBridge.checkApiHasMore(
           account.puuid,
           storedResult.totalCount
         );
         setHasMoreMatches(apiHasMore);
         setMatchesStart(storedResult.totalCount);
+      }
+
+      // If user exists but DB has no matches, auto-fetch first 10 from API
+      if (storedResult.totalCount === 0 && apiHasMore) {
+        const rateLimitCheck = rateLimiter.checkRateLimit();
+        if (!rateLimitCheck.allowed) {
+          setError(`Rate limit exceeded. Please wait ${rateLimitCheck.retryAfter} seconds.`);
+        } else {
+          const result = await BackendBridge.getPlayerMatchDataBatch(
+            account.puuid,
+            0,
+            10,
+            1500
+          );
+          setMatchesData(result.matches);
+          setTotalDbMatches(result.matches.length);
+          setHasMoreMatches(result.hasMore);
+          setMatchesStart(result.nextStart);
+        }
       }
 
       // Update lifetime stats and pie chart from database
@@ -341,8 +361,7 @@ export default function Component() {
         resetAt: rateLimiter.getStatus().resetAt,
       });
 
-      if (storedResult.totalCount === 0 && !hasMoreMatches) {
-        // Check one more time since state may not have updated yet
+      if (storedResult.totalCount === 0 && !apiHasMore) {
         const apiCheck = await BackendBridge.checkApiHasMore(account.puuid, 0);
         if (!apiCheck) {
           setError("No matches found for this player");
@@ -704,9 +723,22 @@ export default function Component() {
         {/* No Data State */}
         {hasSearched && !loading && matchesData.length === 0 && !error && (
           <Card className="bg-slate-800/50 border-slate-600/50">
-            <CardContent className="p-8 text-center">
+            <CardContent className="p-8 text-center flex flex-col items-center gap-4">
               <div className="text-slate-300 text-lg">No match data found</div>
-              <div className="text-slate-400 text-sm mt-2">Try a different summoner name or check your spelling</div>
+              <div className="text-slate-400 text-sm">
+                {hasMoreMatches
+                  ? "Fetch matches from Riot using the button below."
+                  : "Try a different summoner name or check your spelling"}
+              </div>
+              {allDbMatchesLoaded && hasMoreMatches && (
+                <Button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore || !hasMoreMatches}
+                  className="px-8"
+                >
+                  {loadingMore ? "Loading more matches..." : "Load More Matches"}
+                </Button>
+              )}
             </CardContent>
           </Card>
         )}
