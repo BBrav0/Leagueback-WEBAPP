@@ -4,6 +4,9 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'Leagueback App',
   description: 'Created by Ben Bravo',
+  icons: {
+    icon: '/icons/icon.ico',
+  },
 }
 
 const DevelopmentBanner = () => {
