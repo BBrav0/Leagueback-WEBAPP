@@ -322,15 +322,35 @@ export default function Component() {
       setLoadedDbMatches(storedResult.matches.length);
       setHasMoreDbMatches(storedResult.hasMore);
 
+      let apiHasMore = false;
       if (!storedResult.hasMore) {
         // All DB matches fit on first page (or there are none)
         setAllDbMatchesLoaded(true);
-        const apiHasMore = await BackendBridge.checkApiHasMore(
+        apiHasMore = await BackendBridge.checkApiHasMore(
           account.puuid,
           storedResult.totalCount
         );
         setHasMoreMatches(apiHasMore);
         setMatchesStart(storedResult.totalCount);
+      }
+
+      // If user exists but DB has no matches, auto-fetch first 10 from API
+      if (storedResult.totalCount === 0 && apiHasMore) {
+        const rateLimitCheck = rateLimiter.checkRateLimit();
+        if (!rateLimitCheck.allowed) {
+          setError(`Rate limit exceeded. Please wait ${rateLimitCheck.retryAfter} seconds.`);
+        } else {
+          const result = await BackendBridge.getPlayerMatchDataBatch(
+            account.puuid,
+            0,
+            10,
+            1500
+          );
+          setMatchesData(result.matches);
+          setTotalDbMatches(result.matches.length);
+          setHasMoreMatches(result.hasMore);
+          setMatchesStart(result.nextStart);
+        }
       }
 
       // Update lifetime stats and pie chart from database
@@ -341,8 +361,7 @@ export default function Component() {
         resetAt: rateLimiter.getStatus().resetAt,
       });
 
-      if (storedResult.totalCount === 0 && !hasMoreMatches) {
-        // Check one more time since state may not have updated yet
+      if (storedResult.totalCount === 0 && !apiHasMore) {
         const apiCheck = await BackendBridge.checkApiHasMore(account.puuid, 0);
         if (!apiCheck) {
           setError("No matches found for this player");
