@@ -704,13 +704,22 @@ export default function Component() {
         {/* No Data State */}
         {hasSearched && !loading && matchesData.length === 0 && !error && (
           <Card className="bg-slate-800/50 border-slate-600/50">
-            <CardContent className="p-8 text-center">
+            <CardContent className="p-8 text-center flex flex-col items-center gap-4">
               <div className="text-slate-300 text-lg">No match data found</div>
-              <div className="text-slate-400 text-sm mt-2">
+              <div className="text-slate-400 text-sm">
                 {hasMoreMatches
-                  ? "Click \"Load More Matches\" below to fetch from Riot."
+                  ? "Fetch matches from Riot using the button below."
                   : "Try a different summoner name or check your spelling"}
               </div>
+              {allDbMatchesLoaded && hasMoreMatches && (
+                <Button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore || !hasMoreMatches}
+                  className="px-8"
+                >
+                  {loadingMore ? "Loading more matches..." : "Load More Matches"}
+                </Button>
+              )}
             </CardContent>
           </Card>
         )}
