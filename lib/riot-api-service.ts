@@ -36,15 +36,14 @@ export async function getAccountByRiotId(
 
   const account: AccountDto = await res.json();
 
-  // Cache in Supabase (fire-and-forget)
-  supabase
+  // Cache in Supabase — must await on Vercel serverless
+  await supabase
     .from("accounts")
     .upsert({
       puuid: account.puuid,
       game_name: account.gameName,
       tag_line: account.tagLine,
-    })
-    .then();
+    });
 
   return account;
 }
@@ -88,11 +87,10 @@ export async function getMatchDetails(
 
   const matchDto: MatchDto = await res.json();
 
-  // Cache in Supabase (fire-and-forget — completed matches never change)
-  supabase
+  // Cache in Supabase — must await on Vercel serverless
+  await supabase
     .from("match_details")
-    .upsert({ match_id: matchId, match_data: matchDto })
-    .then();
+    .upsert({ match_id: matchId, match_data: matchDto });
 
   return matchDto;
 }
@@ -121,11 +119,10 @@ export async function getMatchTimeline(
 
   const timelineDto: MatchTimelineDto = await res.json();
 
-  // Cache in Supabase (fire-and-forget)
-  supabase
+  // Cache in Supabase — must await on Vercel serverless
+  await supabase
     .from("match_timelines")
-    .upsert({ match_id: matchId, timeline_data: timelineDto })
-    .then();
+    .upsert({ match_id: matchId, timeline_data: timelineDto });
 
   return timelineDto;
 }

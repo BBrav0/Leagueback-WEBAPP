@@ -53,17 +53,21 @@ export async function GET(request: NextRequest) {
       matchTimeline
     );
 
-    // Determine impact category and store in Supabase (fire-and-forget)
+    // Determine impact category and store in Supabase
+    // Must await — fire-and-forget gets killed on Vercel serverless
     const category = determineImpactCategory(
       matchSummary.gameResult,
       matchSummary.yourImpact,
       matchSummary.teamImpact
     );
 
-    supabase
+    const { error: upsertError } = await supabase
       .from("impact_categories")
-      .upsert({ match_id: matchId, puuid: userPuuid, category })
-      .then();
+      .upsert({ match_id: matchId, puuid: userPuuid, category });
+
+    if (upsertError) {
+      console.error("Failed to upsert impact category:", upsertError);
+    }
 
     return NextResponse.json({ success: true, matchSummary });
   } catch (error) {
