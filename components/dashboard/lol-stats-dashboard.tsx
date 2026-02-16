@@ -18,7 +18,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { BackendBridge, MatchSummary } from "@/lib/bridge"
 import { cn } from "@/lib/utils"
 import { rateLimiter } from "@/lib/rate-limiter"
-import { getImpactCategoriesForUser } from "@/lib/database-queries"
 
 
 const chartConfig = {
@@ -246,15 +245,28 @@ export default function Component() {
 
   const updateLifetimeStatsFromDatabase = async (puuid: string) => {
     try {
-      const categories = await getImpactCategoriesForUser(puuid);
+      const res = await fetch(`/api/impact-categories?puuid=${encodeURIComponent(puuid)}`);
+      if (!res.ok) {
+        console.error("Failed to fetch impact categories");
+        return;
+      }
+      const data = await res.json();
+      if (data.error) {
+        console.error("Error fetching impact categories:", data.error);
+        return;
+      }
+      
+      const categories = data.categories || [];
       const counts: ImpactCounts = {
         impactWins: 0,
         impactLosses: 0,
         guaranteedWins: 0,
         guaranteedLosses: 0,
       };
-      categories.forEach((cat) => {
-        counts[cat]++;
+      categories.forEach((cat: string) => {
+        if (cat in counts) {
+          counts[cat as keyof ImpactCounts]++;
+        }
       });
       setLifetimeCounts(counts);
       // Also update impact counts (pie chart) to show all database matches
