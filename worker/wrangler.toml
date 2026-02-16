@@ -1,0 +1,6 @@
+name = "riot-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# To set the API key secret, run:
+# npx wrangler secret put RIOT_API_KEY
