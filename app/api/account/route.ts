@@ -23,12 +23,13 @@ export async function GET(request: NextRequest) {
     if (message === "Rate limit exceeded. Try again later.") {
       return NextResponse.json({ error: message }, { status: 429 });
     }
+    // Return 200 with error body so the client can handle it without a 404 in the console
     if (
       message === "Account not found" ||
       message.startsWith("Data not found") ||
       message.includes("No results found")
     ) {
-      return NextResponse.json({ error: "Account not found" }, { status: 404 });
+      return NextResponse.json({ error: "Account not found" });
     }
     return NextResponse.json({ error: message }, { status: 500 });
   }
