@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
+import { usePathname, useRouter } from "next/navigation"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis, ReferenceArea, PieChart, Pie, Cell } from "recharts"
 import {
   ChartContainer,
@@ -64,6 +65,25 @@ const IMPACT_CACHE_KEY = "matchImpactCache_v1" as const;
 
 // Category helper type
 type ImpactCategory = keyof ImpactCounts;
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function parsePlayerFromUrl(pathname: string, hash: string): { gameName: string; tagLine: string } {
+  const trimmedPath = pathname.replace(/^\/+|\/+$/g, "");
+  const routeGameName = trimmedPath.split("/")[0] || "";
+  const rawHash = hash.startsWith("#") ? hash.slice(1) : hash;
+
+  return {
+    gameName: routeGameName ? safeDecodeURIComponent(routeGameName) : "",
+    tagLine: rawHash ? safeDecodeURIComponent(rawHash) : "",
+  };
+}
 
 // ===== Helper functions =====
 function classifyMatch(match: MatchSummary): ImpactCategory {
@@ -219,6 +239,8 @@ function MatchChart({ data }: { data: MatchSummary["data"] }) {
 }
 
 export default function Component() {
+  const router = useRouter();
+  const pathname = usePathname();
   const [matchesData, setMatchesData] = useState<MatchSummary[]>([]);
   const [impactCounts, setImpactCounts] = useState<ImpactCounts>({
     impactWins: 0,
@@ -248,8 +270,9 @@ export default function Component() {
   const [allDbMatchesLoaded, setAllDbMatchesLoaded] = useState(false);
   const [loadingDbMatches, setLoadingDbMatches] = useState(false);
   const scrollSentinelRef = useRef<HTMLDivElement>(null);
+  const autoSearchKeyRef = useRef<string | null>(null);
 
-  const updateLifetimeStatsFromDatabase = async (puuid: string) => {
+  const updateLifetimeStatsFromDatabase = useCallback(async (puuid: string) => {
     try {
       // Fetch all categories (lifetime) and last 10 (pie chart) in parallel
       const [lifetimeRes, pieRes] = await Promise.all([
@@ -281,13 +304,36 @@ export default function Component() {
     } catch (error) {
       console.error("Error updating stats from database:", error);
     }
-  };
+  }, []);
 
-  const handleSearch = async () => {
-    if (!gameName || !tagLine) {
+  const runSearch = useCallback(async (
+    rawGameName: string,
+    rawTagLine: string,
+    options?: { syncUrl?: boolean }
+  ) => {
+    const normalizedGameName = rawGameName.trim();
+    const normalizedTagLine = rawTagLine.trim();
+
+    if (!normalizedGameName || !normalizedTagLine) {
       setError("Please enter both game name and tag line");
       return;
     }
+
+    const routeKey = `${normalizedGameName}#${normalizedTagLine}`;
+    if (options?.syncUrl !== false) {
+      autoSearchKeyRef.current = routeKey;
+      const nextUrl = `/${encodeURIComponent(normalizedGameName)}#${encodeURIComponent(normalizedTagLine)}`;
+      if (typeof window !== "undefined") {
+        const currentUrl = `${window.location.pathname}${window.location.hash}`;
+        if (currentUrl !== nextUrl) {
+          router.push(nextUrl);
+        }
+      }
+    }
+
+    // Keep input state normalized to the routed identity.
+    setGameName(normalizedGameName);
+    setTagLine(normalizedTagLine);
 
     // Check rate limit before starting (don't count — search only hits DB)
     const rateLimitCheck = rateLimiter.getStatus();
@@ -307,7 +353,7 @@ export default function Component() {
     setAllDbMatchesLoaded(false);
 
     try {
-      const account = await BackendBridge.getAccount(gameName, tagLine);
+      const account = await BackendBridge.getAccount(normalizedGameName, normalizedTagLine);
       if (!account) {
         throw new Error("Failed to get account information");
       }
@@ -374,6 +420,10 @@ export default function Component() {
     } finally {
       setLoading(false);
     }
+  }, [router, updateLifetimeStatsFromDatabase]);
+
+  const handleSearch = async () => {
+    await runSearch(gameName, tagLine, { syncUrl: true });
   };
 
   const handleLoadMore = async () => {
@@ -433,6 +483,28 @@ export default function Component() {
       handleSearch();
     }
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const { gameName: routeGameName, tagLine: routeTagLine } = parsePlayerFromUrl(pathname, window.location.hash);
+
+    if (routeGameName) {
+      setGameName(routeGameName);
+    }
+
+    if (routeTagLine) {
+      setTagLine(routeTagLine);
+    }
+
+    if (!routeGameName || !routeTagLine) return;
+
+    const routeKey = `${routeGameName}#${routeTagLine}`;
+    if (autoSearchKeyRef.current === routeKey) return;
+
+    autoSearchKeyRef.current = routeKey;
+    void runSearch(routeGameName, routeTagLine, { syncUrl: false });
+  }, [pathname, runSearch]);
 
   // Update rate limit status periodically
   useEffect(() => {
