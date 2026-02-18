@@ -76,7 +76,9 @@ function safeDecodeURIComponent(value: string): string {
 
 function parsePlayerFromUrl(pathname: string, hash: string): { gameName: string; tagLine: string } {
   const trimmedPath = pathname.replace(/^\/+|\/+$/g, "");
-  const routeGameName = trimmedPath.split("/")[0] || "";
+  const pathSegments = trimmedPath.split("/").filter(Boolean);
+  const isPlayerRoute = pathSegments.length >= 2 && pathSegments[0].toLowerCase() === "player";
+  const routeGameName = isPlayerRoute ? pathSegments[1] : "";
   const rawHash = hash.startsWith("#") ? hash.slice(1) : hash;
 
   return {
@@ -322,7 +324,7 @@ export default function Component() {
     const routeKey = `${normalizedGameName}#${normalizedTagLine}`;
     if (options?.syncUrl !== false) {
       autoSearchKeyRef.current = routeKey;
-      const nextUrl = `/${encodeURIComponent(normalizedGameName)}#${encodeURIComponent(normalizedTagLine)}`;
+      const nextUrl = `/player/${encodeURIComponent(normalizedGameName)}#${encodeURIComponent(normalizedTagLine)}`;
       if (typeof window !== "undefined") {
         const currentUrl = `${window.location.pathname}${window.location.hash}`;
         if (currentUrl !== nextUrl) {
