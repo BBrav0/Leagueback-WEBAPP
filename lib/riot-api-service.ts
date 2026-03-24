@@ -1,4 +1,4 @@
-import { supabaseServer as supabase } from "./supabase-server";
+import { getSupabaseServer } from "./supabase-server";
 import type { AccountDto, MatchDto, MatchTimelineDto } from "./types";
 
 const WORKER_URL =
@@ -9,7 +9,7 @@ export async function getAccountByRiotId(
   tagLine: string
 ): Promise<AccountDto> {
   // Check Supabase cache (case-insensitive — Riot names are case-insensitive)
-  const { data: cached } = await supabase
+  const { data: cached } = await getSupabaseServer()
     .from("accounts")
     .select("puuid, game_name, tag_line")
     .ilike("game_name", gameName)
@@ -60,7 +60,7 @@ export async function getAccountByRiotId(
   const account: AccountDto = await res.json();
 
   // Cache in Supabase — must await on Vercel serverless
-  await supabase
+  await getSupabaseServer()
     .from("accounts")
     .upsert({
       puuid: account.puuid,
@@ -90,7 +90,7 @@ export async function getMatchDetails(
   matchId: string
 ): Promise<MatchDto> {
   // Check Supabase cache
-  const { data: cached } = await supabase
+  const { data: cached } = await getSupabaseServer()
     .from("match_details")
     .select("match_data")
     .eq("match_id", matchId)
@@ -111,7 +111,7 @@ export async function getMatchDetails(
   const matchDto: MatchDto = await res.json();
 
   // Cache in Supabase — must await on Vercel serverless
-  await supabase
+  await getSupabaseServer()
     .from("match_details")
     .upsert({ match_id: matchId, match_data: matchDto });
 
@@ -122,7 +122,7 @@ export async function getMatchTimeline(
   matchId: string
 ): Promise<MatchTimelineDto> {
   // Check Supabase cache
-  const { data: cached } = await supabase
+  const { data: cached } = await getSupabaseServer()
     .from("match_timelines")
     .select("timeline_data")
     .eq("match_id", matchId)
@@ -143,7 +143,7 @@ export async function getMatchTimeline(
   const timelineDto: MatchTimelineDto = await res.json();
 
   // Cache in Supabase — must await on Vercel serverless
-  await supabase
+  await getSupabaseServer()
     .from("match_timelines")
     .upsert({ match_id: matchId, timeline_data: timelineDto });
 

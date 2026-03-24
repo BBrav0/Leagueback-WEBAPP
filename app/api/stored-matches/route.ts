@@ -8,7 +8,7 @@ import {
   reconstructMatchSummary,
   determineImpactCategory,
 } from "@/lib/match-reconstruction";
-import { supabaseServer } from "@/lib/supabase-server";
+import { getSupabaseServer } from "@/lib/supabase-server";
 import type { ImpactCategory, MatchSummary } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (categoryRows.length > 0) {
-      const { error: upsertError } = await supabaseServer
+      const { error: upsertError } = await getSupabaseServer()
         .from("impact_categories")
         .upsert(categoryRows, { onConflict: "match_id,puuid" });
       if (upsertError) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMatchDetails, getMatchTimeline } from "@/lib/riot-api-service";
 import { reconstructMatchSummary, determineImpactCategory } from "@/lib/match-reconstruction";
-import { supabaseServer } from "@/lib/supabase-server";
+import { getSupabaseServer } from "@/lib/supabase-server";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
       matchSummary.teamImpact
     );
 
-    const { error: upsertError } = await supabaseServer
+    const { error: upsertError } = await getSupabaseServer()
       .from("impact_categories")
       .upsert(
         { match_id: matchId, puuid: userPuuid, category },

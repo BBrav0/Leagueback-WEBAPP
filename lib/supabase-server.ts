@@ -33,6 +33,11 @@ if (process.env.NODE_ENV === "development" && !serviceRoleKey) {
   );
 }
 
-export const supabaseServer: SupabaseClient = createClient(supabaseUrl, serverKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+/** Lazy singleton — avoids creating extra clients on Next.js Fast Refresh / repeated module evaluation. */
+let _supabaseServer: SupabaseClient | null = null;
+
+export function getSupabaseServer(): SupabaseClient {
+  return (_supabaseServer ??= createClient(supabaseUrl, serverKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  }));
+}
