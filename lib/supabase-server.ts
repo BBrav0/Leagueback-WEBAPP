@@ -19,18 +19,12 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
  * Falls back to the anon key if the service role is unset (local dev).
  */
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const anonKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
 
-if (process.env.NODE_ENV === "development" && !serviceRoleKey) {
-  console.warn(
-    "[supabase-server] SUPABASE_SERVICE_ROLE_KEY is not set; using anon key. Server routes may be blocked by RLS."
-  );
-}
-
-/** Lazy singleton — avoids creating extra clients on Next.js Fast Refresh / repeated module evaluation. */
+/** Lazy singleton — recreated if the effective key changes (e.g. after adding SUPABASE_SERVICE_ROLE_KEY). */
 let _supabaseServer: SupabaseClient | null = null;
+let _lastServerKey: string | undefined;
 
 export function getSupabaseServer(): SupabaseClient {
   if (!supabaseUrl || !anonKey) {
@@ -39,8 +33,23 @@ export function getSupabaseServer(): SupabaseClient {
     );
   }
 
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const serverKey = serviceRoleKey || anonKey;
-  return (_supabaseServer ??= createClient(supabaseUrl, serverKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  }));
+
+  if (
+    !_supabaseServer ||
+    _lastServerKey !== serverKey
+  ) {
+    if (process.env.NODE_ENV === "development" && !serviceRoleKey) {
+      console.warn(
+        "[supabase-server] SUPABASE_SERVICE_ROLE_KEY is not set; using anon key. Server writes (e.g. player_matches) will fail with RLS."
+      );
+    }
+    _lastServerKey = serverKey;
+    _supabaseServer = createClient(supabaseUrl, serverKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }
+
+  return _supabaseServer;
 }
