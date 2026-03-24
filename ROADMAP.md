@@ -167,3 +167,5 @@
 - Some features may require Riot API access or partnerships
 - Timeline estimates are approximate and subject to change
 - Community feedback is welcome - open an issue to suggest features!
+
+add an impact percantage on games below the luck percentage.
