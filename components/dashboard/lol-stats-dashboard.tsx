@@ -265,6 +265,74 @@ function MatchChart({ data }: { data: MatchSummary["data"] }) {
   )
 }
 
+const MatchCard = memo(function MatchCard({ match }: { match: MatchSummary }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [showChart, setShowChart] = useState(false);
+
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el || showChart) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setShowChart(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "500px 0px" }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [showChart]);
+
+  return (
+    <div ref={cardRef}>
+      <Card className="bg-slate-800/50 border-slate-600/50 w-full">
+        <CardHeader>
+          <div className="flex justify-between items-start">
+            <div>
+              <CardTitle className="text-white flex items-center gap-3">
+                {match.champion}
+                <Badge
+                  variant={match.gameResult === "Victory" ? "default" : "destructive"}
+                  className={match.gameResult === "Victory" ? "bg-green-600 text-white hover:bg-green-600" : ""}
+                >
+                  {match.gameResult}
+                </Badge>
+              </CardTitle>
+              <CardDescription className="text-slate-300 mt-1">
+                {match.summonerName} ⏱️ {match.gameTime} ⚔️ {match.kda}  <br />
+                🧙 {match.cs} 🔎 {match.visionScore}
+              </CardDescription>
+            </div>
+            <div className="text-right space-y-1">
+              <div className="text-slate-300 text-sm">
+                Your Average Score: {match.yourImpact.toFixed(2)} <br />
+                Average Teammate Score: { match.teamImpact.toFixed(2) }
+              </div>
+              <div className="text-slate-400 text-xs">
+                {match.rank}
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="text-slate-300 text-sm font-medium">Performance Timeline</div>
+            {showChart ? (
+              <MatchChart data={match.data} />
+            ) : (
+              <div className="h-[250px] w-full animate-pulse rounded-md bg-slate-700/50" />
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+});
+
 export default function Component() {
   const router = useRouter();
   const pathname = usePathname();
@@ -300,6 +368,8 @@ export default function Component() {
   const scrollSentinelRef = useRef<HTMLDivElement>(null);
   const autoSearchKeyRef = useRef<string | null>(null);
   const matchesDataRef = useRef<MatchSummary[]>([]);
+  const pageScrollLockYRef = useRef<number | null>(null);
+  const loadingPlaceholderCount = loadingDbMatches ? 3 : loadingMore ? 2 : 0;
 
   useEffect(() => {
     matchesDataRef.current = matchesData;
@@ -644,6 +714,81 @@ export default function Component() {
     };
   }, [hasSearched, allDbMatchesLoaded, hasMoreDbMatches, loadMoreDbMatches]);
 
+  // Strong page-level bottom lock while additional matches are appending.
+  // Prevents outrunning partially rendered cards on fast scroll/wheel/touch.
+  useEffect(() => {
+    const isAppendingMore = loadingDbMatches || loadingMore;
+    if (!isAppendingMore) {
+      pageScrollLockYRef.current = null;
+      return;
+    }
+
+    const getMaxScrollY = () =>
+      Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+
+    if (pageScrollLockYRef.current === null) {
+      pageScrollLockYRef.current = getMaxScrollY();
+    }
+
+    let rafId: number | null = null;
+    const clampToLock = () => {
+      const lockY = pageScrollLockYRef.current;
+      if (lockY === null) return;
+      if (window.scrollY > lockY) {
+        window.scrollTo({ top: lockY, behavior: "auto" });
+      }
+    };
+
+    const onScroll = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        clampToLock();
+      });
+    };
+
+    const onWheel = (event: WheelEvent) => {
+      const lockY = pageScrollLockYRef.current;
+      if (lockY === null) return;
+      // Block only downward movement once user reaches the current rendered bottom.
+      if (event.deltaY > 0 && window.scrollY >= lockY - 1) {
+        event.preventDefault();
+        clampToLock();
+      }
+    };
+
+    let touchStartY = 0;
+    const onTouchStart = (event: TouchEvent) => {
+      touchStartY = event.touches[0]?.clientY ?? 0;
+    };
+
+    const onTouchMove = (event: TouchEvent) => {
+      const lockY = pageScrollLockYRef.current;
+      if (lockY === null) return;
+      const currentY = event.touches[0]?.clientY ?? touchStartY;
+      const isDownwardPageMovement = touchStartY > currentY;
+      if (isDownwardPageMovement && window.scrollY >= lockY - 1) {
+        event.preventDefault();
+        clampToLock();
+      }
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+
+    return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
+    };
+  }, [loadingDbMatches, loadingMore]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-950 via-purple-900 to-blue-900 p-6">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -751,51 +896,43 @@ export default function Component() {
             {/* Match cards */}
             <div className="md:w-3/5 space-y-6">
               {matchesData.map((match) => (
-                <Card key={match.id} className="bg-slate-800/50 border-slate-600/50 w-full">
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="text-white flex items-center gap-3">
-                          {match.champion}
-                          <Badge
-                            variant={match.gameResult === "Victory" ? "default" : "destructive"}
-                            className={match.gameResult === "Victory" ? "bg-green-600 text-white hover:bg-green-600" : ""}
-                          >
-                            {match.gameResult}
-                          </Badge>
-                        </CardTitle>
-                        <CardDescription className="text-slate-300 mt-1">
-                          {match.summonerName} ⏱️ {match.gameTime} ⚔️ {match.kda}  <br />
-                          🧙 {match.cs} 🔎 {match.visionScore}
-                        </CardDescription>
-                      </div>
-                      <div className="text-right space-y-1">
-                        <div className="text-slate-300 text-sm">
-                          Your Average Score: {match.yourImpact.toFixed(2)} <br />
-                          Average Teammate Score: { match.teamImpact.toFixed(2) }
-                        </div>
-                        <div className="text-slate-400 text-xs">
-                          {match.rank}
-                        </div>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="text-slate-300 text-sm font-medium">Performance Timeline</div>
-                      <MatchChart data={match.data} />
-                    </div>
-                  </CardContent>
-                </Card>
+                <MatchCard key={match.id} match={match} />
               ))}
               
               {/* Infinite scroll sentinel for DB matches */}
               {hasMoreDbMatches && !allDbMatchesLoaded && (
-                <div ref={scrollSentinelRef} className="flex flex-col items-center py-4">
+                <div ref={scrollSentinelRef} className="flex min-h-16 flex-col items-center justify-center py-4">
                   <div className="text-slate-400 text-sm">
                     {loadingDbMatches
                       ? "Loading more matches..."
                       : `Loaded ${loadedDbMatches} of ${totalDbMatches} stored matches`}
+                  </div>
+                </div>
+              )}
+
+              {loadingPlaceholderCount > 0 && (
+                <div className="space-y-6" aria-hidden="true">
+                  {Array.from({ length: loadingPlaceholderCount }).map((_, idx) => (
+                    <Card
+                      key={`loading-placeholder-${idx}`}
+                      className="bg-slate-800/50 border-slate-600/50 w-full overflow-hidden"
+                    >
+                      <CardHeader className="animate-pulse space-y-3">
+                        <div className="h-5 w-40 rounded bg-slate-700/70" />
+                        <div className="h-4 w-56 rounded bg-slate-700/60" />
+                      </CardHeader>
+                      <CardContent className="animate-pulse">
+                        <div className="space-y-4">
+                          <div className="h-4 w-36 rounded bg-slate-700/60" />
+                          <div className="h-[250px] w-full rounded-md bg-slate-700/50" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  <div className="flex min-h-12 items-center justify-center rounded-md border border-slate-700/60 bg-slate-800/40 px-4">
+                    <div className="text-slate-300 text-sm">
+                      Loading next matches, rendering cards before more scrolling…
+                    </div>
                   </div>
                 </div>
               )}
@@ -875,7 +1012,18 @@ export default function Component() {
         )}
 
         {/* No Data State */}
-        {hasSearched && !loading && matchesData.length === 0 && !error && (
+        {hasSearched && !loading && fetchingMatchesFromApi && matchesData.length === 0 && !error && (
+          <Card className="bg-slate-800/50 border-slate-600/50">
+            <CardContent className="p-8 flex flex-col items-center gap-4 animate-pulse">
+              <div className="h-5 w-52 rounded-md bg-slate-700/80" />
+              <div className="h-4 w-72 max-w-full rounded-md bg-slate-700/60" />
+              <div className="h-10 w-40 rounded-md bg-slate-700/70 mt-2" />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* No Data State */}
+        {hasSearched && !loading && !fetchingMatchesFromApi && matchesData.length === 0 && !error && (
           <Card className="bg-slate-800/50 border-slate-600/50">
             <CardContent className="p-8 text-center flex flex-col items-center gap-4">
               <div className="text-slate-300 text-lg">No match data found</div>
