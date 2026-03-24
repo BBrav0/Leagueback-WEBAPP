@@ -166,8 +166,8 @@ export async function POST(request: NextRequest) {
     offset += PAGE_SIZE;
   }
 
-  const processed = totalImpactRows;
-  const nextOffset = processed >= limit ? startOffset + processed : null;
+  // Resume pointer should reflect the actual table cursor, not a derived count.
+  const nextOffset = totalImpactRows >= limit ? offset + PAGE_SIZE : null;
   return NextResponse.json({
     backfilled,
     skipped: skippedMissingData + skippedErrors,

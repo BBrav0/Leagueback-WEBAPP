@@ -162,11 +162,15 @@ export async function getMatchCacheEntry(matchId: string): Promise<{
   matchData: MatchDto | null;
   timelineData: MatchTimelineDto | null;
 }> {
-  const { data } = await getSupabaseServer()
+  const { data, error } = await getSupabaseServer()
     .from("match_cache")
     .select("match_data, timeline_data")
     .eq("match_id", matchId)
     .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching match_cache entry:", error);
+  }
 
   return {
     matchData: (data?.match_data as MatchDto | undefined) ?? null,
