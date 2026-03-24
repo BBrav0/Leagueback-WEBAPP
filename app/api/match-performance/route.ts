@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getMatchCacheEntry,
   getMatchDetails,
   getMatchTimeline,
 } from "@/lib/riot-api-service";
@@ -8,7 +7,7 @@ import {
   reconstructMatchSummary,
   determineImpactCategory,
 } from "@/lib/match-reconstruction";
-import { upsertPlayerMatch } from "@/lib/database-queries";
+import { getMatchCacheEntry, upsertPlayerMatch } from "@/lib/database-queries";
 import { getSupabaseServer } from "@/lib/supabase-server";
 import type { PlayerMatchRow } from "@/lib/database-queries";
 
@@ -87,22 +86,22 @@ export async function GET(request: NextRequest) {
     };
 
     const persistError = await upsertPlayerMatch(row);
-    const { error: cacheError } = await getSupabaseServer()
-      .from("match_cache")
-      .upsert(
-        { match_id: matchId, match_data: matchDetails, timeline_data: matchTimeline },
-        { onConflict: "match_id" }
-      );
+    let cacheErrorMessage: string | undefined;
+    if (!cacheEntry.matchData || !cacheEntry.timelineData) {
+      const { error: cacheError } = await getSupabaseServer()
+        .from("match_cache")
+        .upsert(
+          { match_id: matchId, match_data: matchDetails, timeline_data: matchTimeline },
+          { onConflict: "match_id" }
+        );
+      cacheErrorMessage = cacheError?.message;
+    }
 
     return NextResponse.json({
       success: true,
       matchSummary,
-      ...(persistError || cacheError?.message
-        ? {
-            playerMatchesPersistError: persistError || undefined,
-            matchCachePersistError: cacheError?.message,
-          }
-        : {}),
+      ...(persistError ? { playerMatchesPersistError: persistError } : {}),
+      ...(cacheErrorMessage ? { matchCachePersistError: cacheErrorMessage } : {}),
     });
   } catch (error) {
     return NextResponse.json({

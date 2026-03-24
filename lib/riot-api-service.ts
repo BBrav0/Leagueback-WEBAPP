@@ -150,18 +150,3 @@ export async function getMatchTimeline(
   return timelineDto;
 }
 
-export async function getMatchCacheEntry(matchId: string): Promise<{
-  matchData: MatchDto | null;
-  timelineData: MatchTimelineDto | null;
-}> {
-  const { data } = await getSupabaseServer()
-    .from("match_cache")
-    .select("match_data, timeline_data")
-    .eq("match_id", matchId)
-    .maybeSingle();
-
-  return {
-    matchData: (data?.match_data as MatchDto | undefined) ?? null,
-    timelineData: (data?.timeline_data as MatchTimelineDto | undefined) ?? null,
-  };
-}
