@@ -82,4 +82,50 @@ describe("BackendBridge", () => {
     expect(result.hasMore).toBe(true);
     expect(result.nextStart).toBe(2);
   });
+
+  it("syncNewHeadMatchesFromRiot skips all Riot calls when player has no stored rows", async () => {
+    const hist = vi.spyOn(BackendBridge, "getMatchHistory");
+
+    const r = await BackendBridge.syncNewHeadMatchesFromRiot("p1", undefined, 0);
+
+    expect(hist).not.toHaveBeenCalled();
+    expect(r).toEqual({
+      analyzedCount: 0,
+      skippedAlreadyFresh: false,
+      skippedNoHistory: false,
+    });
+  });
+
+  it("syncNewHeadMatchesFromRiot fast path when Riot newest equals DB newest", async () => {
+    vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue(["same"]);
+    const analyze = vi.spyOn(BackendBridge, "analyzeMatchPerformance");
+
+    const r = await BackendBridge.syncNewHeadMatchesFromRiot("p1", "same", 4);
+
+    expect(r.skippedAlreadyFresh).toBe(true);
+    expect(r.analyzedCount).toBe(0);
+    expect(analyze).not.toHaveBeenCalled();
+  });
+
+  it("syncNewHeadMatchesFromRiot analyzes only IDs before first anchor in window", async () => {
+    vi.spyOn(BackendBridge, "getMatchHistory")
+      .mockResolvedValueOnce(["new1"])
+      .mockResolvedValueOnce(["new1", "new2", "anchor"]);
+    vi.spyOn(BackendBridge, "fetchExistingMatchIdsForPlayer").mockResolvedValue(
+      new Set(["anchor"])
+    );
+    const analyze = vi
+      .spyOn(BackendBridge, "analyzeMatchPerformance")
+      .mockResolvedValue({ success: true, matchSummary: sampleMatch });
+
+    const r = await BackendBridge.syncNewHeadMatchesFromRiot("p1", "stale-head", 3, {
+      analyzeDelayMs: 0,
+    });
+
+    expect(r.analyzedCount).toBe(2);
+    expect(r.skippedAlreadyFresh).toBe(false);
+    expect(analyze).toHaveBeenCalledTimes(2);
+    expect(analyze).toHaveBeenCalledWith("new1", "p1");
+    expect(analyze).toHaveBeenCalledWith("new2", "p1");
+  });
 });

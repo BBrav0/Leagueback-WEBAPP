@@ -138,6 +138,110 @@ export class BackendBridge {
   }
 
   /**
+   * Return which of the given match IDs already exist in player_matches for this puuid.
+   */
+  static async fetchExistingMatchIdsForPlayer(
+    puuid: string,
+    matchIds: string[]
+  ): Promise<Set<string>> {
+    if (matchIds.length === 0) return new Set();
+    try {
+      const res = await fetch("/api/player-matches/existing-ids", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ puuid, matchIds }),
+      });
+      if (!res.ok) {
+        console.error("fetchExistingMatchIdsForPlayer HTTP", res.status);
+        return new Set();
+      }
+      const data = (await res.json()) as { existingMatchIds?: string[]; error?: string };
+      if (data.error) {
+        console.error("fetchExistingMatchIdsForPlayer:", data.error);
+        return new Set();
+      }
+      return new Set(data.existingMatchIds ?? []);
+    } catch (e) {
+      console.error("fetchExistingMatchIdsForPlayer:", e);
+      return new Set();
+    }
+  }
+
+  /**
+   * Compare Riot match list head to DB; ingest newer matches until an ID already in player_matches
+   * (anchor). Skips work when the newest Riot id matches dbNewestId. For cold players (no rows),
+   * returns immediately — use getPlayerMatchDataBatch from the dashboard.
+   */
+  static async syncNewHeadMatchesFromRiot(
+    puuid: string,
+    dbNewestId: string | undefined,
+    storedTotalCount: number,
+    options: { windowSize?: number; analyzeDelayMs?: number } = {}
+  ): Promise<{ analyzedCount: number; skippedAlreadyFresh: boolean; skippedNoHistory: boolean }> {
+    const windowSize = options.windowSize ?? 20;
+    const analyzeDelayMs = options.analyzeDelayMs ?? 1500;
+
+    if (storedTotalCount === 0) {
+      return {
+        analyzedCount: 0,
+        skippedAlreadyFresh: false,
+        skippedNoHistory: false,
+      };
+    }
+
+    const newestOnly = await this.getMatchHistory(puuid, 1, 0);
+    if (!newestOnly || newestOnly.length === 0) {
+      return {
+        analyzedCount: 0,
+        skippedAlreadyFresh: false,
+        skippedNoHistory: true,
+      };
+    }
+
+    if (dbNewestId && newestOnly[0] === dbNewestId) {
+      return {
+        analyzedCount: 0,
+        skippedAlreadyFresh: true,
+        skippedNoHistory: false,
+      };
+    }
+
+    const windowIds = await this.getMatchHistory(puuid, windowSize, 0);
+    if (!windowIds || windowIds.length === 0) {
+      return {
+        analyzedCount: 0,
+        skippedAlreadyFresh: false,
+        skippedNoHistory: true,
+      };
+    }
+
+    const existing = await this.fetchExistingMatchIdsForPlayer(puuid, windowIds);
+    const anchorIdx = windowIds.findIndex((id) => existing.has(id));
+    const toAnalyze =
+      anchorIdx === -1 ? windowIds : windowIds.slice(0, anchorIdx);
+
+    let analyzedCount = 0;
+    for (let i = 0; i < toAnalyze.length; i++) {
+      const matchId = toAnalyze[i];
+      const analysis = await this.analyzeMatchPerformance(matchId, puuid);
+      if (analysis?.success && analysis.matchSummary) {
+        analyzedCount++;
+      }
+      if (i < toAnalyze.length - 1) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, analyzeDelayMs / Math.max(toAnalyze.length, 1))
+        );
+      }
+    }
+
+    return {
+      analyzedCount,
+      skippedAlreadyFresh: false,
+      skippedNoHistory: false,
+    };
+  }
+
+  /**
    * Lightweight check if Riot API has more matches beyond what's stored
    */
   static async checkApiHasMore(

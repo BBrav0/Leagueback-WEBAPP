@@ -516,6 +516,45 @@ export default function Component() {
       setLoading(false);
       loadingDismissedEarly = true;
 
+      // Returning players: Riot may have newer games than DB head; sync only the new prefix (see BackendBridge.syncNewHeadMatchesFromRiot).
+      if (storedResult.totalCount > 0) {
+        const syncRate = rateLimiter.checkRateLimit();
+        if (syncRate.allowed) {
+          setFetchingMatchesFromApi(true);
+          try {
+            const dbNewest = storedResult.matches[0]?.id;
+            const syncResult = await BackendBridge.syncNewHeadMatchesFromRiot(
+              account.puuid,
+              dbNewest,
+              storedResult.totalCount,
+              { windowSize: 20, analyzeDelayMs: 1500 }
+            );
+            if (syncResult.analyzedCount > 0) {
+              const refreshed = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
+              setMatchesData(refreshed.matches);
+              setTotalDbMatches(refreshed.totalCount);
+              setLoadedDbMatches(refreshed.matches.length);
+              setHasMoreDbMatches(refreshed.hasMore);
+              matchesForStats = refreshed.matches;
+
+              if (!refreshed.hasMore) {
+                setAllDbMatchesLoaded(true);
+                const more = await BackendBridge.checkApiHasMore(
+                  account.puuid,
+                  refreshed.totalCount
+                );
+                setHasMoreMatches(more);
+                setMatchesStart(refreshed.totalCount);
+              } else {
+                setAllDbMatchesLoaded(false);
+              }
+            }
+          } finally {
+            setFetchingMatchesFromApi(false);
+          }
+        }
+      }
+
       // If user exists but DB has no categorized matches, auto-fetch first 10 from API
       if (storedResult.totalCount === 0 && apiHasMore) {
         const rateLimitCheck = rateLimiter.checkRateLimit();
