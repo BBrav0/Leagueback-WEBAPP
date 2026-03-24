@@ -1,10 +1,18 @@
+import "server-only";
+
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Server-only Supabase client for API routes and lib modules used only on the server.
- * Prefer SUPABASE_SERVICE_ROLE_KEY so Row Level Security does not block reads/writes
- * for league data (impact_categories, match_details, etc.). Falls back to the anon
- * key if the service role is unset (local dev). Never import this file from client components.
+ *
+ * **Service role and RLS:** When `SUPABASE_SERVICE_ROLE_KEY` is set, this client
+ * bypasses Row Level Security. That is an intentional product decision: match and
+ * account data for this app are backend-owned (no end-user Supabase auth on these
+ * tables). The key must exist only in server env — importing this module from a
+ * client bundle fails at build time (`server-only`).
+ *
+ * Prefer the service role so RLS misconfiguration cannot block reads/writes.
+ * Falls back to the anon key if the service role is unset (local dev).
  */
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

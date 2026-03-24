@@ -170,6 +170,15 @@ const ImpactPieChart = memo(function ImpactPieChart({ counts }: { counts: Impact
     [pieData]
   );
 
+  // Stable formatter: keeps slice % labels without recharts animation cost (isAnimationActive={false}).
+  const renderSliceLabel = useCallback(
+    ({ name, value }: { name: string; value: number }) => {
+      const pct = total > 0 ? (value / total) * 100 : 0;
+      return `${pieConfig[name as keyof typeof pieConfig].label} ${pct.toFixed(0)}%`;
+    },
+    [total]
+  );
+
   if (total === 0) {
     return (
       <div className="flex h-[300px] w-full flex-col items-center justify-center gap-2 text-center">
@@ -198,7 +207,8 @@ const ImpactPieChart = memo(function ImpactPieChart({ counts }: { counts: Impact
           paddingAngle={2}
           strokeWidth={0}
           isAnimationActive={false}
-          label={false}
+          label={renderSliceLabel}
+          labelLine={false}
         >
           {pieData.map((entry) => (
             <Cell
@@ -457,6 +467,9 @@ export default function Component() {
 
       let matchesForStats = storedResult.matches;
 
+      // Dismiss full-screen "Analyzing" as soon as account + first DB page are known.
+      // Riot backfill (if any) is indicated by `fetchingMatchesFromApi` so we avoid
+      // a long blocking spinner without hiding ongoing work.
       setLoading(false);
 
       // If user exists but DB has no categorized matches, auto-fetch first 10 from API
@@ -464,6 +477,7 @@ export default function Component() {
         const rateLimitCheck = rateLimiter.checkRateLimit();
         if (!rateLimitCheck.allowed) {
           setError(`Rate limit exceeded. Please wait ${rateLimitCheck.retryAfter} seconds.`);
+          // No batch run — matchesForStats stays []. syncImpactStats still loads from DB below.
         } else {
           setFetchingMatchesFromApi(true);
           try {
@@ -484,6 +498,7 @@ export default function Component() {
         }
       }
 
+      // DB-backed counts always; client fallback only when lifetimeCategoryCount === 0 && matches.length > 0
       await syncImpactStats(account.puuid, matchesForStats);
 
       setRateLimitStatus({
