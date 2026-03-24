@@ -1,13 +1,6 @@
-import type { MatchSummary } from "./types";
+import type { ImpactCategory, MatchSummary } from "./types";
 
-export type ImpactCounts = {
-  impactWins: number;
-  impactLosses: number;
-  guaranteedWins: number;
-  guaranteedLosses: number;
-};
-
-export type ImpactCategory = keyof ImpactCounts;
+export type ImpactCounts = Record<ImpactCategory, number>;
 
 export function classifyMatch(match: MatchSummary): ImpactCategory {
   const youHigher = match.yourImpact > match.teamImpact;

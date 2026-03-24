@@ -136,7 +136,9 @@ const ImpactPieChart = memo(function ImpactPieChart({ counts }: { counts: Impact
   const renderSliceLabel = useCallback(
     ({ name, value }: { name: string; value: number }) => {
       const pct = total > 0 ? (value / total) * 100 : 0;
-      return `${pieConfig[name as keyof typeof pieConfig].label} ${pct.toFixed(0)}%`;
+      const config = pieConfig[name as keyof typeof pieConfig];
+      if (!config) return `${value}`;
+      return `${config.label} ${pct.toFixed(0)}%`;
     },
     [total]
   );
@@ -297,6 +299,11 @@ export default function Component() {
   const [fetchingMatchesFromApi, setFetchingMatchesFromApi] = useState(false);
   const scrollSentinelRef = useRef<HTMLDivElement>(null);
   const autoSearchKeyRef = useRef<string | null>(null);
+  const matchesDataRef = useRef<MatchSummary[]>([]);
+
+  useEffect(() => {
+    matchesDataRef.current = matchesData;
+  }, [matchesData]);
 
   const syncImpactStats = useCallback(async (puuid: string, matches: MatchSummary[]) => {
     try {
@@ -521,11 +528,8 @@ export default function Component() {
         return;
       }
 
-      let merged: MatchSummary[] = [];
-      setMatchesData((prev) => {
-        merged = [...prev, ...result.matches];
-        return merged;
-      });
+      const merged = [...matchesDataRef.current, ...result.matches];
+      setMatchesData(merged);
 
       // Newly fetched matches are stored in DB by match-performance route
       setTotalDbMatches(prev => prev + result.matches.length);

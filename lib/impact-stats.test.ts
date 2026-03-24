@@ -44,6 +44,15 @@ describe("classifyMatch", () => {
       "guaranteedWins"
     );
   });
+
+  it("tie impact uses non-higher branch (product rule)", () => {
+    expect(classifyMatch(makeMatch({ gameResult: "Victory", yourImpact: 6, teamImpact: 6 }))).toBe(
+      "guaranteedWins"
+    );
+    expect(classifyMatch(makeMatch({ gameResult: "Defeat", yourImpact: 6, teamImpact: 6 }))).toBe(
+      "impactLosses"
+    );
+  });
 });
 
 describe("deriveImpactCountsFromMatches", () => {

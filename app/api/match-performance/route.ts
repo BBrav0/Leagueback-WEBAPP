@@ -77,8 +77,7 @@ export async function GET(request: NextRequest) {
       matchSummary,
       ...(upsertError
         ? {
-            impactCategoryPersistError:
-              upsertError.message || "Failed to persist impact category",
+            impactCategoryPersistError: upsertError.message,
           }
         : {}),
     });
