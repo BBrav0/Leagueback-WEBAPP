@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
     const matchIds = await getMatchHistory(puuid, count, start);
     return NextResponse.json(matchIds);
   } catch (error) {
+    console.error("Error in GET /api/match-history:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }

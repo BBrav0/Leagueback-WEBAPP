@@ -44,8 +44,8 @@ export class BackendBridge {
       );
       if (!res.ok) return null;
       const data = await res.json();
-      if (data.error) {
-        console.error("Backend error:", data.error);
+      if (!Array.isArray(data)) {
+        if (data?.error) console.error("Backend error:", data.error);
         return null;
       }
       return data as string[];
@@ -66,7 +66,15 @@ export class BackendBridge {
       if (!res.ok) {
         return { success: false, error: `HTTP ${res.status}` };
       }
-      return (await res.json()) as PerformanceAnalysisResult;
+      const result = (await res.json()) as PerformanceAnalysisResult;
+      if (result.success && result.playerMatchesPersistError) {
+        return {
+          success: false,
+          error: result.playerMatchesPersistError,
+          matchSummary: result.matchSummary,
+        };
+      }
+      return result;
     } catch (error) {
       return {
         success: false,
@@ -138,6 +146,144 @@ export class BackendBridge {
   }
 
   /**
+   * Return which of the given match IDs already exist in player_matches for this puuid.
+   */
+  static async fetchExistingMatchIdsForPlayer(
+    puuid: string,
+    matchIds: string[]
+  ): Promise<Set<string>> {
+    if (matchIds.length === 0) return new Set();
+    try {
+      const res = await fetch("/api/player-matches/existing-ids", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ puuid, matchIds }),
+      });
+      if (!res.ok) {
+        console.error("fetchExistingMatchIdsForPlayer HTTP", res.status);
+        return new Set();
+      }
+      const data = (await res.json()) as { existingMatchIds?: string[]; error?: string };
+      if (data.error) {
+        console.error("fetchExistingMatchIdsForPlayer:", data.error);
+        return new Set();
+      }
+      return new Set(data.existingMatchIds ?? []);
+    } catch (e) {
+      console.error("fetchExistingMatchIdsForPlayer:", e);
+      return new Set();
+    }
+  }
+
+  /**
+   * Compare ranked Riot match list to DB; ingest new ids until one already in player_matches (anchor).
+   * Fast path: if latest ranked match id is already stored, no work. For cold players (no rows),
+   * returns immediately — use getPlayerMatchDataBatch from the dashboard.
+   */
+  static async syncNewHeadMatchesFromRiot(
+    puuid: string,
+    storedTotalCount: number,
+    options: {
+      windowSize?: number;
+      /** Delay between each match-performance call (rate limiting). */
+      analyzeDelayMs?: number;
+      maxSyncRounds?: number;
+    } = {}
+  ): Promise<{
+    analyzedCount: number;
+    skippedAlreadyFresh: boolean;
+    skippedNoHistory: boolean;
+    /** Matches we attempted to analyze but did not persist successfully */
+    failedAnalyzeAttempts: number;
+  }> {
+    const windowSize = options.windowSize ?? 25;
+    const analyzeDelayMs = options.analyzeDelayMs ?? 1500;
+    const maxSyncRounds = options.maxSyncRounds ?? 12;
+
+    if (storedTotalCount === 0) {
+      return {
+        analyzedCount: 0,
+        skippedAlreadyFresh: false,
+        skippedNoHistory: false,
+        failedAnalyzeAttempts: 0,
+      };
+    }
+
+    const newestOnly = await this.getMatchHistory(puuid, 1, 0);
+    if (!newestOnly || newestOnly.length === 0) {
+      return {
+        analyzedCount: 0,
+        skippedAlreadyFresh: false,
+        skippedNoHistory: true,
+        failedAnalyzeAttempts: 0,
+      };
+    }
+
+    const riotHeadId = newestOnly[0];
+    const headExisting = await this.fetchExistingMatchIdsForPlayer(puuid, [riotHeadId]);
+    if (headExisting.has(riotHeadId)) {
+      return {
+        analyzedCount: 0,
+        skippedAlreadyFresh: true,
+        skippedNoHistory: false,
+        failedAnalyzeAttempts: 0,
+      };
+    }
+
+    let analyzedCount = 0;
+    let failedAnalyzeAttempts = 0;
+    let listOffset = 0;
+
+    for (let round = 0; round < maxSyncRounds; round++) {
+      const windowIds = await this.getMatchHistory(puuid, windowSize, listOffset);
+      if (!windowIds || windowIds.length === 0) {
+        if (round === 0) {
+          return {
+            analyzedCount: 0,
+            skippedAlreadyFresh: false,
+            skippedNoHistory: true,
+            failedAnalyzeAttempts,
+          };
+        }
+        break;
+      }
+
+      const existing = await this.fetchExistingMatchIdsForPlayer(puuid, windowIds);
+      const anchorIdx = windowIds.findIndex((id) => existing.has(id));
+      const toAnalyze =
+        anchorIdx === -1 ? windowIds : windowIds.slice(0, anchorIdx);
+
+      for (let i = 0; i < toAnalyze.length; i++) {
+        const matchId = toAnalyze[i];
+        const analysis = await this.analyzeMatchPerformance(matchId, puuid);
+        if (analysis?.success && analysis.matchSummary) {
+          analyzedCount++;
+        } else {
+          failedAnalyzeAttempts++;
+        }
+        if (i < toAnalyze.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, analyzeDelayMs));
+        }
+      }
+
+      if (anchorIdx !== -1) {
+        break;
+      }
+      if (windowIds.length < windowSize) {
+        break;
+      }
+      listOffset += windowIds.length;
+    }
+
+    return {
+      analyzedCount,
+      skippedAlreadyFresh: false,
+      skippedNoHistory: false,
+      failedAnalyzeAttempts,
+    };
+  }
+
+  /**
    * Lightweight check if Riot API has more matches beyond what's stored
    */
   static async checkApiHasMore(
@@ -161,7 +307,8 @@ export class BackendBridge {
     puuid: string,
     start: number = 0,
     batchSize: number = 5,
-    delayBetweenBatches: number = 1500
+    /** Delay between each match-performance request (rate limiting). */
+    delayBetweenMatchesMs: number = 1500
   ): Promise<{ matches: MatchSummary[]; hasMore: boolean; nextStart: number }> {
     const matches: MatchSummary[] = [];
 
@@ -180,9 +327,8 @@ export class BackendBridge {
         matches.push(analysis.matchSummary);
       }
 
-      // Add delay between matches (except for the last one)
       if (i < matchIds.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, delayBetweenBatches / matchIds.length));
+        await new Promise((resolve) => setTimeout(resolve, delayBetweenMatchesMs));
       }
     }
 
