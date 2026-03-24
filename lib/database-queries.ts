@@ -1,11 +1,11 @@
-import { supabase } from "./supabase";
+import { getSupabaseServer } from "./supabase-server";
 import type { MatchDto, MatchTimelineDto, ImpactCategory } from "./types";
 
 /**
  * Get all stored match IDs for a user from impact_categories table
  */
 export async function getAllStoredMatchIds(puuid: string): Promise<string[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabaseServer()
     .from("impact_categories")
     .select("match_id")
     .eq("puuid", puuid)
@@ -29,7 +29,7 @@ export async function getStoredMatchDetails(
 
   if (matchIds.length === 0) return matchMap;
 
-  const { data, error } = await supabase
+  const { data, error } = await getSupabaseServer()
     .from("match_details")
     .select("match_id, match_data")
     .in("match_id", matchIds);
@@ -56,7 +56,7 @@ export async function getStoredMatchTimelines(
 
   if (matchIds.length === 0) return timelineMap;
 
-  const { data, error } = await supabase
+  const { data, error } = await getSupabaseServer()
     .from("match_timelines")
     .select("match_id, timeline_data")
     .in("match_id", matchIds);
@@ -79,7 +79,7 @@ export async function getStoredMatchTimelines(
 export async function getImpactCategoriesForUser(
   puuid: string
 ): Promise<ImpactCategory[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabaseServer()
     .from("impact_categories")
     .select("category")
     .eq("puuid", puuid);
@@ -100,7 +100,7 @@ export async function getPaginatedMatchIds(
   limit: number = 20,
   offset: number = 0
 ): Promise<{ matchIds: string[]; totalCount: number }> {
-  const { count: totalCount, error: countError } = await supabase
+  const { count: totalCount, error: countError } = await getSupabaseServer()
     .from("impact_categories")
     .select("*", { count: "exact", head: true })
     .eq("puuid", puuid);
@@ -110,7 +110,7 @@ export async function getPaginatedMatchIds(
     return { matchIds: [], totalCount: 0 };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await getSupabaseServer()
     .from("impact_categories")
     .select("match_id")
     .eq("puuid", puuid)
@@ -135,7 +135,7 @@ export async function getRecentImpactCategories(
   puuid: string,
   limit: number = 10
 ): Promise<ImpactCategory[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabaseServer()
     .from("impact_categories")
     .select("category")
     .eq("puuid", puuid)
@@ -156,7 +156,7 @@ export async function getRecentImpactCategories(
 export async function getStoredMatchesWithCategories(
   puuid: string
 ): Promise<Array<{ matchId: string; category: ImpactCategory }>> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabaseServer()
     .from("impact_categories")
     .select("match_id, category")
     .eq("puuid", puuid)

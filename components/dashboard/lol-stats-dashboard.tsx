@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, memo, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis, ReferenceArea, PieChart, Pie, Cell } from "recharts"
 import {
@@ -17,6 +17,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { BackendBridge, MatchSummary } from "@/lib/bridge"
+import {
+  deriveImpactCountsFromMatches,
+  type ImpactCategory,
+  type ImpactCounts,
+} from "@/lib/impact-stats"
 import { cn } from "@/lib/utils"
 import { rateLimiter } from "@/lib/rate-limiter"
 
@@ -52,19 +57,8 @@ const pieConfig = {
   },
 } as const
 
-// Type describing the aggregate counts for each category
-type ImpactCounts = {
-  impactWins: number
-  impactLosses: number
-  guaranteedWins: number
-  guaranteedLosses: number
-}
-
 // LocalStorage key for match impact cache
 const IMPACT_CACHE_KEY = "matchImpactCache_v1" as const;
-
-// Category helper type
-type ImpactCategory = keyof ImpactCounts;
 
 function safeDecodeURIComponent(value: string): string {
   try {
@@ -87,17 +81,6 @@ function parsePlayerFromUrl(pathname: string, hash: string): { gameName: string;
   };
 }
 
-// ===== Helper functions =====
-function classifyMatch(match: MatchSummary): ImpactCategory {
-  const youHigher = match.yourImpact > match.teamImpact;
-  const win = match.gameResult === "Victory";
-
-  if (win && youHigher) return "impactWins";
-  if (!win && !youHigher) return "impactLosses";
-  if (!win && youHigher) return "guaranteedLosses";
-  return "guaranteedWins"; // win && !youHigher
-}
-
 function loadImpactCache(): Record<string, ImpactCategory> {
   if (typeof window === "undefined") return {};
   try {
@@ -117,22 +100,66 @@ function saveImpactCache(cache: Record<string, ImpactCategory>) {
   }
 }
 
-function ImpactPieChart({ counts }: { counts: ImpactCounts }) {
-  const pieData: { name: keyof typeof pieConfig; value: number }[] = [
-    { name: "impactWins", value: counts.impactWins },
-    { name: "impactLosses", value: counts.impactLosses },
-    { name: "guaranteedWins", value: counts.guaranteedWins },
-    { name: "guaranteedLosses", value: counts.guaranteedLosses },
-  ]
+/**
+ * Single module-level element so Recharts `content` prop keeps a stable reference.
+ * Safe only while ChartTooltipContent stays stateless; if it later needs context
+ * (theme, locale), switch to a tiny wrapper component or useMemo inside ImpactPieChart.
+ */
+const pieTooltipContent = <ChartTooltipContent hideLabel nameKey="name" />
 
-  const total = pieData.reduce((acc, cur) => acc + cur.value, 0);
+function impactCountsEqual(a: ImpactCounts, b: ImpactCounts): boolean {
+  return (
+    a.impactWins === b.impactWins &&
+    a.impactLosses === b.impactLosses &&
+    a.guaranteedWins === b.guaranteedWins &&
+    a.guaranteedLosses === b.guaranteedLosses
+  );
+}
+
+const ImpactPieChart = memo(function ImpactPieChart({ counts }: { counts: ImpactCounts }) {
+  const pieData = useMemo(
+    (): { name: keyof typeof pieConfig; value: number }[] => [
+      { name: "impactWins", value: counts.impactWins },
+      { name: "impactLosses", value: counts.impactLosses },
+      { name: "guaranteedWins", value: counts.guaranteedWins },
+      { name: "guaranteedLosses", value: counts.guaranteedLosses },
+    ],
+    [counts.impactWins, counts.impactLosses, counts.guaranteedWins, counts.guaranteedLosses]
+  );
+
+  const total = useMemo(
+    () => pieData.reduce((acc, cur) => acc + cur.value, 0),
+    [pieData]
+  );
+
+  // Stable formatter: keeps slice % labels without recharts animation cost (isAnimationActive={false}).
+  const renderSliceLabel = useCallback(
+    ({ name, value }: { name: string; value: number }) => {
+      const pct = total > 0 ? (value / total) * 100 : 0;
+      const config = pieConfig[name as keyof typeof pieConfig];
+      if (!config) return `${value}`;
+      return `${config.label} ${pct.toFixed(0)}%`;
+    },
+    [total]
+  );
+
+  if (total === 0) {
+    return (
+      <div className="flex h-[300px] w-full flex-col items-center justify-center gap-2 text-center">
+        <p className="text-slate-400 text-sm">No categorized matches yet</p>
+        <p className="text-slate-500 text-xs max-w-xs">
+          Stats appear after matches are analyzed and saved, or from your loaded match list.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <ChartContainer
       config={pieConfig}
-      className="h-[300px] w-full justify-center"
+      className="h-[300px] w-full justify-center [&_.recharts-responsive-container]:max-h-[300px]"
     >
-      <PieChart>
+      <PieChart margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
         <Pie
           data={pieData}
           dataKey="value"
@@ -143,10 +170,8 @@ function ImpactPieChart({ counts }: { counts: ImpactCounts }) {
           outerRadius={110}
           paddingAngle={2}
           strokeWidth={0}
-          label={({ name, value }) => {
-            const percent = total > 0 ? ((value as number) / total) * 100 : 0;
-            return `${pieConfig[name as keyof typeof pieConfig].label} ${percent.toFixed(0)}%`;
-          }}
+          isAnimationActive={false}
+          label={renderSliceLabel}
           labelLine={false}
         >
           {pieData.map((entry) => (
@@ -156,12 +181,12 @@ function ImpactPieChart({ counts }: { counts: ImpactCounts }) {
             />
           ))}
         </Pie>
-        <ChartTooltip content={<ChartTooltipContent />} />
+        <ChartTooltip content={pieTooltipContent} />
         <ChartLegend content={<ChartLegendContent />} />
       </PieChart>
     </ChartContainer>
-  )
-}
+  );
+}, (prev, next) => impactCountsEqual(prev.counts, next.counts));
 
 function MatchChart({ data }: { data: MatchSummary["data"] }) {
   const roundedData = data.map((d) => ({
@@ -271,24 +296,34 @@ export default function Component() {
   const [hasMoreDbMatches, setHasMoreDbMatches] = useState(false);
   const [allDbMatchesLoaded, setAllDbMatchesLoaded] = useState(false);
   const [loadingDbMatches, setLoadingDbMatches] = useState(false);
+  const [fetchingMatchesFromApi, setFetchingMatchesFromApi] = useState(false);
   const scrollSentinelRef = useRef<HTMLDivElement>(null);
   const autoSearchKeyRef = useRef<string | null>(null);
+  const matchesDataRef = useRef<MatchSummary[]>([]);
 
-  const updateLifetimeStatsFromDatabase = useCallback(async (puuid: string) => {
+  useEffect(() => {
+    matchesDataRef.current = matchesData;
+  }, [matchesData]);
+
+  const syncImpactStats = useCallback(async (puuid: string, matches: MatchSummary[]) => {
     try {
-      // Fetch all categories (lifetime) and last 10 (pie chart) in parallel
       const [lifetimeRes, pieRes] = await Promise.all([
         fetch(`/api/impact-categories?puuid=${encodeURIComponent(puuid)}`),
         fetch(`/api/impact-categories?puuid=${encodeURIComponent(puuid)}&limit=10`),
       ]);
 
+      let lifetimeDbSucceeded = false;
+      let lifetimeCategoryCount = 0;
+
       if (lifetimeRes.ok) {
         const lifetimeData = await lifetimeRes.json();
         if (!lifetimeData.error) {
+          lifetimeDbSucceeded = true;
           const counts: ImpactCounts = { impactWins: 0, impactLosses: 0, guaranteedWins: 0, guaranteedLosses: 0 };
           (lifetimeData.categories || []).forEach((cat: string) => {
             if (cat in counts) counts[cat as keyof ImpactCounts]++;
           });
+          lifetimeCategoryCount = (lifetimeData.categories || []).length;
           setLifetimeCounts(counts);
         }
       }
@@ -302,6 +337,13 @@ export default function Component() {
           });
           setImpactCounts(counts);
         }
+      }
+
+      // Client fallback only when the lifetime API responded successfully with zero categories — not on network/5xx errors.
+      if (lifetimeDbSucceeded && lifetimeCategoryCount === 0 && matches.length > 0) {
+        const { pie, lifetime } = deriveImpactCountsFromMatches(matches);
+        setImpactCounts(pie);
+        setLifetimeCounts(lifetime);
       }
     } catch (error) {
       console.error("Error updating stats from database:", error);
@@ -347,6 +389,19 @@ export default function Component() {
     setLoading(true);
     setError(null);
     setHasSearched(true);
+    setFetchingMatchesFromApi(false);
+    setImpactCounts({
+      impactWins: 0,
+      impactLosses: 0,
+      guaranteedWins: 0,
+      guaranteedLosses: 0,
+    });
+    setLifetimeCounts({
+      impactWins: 0,
+      impactLosses: 0,
+      guaranteedWins: 0,
+      guaranteedLosses: 0,
+    });
     setMatchesStart(0);
     setHasMoreMatches(false);
     setTotalDbMatches(0);
@@ -354,6 +409,7 @@ export default function Component() {
     setHasMoreDbMatches(false);
     setAllDbMatchesLoaded(false);
 
+    let loadingDismissedEarly = false;
     try {
       const account = await BackendBridge.getAccount(normalizedGameName, normalizedTagLine);
       if (!account) {
@@ -382,27 +438,41 @@ export default function Component() {
         setMatchesStart(storedResult.totalCount);
       }
 
-      // If user exists but DB has no matches, auto-fetch first 10 from API
+      let matchesForStats = storedResult.matches;
+
+      // Dismiss full-screen "Analyzing" as soon as account + first DB page are known.
+      // Riot backfill (if any) is indicated by `fetchingMatchesFromApi` so we avoid
+      // a long blocking spinner without hiding ongoing work.
+      setLoading(false);
+      loadingDismissedEarly = true;
+
+      // If user exists but DB has no categorized matches, auto-fetch first 10 from API
       if (storedResult.totalCount === 0 && apiHasMore) {
         const rateLimitCheck = rateLimiter.checkRateLimit();
         if (!rateLimitCheck.allowed) {
           setError(`Rate limit exceeded. Please wait ${rateLimitCheck.retryAfter} seconds.`);
+          // No batch run — matchesForStats stays []. syncImpactStats still loads from DB below.
         } else {
-          const result = await BackendBridge.getPlayerMatchDataBatch(
-            account.puuid,
-            0,
-            10,
-            1500
-          );
-          setMatchesData(result.matches);
-          setTotalDbMatches(result.matches.length);
-          setHasMoreMatches(result.hasMore);
-          setMatchesStart(result.nextStart);
+          setFetchingMatchesFromApi(true);
+          try {
+            const result = await BackendBridge.getPlayerMatchDataBatch(
+              account.puuid,
+              0,
+              10,
+              1500
+            );
+            setMatchesData(result.matches);
+            setTotalDbMatches(result.matches.length);
+            setHasMoreMatches(result.hasMore);
+            setMatchesStart(result.nextStart);
+            matchesForStats = result.matches;
+          } finally {
+            setFetchingMatchesFromApi(false);
+          }
         }
       }
 
-      // Update lifetime stats and pie chart from database
-      await updateLifetimeStatsFromDatabase(account.puuid);
+      await syncImpactStats(account.puuid, matchesForStats);
 
       setRateLimitStatus({
         remaining: rateLimiter.getStatus().remaining,
@@ -420,9 +490,12 @@ export default function Component() {
       setMatchesData([]);
       setCurrentPuuid(null);
     } finally {
-      setLoading(false);
+      setFetchingMatchesFromApi(false);
+      if (!loadingDismissedEarly) {
+        setLoading(false);
+      }
     }
-  }, [router, updateLifetimeStatsFromDatabase]);
+  }, [router, syncImpactStats]);
 
   const handleSearch = async () => {
     await runSearch(gameName, tagLine, { syncUrl: true });
@@ -455,14 +528,13 @@ export default function Component() {
         return;
       }
 
-      // Append new API matches to display
-      setMatchesData(prev => [...prev, ...result.matches]);
+      const merged = [...matchesDataRef.current, ...result.matches];
+      setMatchesData(merged);
 
       // Newly fetched matches are stored in DB by match-performance route
       setTotalDbMatches(prev => prev + result.matches.length);
 
-      // Update lifetime stats and pie chart from database
-      await updateLifetimeStatsFromDatabase(currentPuuid);
+      await syncImpactStats(currentPuuid, merged);
 
       // Check if API has more
       const apiHasMore = await BackendBridge.checkApiHasMore(currentPuuid, result.nextStart);
@@ -651,6 +723,14 @@ export default function Component() {
           <Alert className="bg-red-900/50 border-red-600">
             <AlertDescription className="text-red-200">
               {error}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {hasSearched && fetchingMatchesFromApi && (
+          <Alert className="border-blue-600/50 bg-slate-800/50">
+            <AlertDescription className="text-slate-200 text-sm">
+              Fetching match data from Riot (this can take a minute)…
             </AlertDescription>
           </Alert>
         )}

@@ -99,6 +99,8 @@ export interface PerformanceAnalysisResult {
   success: boolean;
   matchSummary?: MatchSummary;
   error?: string;
+  /** Present when impact_categories upsert failed (RLS, schema, etc.) */
+  impactCategoryPersistError?: string;
 }
 
 export type ImpactCategory =
