@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getMatchDetails, getMatchTimeline } from "@/lib/riot-api-service";
+import {
+  getMatchCacheEntry,
+  getMatchDetails,
+  getMatchTimeline,
+} from "@/lib/riot-api-service";
 import {
   reconstructMatchSummary,
   determineImpactCategory,
@@ -21,10 +25,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [matchDetails, matchTimeline] = await Promise.all([
-      getMatchDetails(matchId),
-      getMatchTimeline(matchId),
-    ]);
+    const cacheEntry = await getMatchCacheEntry(matchId);
+    const [matchDetails, matchTimeline] =
+      cacheEntry.matchData && cacheEntry.timelineData
+        ? [cacheEntry.matchData, cacheEntry.timelineData]
+        : await Promise.all([getMatchDetails(matchId), getMatchTimeline(matchId)]);
 
     if (!matchDetails) {
       return NextResponse.json({
@@ -94,8 +99,6 @@ export async function GET(request: NextRequest) {
       matchSummary,
       ...(persistError || cacheError?.message
         ? {
-            impactCategoryPersistError:
-              persistError || cacheError?.message || "Unknown persist error",
             playerMatchesPersistError: persistError || undefined,
             matchCachePersistError: cacheError?.message,
           }

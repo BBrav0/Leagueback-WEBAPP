@@ -89,16 +89,6 @@ export async function getMatchHistory(
 export async function getMatchDetails(
   matchId: string
 ): Promise<MatchDto> {
-  // Prefer combined cache table first
-  const { data: combinedCached } = await getSupabaseServer()
-    .from("match_cache")
-    .select("match_data")
-    .eq("match_id", matchId)
-    .single();
-  if (combinedCached?.match_data) {
-    return combinedCached.match_data as MatchDto;
-  }
-
   // Check Supabase cache
   const { data: cached } = await getSupabaseServer()
     .from("match_details")
@@ -131,16 +121,6 @@ export async function getMatchDetails(
 export async function getMatchTimeline(
   matchId: string
 ): Promise<MatchTimelineDto> {
-  // Prefer combined cache table first
-  const { data: combinedCached } = await getSupabaseServer()
-    .from("match_cache")
-    .select("timeline_data")
-    .eq("match_id", matchId)
-    .single();
-  if (combinedCached?.timeline_data) {
-    return combinedCached.timeline_data as MatchTimelineDto;
-  }
-
   // Check Supabase cache
   const { data: cached } = await getSupabaseServer()
     .from("match_timelines")
@@ -168,4 +148,20 @@ export async function getMatchTimeline(
     .upsert({ match_id: matchId, timeline_data: timelineDto });
 
   return timelineDto;
+}
+
+export async function getMatchCacheEntry(matchId: string): Promise<{
+  matchData: MatchDto | null;
+  timelineData: MatchTimelineDto | null;
+}> {
+  const { data } = await getSupabaseServer()
+    .from("match_cache")
+    .select("match_data, timeline_data")
+    .eq("match_id", matchId)
+    .maybeSingle();
+
+  return {
+    matchData: (data?.match_data as MatchDto | undefined) ?? null,
+    timelineData: (data?.timeline_data as MatchTimelineDto | undefined) ?? null,
+  };
 }

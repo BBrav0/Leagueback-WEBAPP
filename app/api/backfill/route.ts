@@ -16,12 +16,19 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = getSupabaseServer();
+  const params = request.nextUrl.searchParams;
+  const startOffsetRaw = Number.parseInt(params.get("offset") || "0", 10);
+  const requestedLimit = Number.parseInt(params.get("limit") || "1000", 10);
+  const limit = Math.min(Math.max(Number.isNaN(requestedLimit) ? 1000 : requestedLimit, 1), 1000);
   const PAGE_SIZE = 500;
   const CHUNK = 50;
-  let offset = 0;
+  const startOffset = Number.isNaN(startOffsetRaw) ? 0 : Math.max(startOffsetRaw, 0);
+  let offset = startOffset;
+  const targetEndOffset = offset + limit;
   let totalImpactRows = 0;
   let backfilled = 0;
-  let skipped = 0;
+  let skippedMissingData = 0;
+  let skippedErrors = 0;
   let totalMatchDetails = 0;
   let totalTimelines = 0;
 
@@ -101,7 +108,7 @@ export async function POST(request: NextRequest) {
       const matchTimeline = cache?.timeline_data ?? timelinesMap.get(match_id);
 
       if (!matchDetails || !matchTimeline) {
-        skipped++;
+        skippedMissingData++;
         continue;
       }
 
@@ -138,7 +145,7 @@ export async function POST(request: NextRequest) {
         });
       } catch (err) {
         console.error("Backfill row reconstruction failed:", err);
-        skipped++;
+        skippedErrors++;
       }
     }
 
@@ -153,17 +160,22 @@ export async function POST(request: NextRequest) {
     }
 
     backfilled += rows.length;
-    if (impactRows.length < PAGE_SIZE) {
+    if (impactRows.length < PAGE_SIZE || offset + impactRows.length >= targetEndOffset) {
       break;
     }
     offset += PAGE_SIZE;
   }
 
+  const processed = totalImpactRows;
+  const nextOffset = processed >= limit ? startOffset + processed : null;
   return NextResponse.json({
     backfilled,
-    skipped,
+    skipped: skippedMissingData + skippedErrors,
+    skippedMissingData,
+    skippedErrors,
     totalImpactRows,
     totalMatchDetails,
     totalTimelines,
+    nextOffset,
   });
 }
