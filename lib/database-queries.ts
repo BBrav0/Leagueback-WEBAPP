@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { supabaseServer as supabase } from "./supabase-server";
 import type { MatchDto, MatchTimelineDto, ImpactCategory } from "./types";
 
 /**

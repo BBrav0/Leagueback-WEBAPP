@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { supabaseServer as supabase } from "./supabase-server";
 import type { AccountDto, MatchDto, MatchTimelineDto } from "./types";
 
 const WORKER_URL =

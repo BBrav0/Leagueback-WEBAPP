@@ -117,6 +117,31 @@ function saveImpactCache(cache: Record<string, ImpactCategory>) {
   }
 }
 
+function deriveImpactCountsFromMatches(matches: MatchSummary[]): {
+  pie: ImpactCounts;
+  lifetime: ImpactCounts;
+} {
+  const lifetime: ImpactCounts = {
+    impactWins: 0,
+    impactLosses: 0,
+    guaranteedWins: 0,
+    guaranteedLosses: 0,
+  };
+  for (const m of matches) {
+    lifetime[classifyMatch(m)]++;
+  }
+  const pie: ImpactCounts = {
+    impactWins: 0,
+    impactLosses: 0,
+    guaranteedWins: 0,
+    guaranteedLosses: 0,
+  };
+  for (const m of matches.slice(0, 10)) {
+    pie[classifyMatch(m)]++;
+  }
+  return { pie, lifetime };
+}
+
 function ImpactPieChart({ counts }: { counts: ImpactCounts }) {
   const pieData: { name: keyof typeof pieConfig; value: number }[] = [
     { name: "impactWins", value: counts.impactWins },
@@ -126,6 +151,17 @@ function ImpactPieChart({ counts }: { counts: ImpactCounts }) {
   ]
 
   const total = pieData.reduce((acc, cur) => acc + cur.value, 0);
+
+  if (total === 0) {
+    return (
+      <div className="flex h-[300px] w-full flex-col items-center justify-center gap-2 text-center">
+        <p className="text-slate-400 text-sm">No categorized matches yet</p>
+        <p className="text-slate-500 text-xs max-w-xs">
+          Stats appear after matches are analyzed and saved, or from your loaded match list.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <ChartContainer
@@ -271,16 +307,18 @@ export default function Component() {
   const [hasMoreDbMatches, setHasMoreDbMatches] = useState(false);
   const [allDbMatchesLoaded, setAllDbMatchesLoaded] = useState(false);
   const [loadingDbMatches, setLoadingDbMatches] = useState(false);
+  const [fetchingMatchesFromApi, setFetchingMatchesFromApi] = useState(false);
   const scrollSentinelRef = useRef<HTMLDivElement>(null);
   const autoSearchKeyRef = useRef<string | null>(null);
 
-  const updateLifetimeStatsFromDatabase = useCallback(async (puuid: string) => {
+  const syncImpactStats = useCallback(async (puuid: string, matches: MatchSummary[]) => {
     try {
-      // Fetch all categories (lifetime) and last 10 (pie chart) in parallel
       const [lifetimeRes, pieRes] = await Promise.all([
         fetch(`/api/impact-categories?puuid=${encodeURIComponent(puuid)}`),
         fetch(`/api/impact-categories?puuid=${encodeURIComponent(puuid)}&limit=10`),
       ]);
+
+      let lifetimeCategoryCount = 0;
 
       if (lifetimeRes.ok) {
         const lifetimeData = await lifetimeRes.json();
@@ -289,6 +327,7 @@ export default function Component() {
           (lifetimeData.categories || []).forEach((cat: string) => {
             if (cat in counts) counts[cat as keyof ImpactCounts]++;
           });
+          lifetimeCategoryCount = (lifetimeData.categories || []).length;
           setLifetimeCounts(counts);
         }
       }
@@ -302,6 +341,12 @@ export default function Component() {
           });
           setImpactCounts(counts);
         }
+      }
+
+      if (lifetimeCategoryCount === 0 && matches.length > 0) {
+        const { pie, lifetime } = deriveImpactCountsFromMatches(matches);
+        setImpactCounts(pie);
+        setLifetimeCounts(lifetime);
       }
     } catch (error) {
       console.error("Error updating stats from database:", error);
@@ -347,6 +392,19 @@ export default function Component() {
     setLoading(true);
     setError(null);
     setHasSearched(true);
+    setFetchingMatchesFromApi(false);
+    setImpactCounts({
+      impactWins: 0,
+      impactLosses: 0,
+      guaranteedWins: 0,
+      guaranteedLosses: 0,
+    });
+    setLifetimeCounts({
+      impactWins: 0,
+      impactLosses: 0,
+      guaranteedWins: 0,
+      guaranteedLosses: 0,
+    });
     setMatchesStart(0);
     setHasMoreMatches(false);
     setTotalDbMatches(0);
@@ -382,27 +440,36 @@ export default function Component() {
         setMatchesStart(storedResult.totalCount);
       }
 
-      // If user exists but DB has no matches, auto-fetch first 10 from API
+      let matchesForStats = storedResult.matches;
+
+      setLoading(false);
+
+      // If user exists but DB has no categorized matches, auto-fetch first 10 from API
       if (storedResult.totalCount === 0 && apiHasMore) {
         const rateLimitCheck = rateLimiter.checkRateLimit();
         if (!rateLimitCheck.allowed) {
           setError(`Rate limit exceeded. Please wait ${rateLimitCheck.retryAfter} seconds.`);
         } else {
-          const result = await BackendBridge.getPlayerMatchDataBatch(
-            account.puuid,
-            0,
-            10,
-            1500
-          );
-          setMatchesData(result.matches);
-          setTotalDbMatches(result.matches.length);
-          setHasMoreMatches(result.hasMore);
-          setMatchesStart(result.nextStart);
+          setFetchingMatchesFromApi(true);
+          try {
+            const result = await BackendBridge.getPlayerMatchDataBatch(
+              account.puuid,
+              0,
+              10,
+              1500
+            );
+            setMatchesData(result.matches);
+            setTotalDbMatches(result.matches.length);
+            setHasMoreMatches(result.hasMore);
+            setMatchesStart(result.nextStart);
+            matchesForStats = result.matches;
+          } finally {
+            setFetchingMatchesFromApi(false);
+          }
         }
       }
 
-      // Update lifetime stats and pie chart from database
-      await updateLifetimeStatsFromDatabase(account.puuid);
+      await syncImpactStats(account.puuid, matchesForStats);
 
       setRateLimitStatus({
         remaining: rateLimiter.getStatus().remaining,
@@ -421,8 +488,9 @@ export default function Component() {
       setCurrentPuuid(null);
     } finally {
       setLoading(false);
+      setFetchingMatchesFromApi(false);
     }
-  }, [router, updateLifetimeStatsFromDatabase]);
+  }, [router, syncImpactStats]);
 
   const handleSearch = async () => {
     await runSearch(gameName, tagLine, { syncUrl: true });
@@ -455,14 +523,13 @@ export default function Component() {
         return;
       }
 
-      // Append new API matches to display
-      setMatchesData(prev => [...prev, ...result.matches]);
+      const merged = [...matchesData, ...result.matches];
+      setMatchesData(merged);
 
       // Newly fetched matches are stored in DB by match-performance route
       setTotalDbMatches(prev => prev + result.matches.length);
 
-      // Update lifetime stats and pie chart from database
-      await updateLifetimeStatsFromDatabase(currentPuuid);
+      await syncImpactStats(currentPuuid, merged);
 
       // Check if API has more
       const apiHasMore = await BackendBridge.checkApiHasMore(currentPuuid, result.nextStart);
@@ -651,6 +718,14 @@ export default function Component() {
           <Alert className="bg-red-900/50 border-red-600">
             <AlertDescription className="text-red-200">
               {error}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {hasSearched && fetchingMatchesFromApi && (
+          <Alert className="border-blue-600/50 bg-slate-800/50">
+            <AlertDescription className="text-slate-200 text-sm">
+              Fetching match data from Riot (this can take a minute)…
             </AlertDescription>
           </Alert>
         )}

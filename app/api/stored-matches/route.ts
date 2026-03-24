@@ -4,7 +4,11 @@ import {
   getStoredMatchDetails,
   getStoredMatchTimelines,
 } from "@/lib/database-queries";
-import { reconstructMatchSummary } from "@/lib/match-reconstruction";
+import {
+  reconstructMatchSummary,
+  determineImpactCategory,
+} from "@/lib/match-reconstruction";
+import { supabaseServer } from "@/lib/supabase-server";
 import type { MatchSummary } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
@@ -56,6 +60,24 @@ export async function GET(request: NextRequest) {
             matchTimeline
           );
           matches.push(summary);
+
+          const category = determineImpactCategory(
+            summary.gameResult,
+            summary.yourImpact,
+            summary.teamImpact
+          );
+          const { error: catErr } = await supabaseServer
+            .from("impact_categories")
+            .upsert(
+              { match_id: matchId, puuid, category },
+              { onConflict: "match_id,puuid" }
+            );
+          if (catErr) {
+            console.error(
+              `impact_categories upsert failed for match ${matchId}:`,
+              catErr
+            );
+          }
         } catch (error) {
           console.error(`Error reconstructing match ${matchId}:`, error);
         }

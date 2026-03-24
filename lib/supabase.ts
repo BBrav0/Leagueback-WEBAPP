@@ -1,5 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 
+/**
+ * Anon-key client (e.g. for any future browser usage).
+ * API routes and server-only modules should use `./supabase-server` so writes/reads
+ * can use the service role and bypass RLS when needed.
+ */
 // Get Supabase URL and key from environment variables
 // Support both NEXT_PUBLIC_ prefix (for client-side) and regular (for server-side)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;

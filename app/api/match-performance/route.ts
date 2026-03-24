@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMatchDetails, getMatchTimeline } from "@/lib/riot-api-service";
 import { reconstructMatchSummary, determineImpactCategory } from "@/lib/match-reconstruction";
-import { supabase } from "@/lib/supabase";
+import { supabaseServer } from "@/lib/supabase-server";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -61,15 +61,27 @@ export async function GET(request: NextRequest) {
       matchSummary.teamImpact
     );
 
-    const { error: upsertError } = await supabase
+    const { error: upsertError } = await supabaseServer
       .from("impact_categories")
-      .upsert({ match_id: matchId, puuid: userPuuid, category });
+      .upsert(
+        { match_id: matchId, puuid: userPuuid, category },
+        { onConflict: "match_id,puuid" }
+      );
 
     if (upsertError) {
       console.error("Failed to upsert impact category:", upsertError);
     }
 
-    return NextResponse.json({ success: true, matchSummary });
+    return NextResponse.json({
+      success: true,
+      matchSummary,
+      ...(upsertError
+        ? {
+            impactCategoryPersistError:
+              upsertError.message || "Failed to persist impact category",
+          }
+        : {}),
+    });
   } catch (error) {
     return NextResponse.json({
       success: false,
