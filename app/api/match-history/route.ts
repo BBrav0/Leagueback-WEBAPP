@@ -13,8 +13,18 @@ export async function GET(request: NextRequest) {
 
   try {
     const matchIds = await getMatchHistory(puuid, count, start);
+    const head = matchIds[0]?.slice(0, 14) ?? "none";
+    console.info(
+      "[match-history]",
+      `puuid=${puuid.slice(0, 8)}… count=${count} start→${start} returned=${matchIds.length} head=${head}…`
+    );
     return NextResponse.json(matchIds);
   } catch (error) {
+    console.error(
+      "[match-history] error",
+      { puuid: puuid!.slice(0, 8), count, start },
+      error
+    );
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }

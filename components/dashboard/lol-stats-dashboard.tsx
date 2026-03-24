@@ -527,8 +527,19 @@ export default function Component() {
               account.puuid,
               dbNewest,
               storedResult.totalCount,
-              { windowSize: 20, analyzeDelayMs: 1500 }
+              { windowSize: 25, analyzeDelayMs: 1500, maxSyncRounds: 12 }
             );
+            console.info("[head-sync] dashboard result", syncResult);
+            if (
+              !syncResult.skippedAlreadyFresh &&
+              !syncResult.skippedNoHistory &&
+              syncResult.analyzedCount === 0 &&
+              syncResult.failedAnalyzeAttempts > 0
+            ) {
+              setError(
+                "New ranked matches were analyzed but could not be saved to the database. Add SUPABASE_SERVICE_ROLE_KEY to .env.local (Supabase → Project Settings → API → service_role secret), restart the dev server, and try again. The anon key cannot insert into player_matches (RLS)."
+              );
+            }
             if (syncResult.analyzedCount > 0) {
               const refreshed = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
               setMatchesData(refreshed.matches);
@@ -552,6 +563,12 @@ export default function Component() {
           } finally {
             setFetchingMatchesFromApi(false);
           }
+        } else {
+          console.info(
+            "[head-sync] skipped: client rate limit, retry after",
+            syncRate.retryAfter,
+            "s"
+          );
         }
       }
 

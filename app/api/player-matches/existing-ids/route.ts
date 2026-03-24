@@ -31,12 +31,18 @@ export async function POST(request: NextRequest) {
       .in("match_id", matchIds);
 
     if (error) {
-      console.error("existing-ids query failed:", error);
+      console.error("[existing-ids] query failed:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    const existing = (data ?? []).map((r) => r.match_id as string);
+    console.info(
+      "[existing-ids]",
+      `puuid=${puuid.slice(0, 8)}… checked=${matchIds.length} hits=${existing.length}`
+    );
+
     return NextResponse.json({
-      existingMatchIds: (data ?? []).map((r) => r.match_id as string),
+      existingMatchIds: existing,
     });
   } catch (e) {
     console.error("existing-ids route error:", e);

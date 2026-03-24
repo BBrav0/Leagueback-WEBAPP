@@ -6,6 +6,8 @@ import type {
 
 export type { AccountData, ChartDataPoint, MatchSummary, PerformanceAnalysisResult } from "./types";
 
+const HEAD_SYNC_LOG = "[head-sync]";
+
 export class BackendBridge {
   static async getAccount(
     gameName: string,
@@ -42,15 +44,27 @@ export class BackendBridge {
       const res = await fetch(
         `/api/match-history?puuid=${encodeURIComponent(puuid)}&count=${count}&start=${start}`
       );
-      if (!res.ok) return null;
+      const url = `/api/match-history?count=${count}&start=${start}`;
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.warn(
+          `${HEAD_SYNC_LOG} getMatchHistory HTTP ${res.status} ${url}`,
+          body.slice(0, 200)
+        );
+        return null;
+      }
       const data = await res.json();
-      if (data.error) {
-        console.error("Backend error:", data.error);
+      if (data && typeof data === "object" && !Array.isArray(data) && "error" in data) {
+        console.warn(`${HEAD_SYNC_LOG} getMatchHistory API error`, (data as { error?: string }).error);
+        return null;
+      }
+      if (!Array.isArray(data)) {
+        console.warn(`${HEAD_SYNC_LOG} getMatchHistory unexpected shape`, typeof data);
         return null;
       }
       return data as string[];
     } catch (error) {
-      console.error("Error calling getMatchHistory:", error);
+      console.error(`${HEAD_SYNC_LOG} getMatchHistory exception`, error);
       return null;
     }
   }
@@ -66,7 +80,15 @@ export class BackendBridge {
       if (!res.ok) {
         return { success: false, error: `HTTP ${res.status}` };
       }
-      return (await res.json()) as PerformanceAnalysisResult;
+      const result = (await res.json()) as PerformanceAnalysisResult;
+      if (result.success && result.playerMatchesPersistError) {
+        return {
+          success: false,
+          error: result.playerMatchesPersistError,
+          matchSummary: result.matchSummary,
+        };
+      }
+      return result;
     } catch (error) {
       return {
         success: false,
@@ -152,92 +174,168 @@ export class BackendBridge {
         body: JSON.stringify({ puuid, matchIds }),
       });
       if (!res.ok) {
-        console.error("fetchExistingMatchIdsForPlayer HTTP", res.status);
+        const body = await res.text().catch(() => "");
+        console.warn(
+          `${HEAD_SYNC_LOG} existing-ids HTTP ${res.status}`,
+          body.slice(0, 200)
+        );
         return new Set();
       }
       const data = (await res.json()) as { existingMatchIds?: string[]; error?: string };
       if (data.error) {
-        console.error("fetchExistingMatchIdsForPlayer:", data.error);
+        console.warn(`${HEAD_SYNC_LOG} existing-ids error`, data.error);
         return new Set();
       }
-      return new Set(data.existingMatchIds ?? []);
+      const set = new Set(data.existingMatchIds ?? []);
+      console.info(
+        `${HEAD_SYNC_LOG} existing-ids lookup puuid=${puuid.slice(0, 8)}… asked=${matchIds.length} foundInDb=${set.size}`
+      );
+      return set;
     } catch (e) {
-      console.error("fetchExistingMatchIdsForPlayer:", e);
+      console.error(`${HEAD_SYNC_LOG} existing-ids exception`, e);
       return new Set();
     }
   }
 
   /**
-   * Compare Riot match list head to DB; ingest newer matches until an ID already in player_matches
-   * (anchor). Skips work when the newest Riot id matches dbNewestId. For cold players (no rows),
+   * Compare ranked Riot match list to DB; ingest new ids until one already in player_matches (anchor).
+   * Fast path: if latest ranked match id is already stored, no work. For cold players (no rows),
    * returns immediately — use getPlayerMatchDataBatch from the dashboard.
    */
   static async syncNewHeadMatchesFromRiot(
     puuid: string,
-    dbNewestId: string | undefined,
+    _dbNewestId: string | undefined,
     storedTotalCount: number,
-    options: { windowSize?: number; analyzeDelayMs?: number } = {}
-  ): Promise<{ analyzedCount: number; skippedAlreadyFresh: boolean; skippedNoHistory: boolean }> {
-    const windowSize = options.windowSize ?? 20;
+    options: {
+      windowSize?: number;
+      analyzeDelayMs?: number;
+      maxSyncRounds?: number;
+    } = {}
+  ): Promise<{
+    analyzedCount: number;
+    skippedAlreadyFresh: boolean;
+    skippedNoHistory: boolean;
+    /** Matches we attempted to analyze but did not persist successfully */
+    failedAnalyzeAttempts: number;
+  }> {
+    const windowSize = options.windowSize ?? 25;
     const analyzeDelayMs = options.analyzeDelayMs ?? 1500;
+    const maxSyncRounds = options.maxSyncRounds ?? 12;
 
     if (storedTotalCount === 0) {
+      console.info(`${HEAD_SYNC_LOG} skip: no rows in player_matches for this user yet`);
       return {
         analyzedCount: 0,
         skippedAlreadyFresh: false,
         skippedNoHistory: false,
+        failedAnalyzeAttempts: 0,
       };
     }
 
+    console.info(
+      `${HEAD_SYNC_LOG} start puuid=${puuid.slice(0, 8)}… storedTotalCount=${storedTotalCount} window=${windowSize} maxRounds=${maxSyncRounds}`
+    );
+
     const newestOnly = await this.getMatchHistory(puuid, 1, 0);
     if (!newestOnly || newestOnly.length === 0) {
+      console.warn(`${HEAD_SYNC_LOG} abort: ranked match-history empty at start=0 (check Riot proxy / API key)`);
       return {
         analyzedCount: 0,
         skippedAlreadyFresh: false,
         skippedNoHistory: true,
+        failedAnalyzeAttempts: 0,
       };
     }
 
-    if (dbNewestId && newestOnly[0] === dbNewestId) {
+    const riotHeadId = newestOnly[0];
+    const headExisting = await this.fetchExistingMatchIdsForPlayer(puuid, [riotHeadId]);
+    if (headExisting.has(riotHeadId)) {
+      console.info(
+        `${HEAD_SYNC_LOG} fast path OK: latest ranked match already in DB (${riotHeadId.slice(0, 12)}…) — no ingest`
+      );
       return {
         analyzedCount: 0,
         skippedAlreadyFresh: true,
         skippedNoHistory: false,
+        failedAnalyzeAttempts: 0,
       };
     }
 
-    const windowIds = await this.getMatchHistory(puuid, windowSize, 0);
-    if (!windowIds || windowIds.length === 0) {
-      return {
-        analyzedCount: 0,
-        skippedAlreadyFresh: false,
-        skippedNoHistory: true,
-      };
-    }
-
-    const existing = await this.fetchExistingMatchIdsForPlayer(puuid, windowIds);
-    const anchorIdx = windowIds.findIndex((id) => existing.has(id));
-    const toAnalyze =
-      anchorIdx === -1 ? windowIds : windowIds.slice(0, anchorIdx);
+    console.info(
+      `${HEAD_SYNC_LOG} drift: ranked head ${riotHeadId.slice(0, 12)}… not in DB — ingesting until anchor`
+    );
 
     let analyzedCount = 0;
-    for (let i = 0; i < toAnalyze.length; i++) {
-      const matchId = toAnalyze[i];
-      const analysis = await this.analyzeMatchPerformance(matchId, puuid);
-      if (analysis?.success && analysis.matchSummary) {
-        analyzedCount++;
+    let failedAnalyzeAttempts = 0;
+    let listOffset = 0;
+
+    for (let round = 0; round < maxSyncRounds; round++) {
+      const windowIds = await this.getMatchHistory(puuid, windowSize, listOffset);
+      if (!windowIds || windowIds.length === 0) {
+        if (round === 0) {
+          console.warn(`${HEAD_SYNC_LOG} abort: empty window at offset 0 after non-empty single-id fetch`);
+          return {
+            analyzedCount: 0,
+            skippedAlreadyFresh: false,
+            skippedNoHistory: true,
+            failedAnalyzeAttempts,
+          };
+        }
+        console.info(`${HEAD_SYNC_LOG} round ${round} empty list at offset ${listOffset}, stop`);
+        break;
       }
-      if (i < toAnalyze.length - 1) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, analyzeDelayMs / Math.max(toAnalyze.length, 1))
-        );
+
+      const existing = await this.fetchExistingMatchIdsForPlayer(puuid, windowIds);
+      const anchorIdx = windowIds.findIndex((id) => existing.has(id));
+      const toAnalyze =
+        anchorIdx === -1 ? windowIds : windowIds.slice(0, anchorIdx);
+
+      console.info(
+        `${HEAD_SYNC_LOG} round ${round} offset=${listOffset} ids=${windowIds.length} anchorIdx=${anchorIdx} toAnalyze=${toAnalyze.length}`
+      );
+
+      for (let i = 0; i < toAnalyze.length; i++) {
+        const matchId = toAnalyze[i];
+        const analysis = await this.analyzeMatchPerformance(matchId, puuid);
+        if (analysis?.success && analysis.matchSummary) {
+          analyzedCount++;
+          console.info(
+            `${HEAD_SYNC_LOG} analyze OK ${matchId.slice(0, 14)}… (${analyzedCount} ok so far)`
+          );
+        } else {
+          failedAnalyzeAttempts++;
+          console.warn(
+            `${HEAD_SYNC_LOG} analyze FAIL ${matchId.slice(0, 14)}…`,
+            analysis?.error ?? "no result"
+          );
+        }
+        if (i < toAnalyze.length - 1) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, analyzeDelayMs / Math.max(toAnalyze.length, 1))
+          );
+        }
       }
+
+      if (anchorIdx !== -1) {
+        console.info(`${HEAD_SYNC_LOG} anchored at idx ${anchorIdx}, done`);
+        break;
+      }
+      if (windowIds.length < windowSize) {
+        console.info(`${HEAD_SYNC_LOG} partial window (${windowIds.length}) end of ranked history for this depth`);
+        break;
+      }
+      listOffset += windowIds.length;
     }
+
+    console.info(
+      `${HEAD_SYNC_LOG} end analyzedOk=${analyzedCount} analyzeFail=${failedAnalyzeAttempts} skippedNoHistory=false`
+    );
 
     return {
       analyzedCount,
       skippedAlreadyFresh: false,
       skippedNoHistory: false,
+      failedAnalyzeAttempts,
     };
   }
 

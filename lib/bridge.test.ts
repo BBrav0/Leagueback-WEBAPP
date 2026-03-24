@@ -93,17 +93,22 @@ describe("BackendBridge", () => {
       analyzedCount: 0,
       skippedAlreadyFresh: false,
       skippedNoHistory: false,
+      failedAnalyzeAttempts: 0,
     });
   });
 
-  it("syncNewHeadMatchesFromRiot fast path when Riot newest equals DB newest", async () => {
+  it("syncNewHeadMatchesFromRiot fast path when ranked Riot head id already in DB", async () => {
     vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue(["same"]);
+    vi.spyOn(BackendBridge, "fetchExistingMatchIdsForPlayer").mockResolvedValue(
+      new Set(["same"])
+    );
     const analyze = vi.spyOn(BackendBridge, "analyzeMatchPerformance");
 
-    const r = await BackendBridge.syncNewHeadMatchesFromRiot("p1", "same", 4);
+    const r = await BackendBridge.syncNewHeadMatchesFromRiot("p1", undefined, 4);
 
     expect(r.skippedAlreadyFresh).toBe(true);
     expect(r.analyzedCount).toBe(0);
+    expect(r.failedAnalyzeAttempts).toBe(0);
     expect(analyze).not.toHaveBeenCalled();
   });
 
@@ -111,9 +116,9 @@ describe("BackendBridge", () => {
     vi.spyOn(BackendBridge, "getMatchHistory")
       .mockResolvedValueOnce(["new1"])
       .mockResolvedValueOnce(["new1", "new2", "anchor"]);
-    vi.spyOn(BackendBridge, "fetchExistingMatchIdsForPlayer").mockResolvedValue(
-      new Set(["anchor"])
-    );
+    vi.spyOn(BackendBridge, "fetchExistingMatchIdsForPlayer")
+      .mockResolvedValueOnce(new Set())
+      .mockResolvedValueOnce(new Set(["anchor"]));
     const analyze = vi
       .spyOn(BackendBridge, "analyzeMatchPerformance")
       .mockResolvedValue({ success: true, matchSummary: sampleMatch });
@@ -123,6 +128,7 @@ describe("BackendBridge", () => {
     });
 
     expect(r.analyzedCount).toBe(2);
+    expect(r.failedAnalyzeAttempts).toBe(0);
     expect(r.skippedAlreadyFresh).toBe(false);
     expect(analyze).toHaveBeenCalledTimes(2);
     expect(analyze).toHaveBeenCalledWith("new1", "p1");
