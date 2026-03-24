@@ -100,8 +100,12 @@ export interface PerformanceAnalysisResult {
   success: boolean;
   matchSummary?: MatchSummary;
   error?: string;
-  /** Present when impact_categories upsert failed (RLS, schema, etc.) */
+  /** Backward-compatible aggregate persistence error message. */
   impactCategoryPersistError?: string;
+  /** Present when player_matches upsert failed. */
+  playerMatchesPersistError?: string;
+  /** Present when match_cache upsert failed. */
+  matchCachePersistError?: string;
 }
 
 export type ImpactCategory =

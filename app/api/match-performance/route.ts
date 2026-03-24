@@ -89,15 +89,16 @@ export async function GET(request: NextRequest) {
         { onConflict: "match_id" }
       );
 
-    const combinedPersistError = [persistError, cacheError?.message]
-      .filter(Boolean)
-      .join(" | ");
-
     return NextResponse.json({
       success: true,
       matchSummary,
-      ...(combinedPersistError
-        ? { impactCategoryPersistError: combinedPersistError }
+      ...(persistError || cacheError?.message
+        ? {
+            impactCategoryPersistError:
+              persistError || cacheError?.message || "Unknown persist error",
+            playerMatchesPersistError: persistError || undefined,
+            matchCachePersistError: cacheError?.message,
+          }
         : {}),
     });
   } catch (error) {
