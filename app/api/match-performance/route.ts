@@ -31,7 +31,6 @@ export async function GET(request: NextRequest) {
         : await Promise.all([getMatchDetails(matchId), getMatchTimeline(matchId)]);
 
     if (!matchDetails) {
-      console.warn("[match-performance] no match details", matchId.slice(0, 14));
       return NextResponse.json({
         success: false,
         error: "Could not retrieve match details.",
@@ -42,13 +41,6 @@ export async function GET(request: NextRequest) {
       (p) => p.puuid === userPuuid
     );
     if (!userParticipant) {
-      console.warn(
-        "[match-performance] puuid not in match participants",
-        "match=",
-        matchId.slice(0, 14),
-        "userPuuid=",
-        userPuuid.slice(0, 12)
-      );
       return NextResponse.json({
         success: false,
         error: "User not found in match.",
@@ -56,7 +48,6 @@ export async function GET(request: NextRequest) {
     }
 
     if (!matchTimeline) {
-      console.warn("[match-performance] no timeline", matchId.slice(0, 14));
       return NextResponse.json({
         success: false,
         error: "Could not retrieve match timeline data.",
@@ -95,15 +86,6 @@ export async function GET(request: NextRequest) {
     };
 
     const persistError = await upsertPlayerMatch(row);
-    if (persistError) {
-      console.warn(
-        "[match-performance] player_matches upsert failed",
-        matchId.slice(0, 14),
-        "puuid=",
-        userPuuid.slice(0, 8),
-        persistError
-      );
-    }
     let cacheErrorMessage: string | undefined;
     if (!cacheEntry.matchData || !cacheEntry.timelineData) {
       const { error: cacheError } = await getSupabaseServer()

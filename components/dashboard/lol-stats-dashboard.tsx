@@ -522,14 +522,11 @@ export default function Component() {
         if (syncRate.allowed) {
           setFetchingMatchesFromApi(true);
           try {
-            const dbNewest = storedResult.matches[0]?.id;
             const syncResult = await BackendBridge.syncNewHeadMatchesFromRiot(
               account.puuid,
-              dbNewest,
               storedResult.totalCount,
               { windowSize: 25, analyzeDelayMs: 1500, maxSyncRounds: 12 }
             );
-            console.info("[head-sync] dashboard result", syncResult);
             if (
               !syncResult.skippedAlreadyFresh &&
               !syncResult.skippedNoHistory &&
@@ -537,8 +534,13 @@ export default function Component() {
               syncResult.failedAnalyzeAttempts > 0
             ) {
               setError(
-                "New ranked matches were analyzed but could not be saved to the database. Add SUPABASE_SERVICE_ROLE_KEY to .env.local (Supabase → Project Settings → API → service_role secret), restart the dev server, and try again. The anon key cannot insert into player_matches (RLS)."
+                "We could not save new match results. Please try again later."
               );
+              if (process.env.NODE_ENV === "development") {
+                console.warn(
+                  "[head-sync] All analyze attempts failed to persist (common fix: set SUPABASE_SERVICE_ROLE_KEY in .env.local for server routes; check terminal for player_matches upsert errors)."
+                );
+              }
             }
             if (syncResult.analyzedCount > 0) {
               const refreshed = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
@@ -563,12 +565,6 @@ export default function Component() {
           } finally {
             setFetchingMatchesFromApi(false);
           }
-        } else {
-          console.info(
-            "[head-sync] skipped: client rate limit, retry after",
-            syncRate.retryAfter,
-            "s"
-          );
         }
       }
 

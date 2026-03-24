@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     const puuid = typeof body?.puuid === "string" ? body.puuid : undefined;
     const matchIdsRaw = body?.matchIds;
 
-    if (typeof puuid !== "string" || !puuid) {
+    if (!puuid) {
       return NextResponse.json({ error: "Missing puuid" }, { status: 400 });
     }
     if (!Array.isArray(matchIdsRaw) || matchIdsRaw.length === 0) {
@@ -31,15 +31,11 @@ export async function POST(request: NextRequest) {
       .in("match_id", matchIds);
 
     if (error) {
-      console.error("[existing-ids] query failed:", error);
+      console.error("existing-ids query failed:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     const existing = (data ?? []).map((r) => r.match_id as string);
-    console.info(
-      "[existing-ids]",
-      `puuid=${puuid.slice(0, 8)}… checked=${matchIds.length} hits=${existing.length}`
-    );
 
     return NextResponse.json({
       existingMatchIds: existing,

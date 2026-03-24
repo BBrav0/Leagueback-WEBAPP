@@ -6,8 +6,6 @@ import type {
 
 export type { AccountData, ChartDataPoint, MatchSummary, PerformanceAnalysisResult } from "./types";
 
-const HEAD_SYNC_LOG = "[head-sync]";
-
 export class BackendBridge {
   static async getAccount(
     gameName: string,
@@ -44,27 +42,15 @@ export class BackendBridge {
       const res = await fetch(
         `/api/match-history?puuid=${encodeURIComponent(puuid)}&count=${count}&start=${start}`
       );
-      const url = `/api/match-history?count=${count}&start=${start}`;
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        console.warn(
-          `${HEAD_SYNC_LOG} getMatchHistory HTTP ${res.status} ${url}`,
-          body.slice(0, 200)
-        );
-        return null;
-      }
+      if (!res.ok) return null;
       const data = await res.json();
-      if (data && typeof data === "object" && !Array.isArray(data) && "error" in data) {
-        console.warn(`${HEAD_SYNC_LOG} getMatchHistory API error`, (data as { error?: string }).error);
-        return null;
-      }
       if (!Array.isArray(data)) {
-        console.warn(`${HEAD_SYNC_LOG} getMatchHistory unexpected shape`, typeof data);
+        if (data?.error) console.error("Backend error:", data.error);
         return null;
       }
       return data as string[];
     } catch (error) {
-      console.error(`${HEAD_SYNC_LOG} getMatchHistory exception`, error);
+      console.error("Error calling getMatchHistory:", error);
       return null;
     }
   }
@@ -174,25 +160,17 @@ export class BackendBridge {
         body: JSON.stringify({ puuid, matchIds }),
       });
       if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        console.warn(
-          `${HEAD_SYNC_LOG} existing-ids HTTP ${res.status}`,
-          body.slice(0, 200)
-        );
+        console.error("fetchExistingMatchIdsForPlayer HTTP", res.status);
         return new Set();
       }
       const data = (await res.json()) as { existingMatchIds?: string[]; error?: string };
       if (data.error) {
-        console.warn(`${HEAD_SYNC_LOG} existing-ids error`, data.error);
+        console.error("fetchExistingMatchIdsForPlayer:", data.error);
         return new Set();
       }
-      const set = new Set(data.existingMatchIds ?? []);
-      console.info(
-        `${HEAD_SYNC_LOG} existing-ids lookup puuid=${puuid.slice(0, 8)}… asked=${matchIds.length} foundInDb=${set.size}`
-      );
-      return set;
+      return new Set(data.existingMatchIds ?? []);
     } catch (e) {
-      console.error(`${HEAD_SYNC_LOG} existing-ids exception`, e);
+      console.error("fetchExistingMatchIdsForPlayer:", e);
       return new Set();
     }
   }
@@ -204,10 +182,10 @@ export class BackendBridge {
    */
   static async syncNewHeadMatchesFromRiot(
     puuid: string,
-    _dbNewestId: string | undefined,
     storedTotalCount: number,
     options: {
       windowSize?: number;
+      /** Delay between each match-performance call (rate limiting). */
       analyzeDelayMs?: number;
       maxSyncRounds?: number;
     } = {}
@@ -223,7 +201,6 @@ export class BackendBridge {
     const maxSyncRounds = options.maxSyncRounds ?? 12;
 
     if (storedTotalCount === 0) {
-      console.info(`${HEAD_SYNC_LOG} skip: no rows in player_matches for this user yet`);
       return {
         analyzedCount: 0,
         skippedAlreadyFresh: false,
@@ -232,13 +209,8 @@ export class BackendBridge {
       };
     }
 
-    console.info(
-      `${HEAD_SYNC_LOG} start puuid=${puuid.slice(0, 8)}… storedTotalCount=${storedTotalCount} window=${windowSize} maxRounds=${maxSyncRounds}`
-    );
-
     const newestOnly = await this.getMatchHistory(puuid, 1, 0);
     if (!newestOnly || newestOnly.length === 0) {
-      console.warn(`${HEAD_SYNC_LOG} abort: ranked match-history empty at start=0 (check Riot proxy / API key)`);
       return {
         analyzedCount: 0,
         skippedAlreadyFresh: false,
@@ -250,9 +222,6 @@ export class BackendBridge {
     const riotHeadId = newestOnly[0];
     const headExisting = await this.fetchExistingMatchIdsForPlayer(puuid, [riotHeadId]);
     if (headExisting.has(riotHeadId)) {
-      console.info(
-        `${HEAD_SYNC_LOG} fast path OK: latest ranked match already in DB (${riotHeadId.slice(0, 12)}…) — no ingest`
-      );
       return {
         analyzedCount: 0,
         skippedAlreadyFresh: true,
@@ -260,10 +229,6 @@ export class BackendBridge {
         failedAnalyzeAttempts: 0,
       };
     }
-
-    console.info(
-      `${HEAD_SYNC_LOG} drift: ranked head ${riotHeadId.slice(0, 12)}… not in DB — ingesting until anchor`
-    );
 
     let analyzedCount = 0;
     let failedAnalyzeAttempts = 0;
@@ -273,7 +238,6 @@ export class BackendBridge {
       const windowIds = await this.getMatchHistory(puuid, windowSize, listOffset);
       if (!windowIds || windowIds.length === 0) {
         if (round === 0) {
-          console.warn(`${HEAD_SYNC_LOG} abort: empty window at offset 0 after non-empty single-id fetch`);
           return {
             analyzedCount: 0,
             skippedAlreadyFresh: false,
@@ -281,7 +245,6 @@ export class BackendBridge {
             failedAnalyzeAttempts,
           };
         }
-        console.info(`${HEAD_SYNC_LOG} round ${round} empty list at offset ${listOffset}, stop`);
         break;
       }
 
@@ -290,46 +253,27 @@ export class BackendBridge {
       const toAnalyze =
         anchorIdx === -1 ? windowIds : windowIds.slice(0, anchorIdx);
 
-      console.info(
-        `${HEAD_SYNC_LOG} round ${round} offset=${listOffset} ids=${windowIds.length} anchorIdx=${anchorIdx} toAnalyze=${toAnalyze.length}`
-      );
-
       for (let i = 0; i < toAnalyze.length; i++) {
         const matchId = toAnalyze[i];
         const analysis = await this.analyzeMatchPerformance(matchId, puuid);
         if (analysis?.success && analysis.matchSummary) {
           analyzedCount++;
-          console.info(
-            `${HEAD_SYNC_LOG} analyze OK ${matchId.slice(0, 14)}… (${analyzedCount} ok so far)`
-          );
         } else {
           failedAnalyzeAttempts++;
-          console.warn(
-            `${HEAD_SYNC_LOG} analyze FAIL ${matchId.slice(0, 14)}…`,
-            analysis?.error ?? "no result"
-          );
         }
         if (i < toAnalyze.length - 1) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, analyzeDelayMs / Math.max(toAnalyze.length, 1))
-          );
+          await new Promise((resolve) => setTimeout(resolve, analyzeDelayMs));
         }
       }
 
       if (anchorIdx !== -1) {
-        console.info(`${HEAD_SYNC_LOG} anchored at idx ${anchorIdx}, done`);
         break;
       }
       if (windowIds.length < windowSize) {
-        console.info(`${HEAD_SYNC_LOG} partial window (${windowIds.length}) end of ranked history for this depth`);
         break;
       }
       listOffset += windowIds.length;
     }
-
-    console.info(
-      `${HEAD_SYNC_LOG} end analyzedOk=${analyzedCount} analyzeFail=${failedAnalyzeAttempts} skippedNoHistory=false`
-    );
 
     return {
       analyzedCount,
@@ -363,7 +307,8 @@ export class BackendBridge {
     puuid: string,
     start: number = 0,
     batchSize: number = 5,
-    delayBetweenBatches: number = 1500
+    /** Delay between each match-performance request (rate limiting). */
+    delayBetweenMatchesMs: number = 1500
   ): Promise<{ matches: MatchSummary[]; hasMore: boolean; nextStart: number }> {
     const matches: MatchSummary[] = [];
 
@@ -382,9 +327,8 @@ export class BackendBridge {
         matches.push(analysis.matchSummary);
       }
 
-      // Add delay between matches (except for the last one)
       if (i < matchIds.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, delayBetweenBatches / matchIds.length));
+        await new Promise((resolve) => setTimeout(resolve, delayBetweenMatchesMs));
       }
     }
 

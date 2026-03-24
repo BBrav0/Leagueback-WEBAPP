@@ -86,7 +86,7 @@ describe("BackendBridge", () => {
   it("syncNewHeadMatchesFromRiot skips all Riot calls when player has no stored rows", async () => {
     const hist = vi.spyOn(BackendBridge, "getMatchHistory");
 
-    const r = await BackendBridge.syncNewHeadMatchesFromRiot("p1", undefined, 0);
+    const r = await BackendBridge.syncNewHeadMatchesFromRiot("p1", 0);
 
     expect(hist).not.toHaveBeenCalled();
     expect(r).toEqual({
@@ -104,7 +104,7 @@ describe("BackendBridge", () => {
     );
     const analyze = vi.spyOn(BackendBridge, "analyzeMatchPerformance");
 
-    const r = await BackendBridge.syncNewHeadMatchesFromRiot("p1", undefined, 4);
+    const r = await BackendBridge.syncNewHeadMatchesFromRiot("p1", 4);
 
     expect(r.skippedAlreadyFresh).toBe(true);
     expect(r.analyzedCount).toBe(0);
@@ -123,7 +123,7 @@ describe("BackendBridge", () => {
       .spyOn(BackendBridge, "analyzeMatchPerformance")
       .mockResolvedValue({ success: true, matchSummary: sampleMatch });
 
-    const r = await BackendBridge.syncNewHeadMatchesFromRiot("p1", "stale-head", 3, {
+    const r = await BackendBridge.syncNewHeadMatchesFromRiot("p1", 3, {
       analyzeDelayMs: 0,
     });
 
