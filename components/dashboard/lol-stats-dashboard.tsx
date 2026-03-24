@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, memo, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis, ReferenceArea, PieChart, Pie, Cell } from "recharts"
 import {
@@ -142,15 +142,33 @@ function deriveImpactCountsFromMatches(matches: MatchSummary[]): {
   return { pie, lifetime };
 }
 
-function ImpactPieChart({ counts }: { counts: ImpactCounts }) {
-  const pieData: { name: keyof typeof pieConfig; value: number }[] = [
-    { name: "impactWins", value: counts.impactWins },
-    { name: "impactLosses", value: counts.impactLosses },
-    { name: "guaranteedWins", value: counts.guaranteedWins },
-    { name: "guaranteedLosses", value: counts.guaranteedLosses },
-  ]
+/** Stable tooltip element — avoids new component identity every parent render (Recharts reconciliation). */
+const pieTooltipContent = <ChartTooltipContent hideLabel nameKey="name" />
 
-  const total = pieData.reduce((acc, cur) => acc + cur.value, 0);
+function impactCountsEqual(a: ImpactCounts, b: ImpactCounts): boolean {
+  return (
+    a.impactWins === b.impactWins &&
+    a.impactLosses === b.impactLosses &&
+    a.guaranteedWins === b.guaranteedWins &&
+    a.guaranteedLosses === b.guaranteedLosses
+  );
+}
+
+const ImpactPieChart = memo(function ImpactPieChart({ counts }: { counts: ImpactCounts }) {
+  const pieData = useMemo(
+    (): { name: keyof typeof pieConfig; value: number }[] => [
+      { name: "impactWins", value: counts.impactWins },
+      { name: "impactLosses", value: counts.impactLosses },
+      { name: "guaranteedWins", value: counts.guaranteedWins },
+      { name: "guaranteedLosses", value: counts.guaranteedLosses },
+    ],
+    [counts.impactWins, counts.impactLosses, counts.guaranteedWins, counts.guaranteedLosses]
+  );
+
+  const total = useMemo(
+    () => pieData.reduce((acc, cur) => acc + cur.value, 0),
+    [pieData]
+  );
 
   if (total === 0) {
     return (
@@ -166,9 +184,9 @@ function ImpactPieChart({ counts }: { counts: ImpactCounts }) {
   return (
     <ChartContainer
       config={pieConfig}
-      className="h-[300px] w-full justify-center"
+      className="h-[300px] w-full justify-center [&_.recharts-responsive-container]:max-h-[300px]"
     >
-      <PieChart>
+      <PieChart margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
         <Pie
           data={pieData}
           dataKey="value"
@@ -179,11 +197,8 @@ function ImpactPieChart({ counts }: { counts: ImpactCounts }) {
           outerRadius={110}
           paddingAngle={2}
           strokeWidth={0}
-          label={({ name, value }) => {
-            const percent = total > 0 ? ((value as number) / total) * 100 : 0;
-            return `${pieConfig[name as keyof typeof pieConfig].label} ${percent.toFixed(0)}%`;
-          }}
-          labelLine={false}
+          isAnimationActive={false}
+          label={false}
         >
           {pieData.map((entry) => (
             <Cell
@@ -192,12 +207,12 @@ function ImpactPieChart({ counts }: { counts: ImpactCounts }) {
             />
           ))}
         </Pie>
-        <ChartTooltip content={<ChartTooltipContent />} />
+        <ChartTooltip content={pieTooltipContent} />
         <ChartLegend content={<ChartLegendContent />} />
       </PieChart>
     </ChartContainer>
-  )
-}
+  );
+}, (prev, next) => impactCountsEqual(prev.counts, next.counts));
 
 function MatchChart({ data }: { data: MatchSummary["data"] }) {
   const roundedData = data.map((d) => ({
