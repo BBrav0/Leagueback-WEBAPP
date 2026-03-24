@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMatchDetails, getMatchTimeline } from "@/lib/riot-api-service";
-import { reconstructMatchSummary, determineImpactCategory } from "@/lib/match-reconstruction";
-import { getSupabaseServer } from "@/lib/supabase-server";
+import {
+  reconstructMatchSummary,
+  determineImpactCategory,
+} from "@/lib/match-reconstruction";
+import { upsertPlayerMatch } from "@/lib/database-queries";
+import type { PlayerMatchRow } from "@/lib/database-queries";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -45,7 +49,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Reconstruct match summary using shared logic
     const matchSummary = reconstructMatchSummary(
       matchId,
       userPuuid,
@@ -53,34 +56,33 @@ export async function GET(request: NextRequest) {
       matchTimeline
     );
 
-    // Determine impact category and store in Supabase
-    // Must await — fire-and-forget gets killed on Vercel serverless
     const category = determineImpactCategory(
       matchSummary.gameResult,
       matchSummary.yourImpact,
       matchSummary.teamImpact
     );
 
-    const { error: upsertError } = await getSupabaseServer()
-      .from("impact_categories")
-      .upsert(
-        { match_id: matchId, puuid: userPuuid, category },
-        { onConflict: "match_id,puuid" }
-      );
+    const row: PlayerMatchRow = {
+      match_id: matchId,
+      puuid: userPuuid,
+      summoner_name: matchSummary.summonerName,
+      champion: matchSummary.champion,
+      kda: matchSummary.kda,
+      cs: matchSummary.cs,
+      vision_score: matchSummary.visionScore,
+      game_result: matchSummary.gameResult,
+      game_time: matchSummary.gameTime,
+      your_impact: matchSummary.yourImpact,
+      team_impact: matchSummary.teamImpact,
+      impact_category: category,
+      chart_data: matchSummary.data,
+      game_creation: matchDetails.info.gameCreation ?? 0,
+      game_duration: matchDetails.info.gameDuration,
+    };
 
-    if (upsertError) {
-      console.error("Failed to upsert impact category:", upsertError);
-    }
+    await upsertPlayerMatch(row);
 
-    return NextResponse.json({
-      success: true,
-      matchSummary,
-      ...(upsertError
-        ? {
-            impactCategoryPersistError: upsertError.message,
-          }
-        : {}),
-    });
+    return NextResponse.json({ success: true, matchSummary });
   } catch (error) {
     return NextResponse.json({
       success: false,

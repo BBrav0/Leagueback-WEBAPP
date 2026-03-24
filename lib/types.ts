@@ -17,6 +17,7 @@ export interface MatchInfo {
   participants: Participant[];
   teams: Team[];
   gameDuration: number;
+  gameCreation: number;
 }
 
 export interface Participant {
