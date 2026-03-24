@@ -89,6 +89,16 @@ export async function getMatchHistory(
 export async function getMatchDetails(
   matchId: string
 ): Promise<MatchDto> {
+  // Prefer combined cache table first
+  const { data: combinedCached } = await getSupabaseServer()
+    .from("match_cache")
+    .select("match_data")
+    .eq("match_id", matchId)
+    .single();
+  if (combinedCached?.match_data) {
+    return combinedCached.match_data as MatchDto;
+  }
+
   // Check Supabase cache
   const { data: cached } = await getSupabaseServer()
     .from("match_details")
@@ -121,6 +131,16 @@ export async function getMatchDetails(
 export async function getMatchTimeline(
   matchId: string
 ): Promise<MatchTimelineDto> {
+  // Prefer combined cache table first
+  const { data: combinedCached } = await getSupabaseServer()
+    .from("match_cache")
+    .select("timeline_data")
+    .eq("match_id", matchId)
+    .single();
+  if (combinedCached?.timeline_data) {
+    return combinedCached.timeline_data as MatchTimelineDto;
+  }
+
   // Check Supabase cache
   const { data: cached } = await getSupabaseServer()
     .from("match_timelines")

@@ -46,45 +46,38 @@ export async function getPlayerMatchesPaginated(
 ): Promise<{ matches: MatchSummary[]; totalCount: number; hasMore: boolean }> {
   const supabase = getSupabaseServer();
 
-  const { count: totalCount, error: countError } = await supabase
+  const { data, error, count } = await supabase
     .from("player_matches")
-    .select("*", { count: "exact", head: true })
-    .eq("puuid", puuid);
-
-  if (countError) {
-    console.error("Error counting player matches:", countError);
-    return { matches: [], totalCount: 0, hasMore: false };
-  }
-
-  const { data, error } = await supabase
-    .from("player_matches")
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("puuid", puuid)
     .order("game_creation", { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) {
     console.error("Error fetching player matches:", error);
-    return { matches: [], totalCount: totalCount || 0, hasMore: false };
+    return { matches: [], totalCount: count || 0, hasMore: false };
   }
 
   const matches = (data as PlayerMatchRow[]).map(rowToMatchSummary);
-  const hasMore = offset + matches.length < (totalCount || 0);
+  const totalCount = count || 0;
+  const hasMore = offset + matches.length < totalCount;
 
-  return { matches, totalCount: totalCount || 0, hasMore };
+  return { matches, totalCount, hasMore };
 }
 
 /**
  * Upsert a precomputed match summary into player_matches.
  */
-export async function upsertPlayerMatch(row: PlayerMatchRow): Promise<void> {
+export async function upsertPlayerMatch(row: PlayerMatchRow): Promise<string | null> {
   const { error } = await getSupabaseServer()
     .from("player_matches")
     .upsert(row, { onConflict: "match_id,puuid" });
 
   if (error) {
     console.error("player_matches upsert failed:", error);
+    return error.message;
   }
+  return null;
 }
 
 /**
@@ -92,8 +85,8 @@ export async function upsertPlayerMatch(row: PlayerMatchRow): Promise<void> {
  */
 export async function upsertPlayerMatchBatch(
   rows: PlayerMatchRow[]
-): Promise<void> {
-  if (rows.length === 0) return;
+): Promise<string | null> {
+  if (rows.length === 0) return null;
 
   const { error } = await getSupabaseServer()
     .from("player_matches")
@@ -101,7 +94,9 @@ export async function upsertPlayerMatchBatch(
 
   if (error) {
     console.error("player_matches batch upsert failed:", error);
+    return error.message;
   }
+  return null;
 }
 
 /**

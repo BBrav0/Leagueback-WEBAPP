@@ -5,6 +5,7 @@ import {
   determineImpactCategory,
 } from "@/lib/match-reconstruction";
 import { upsertPlayerMatch } from "@/lib/database-queries";
+import { getSupabaseServer } from "@/lib/supabase-server";
 import type { PlayerMatchRow } from "@/lib/database-queries";
 
 export async function GET(request: NextRequest) {
@@ -80,9 +81,25 @@ export async function GET(request: NextRequest) {
       game_duration: matchDetails.info.gameDuration,
     };
 
-    await upsertPlayerMatch(row);
+    const persistError = await upsertPlayerMatch(row);
+    const { error: cacheError } = await getSupabaseServer()
+      .from("match_cache")
+      .upsert(
+        { match_id: matchId, match_data: matchDetails, timeline_data: matchTimeline },
+        { onConflict: "match_id" }
+      );
 
-    return NextResponse.json({ success: true, matchSummary });
+    const combinedPersistError = [persistError, cacheError?.message]
+      .filter(Boolean)
+      .join(" | ");
+
+    return NextResponse.json({
+      success: true,
+      matchSummary,
+      ...(combinedPersistError
+        ? { impactCategoryPersistError: combinedPersistError }
+        : {}),
+    });
   } catch (error) {
     return NextResponse.json({
       success: false,

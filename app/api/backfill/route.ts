@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase-server";
 import {
   reconstructMatchSummary,
@@ -8,7 +8,13 @@ import { upsertPlayerMatchBatch } from "@/lib/database-queries";
 import type { PlayerMatchRow } from "@/lib/database-queries";
 import type { MatchDto, MatchTimelineDto } from "@/lib/types";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const expectedSecret = process.env.BACKFILL_SECRET;
+  const providedSecret = request.headers.get("x-backfill-secret");
+  if (!expectedSecret || providedSecret !== expectedSecret) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const supabase = getSupabaseServer();
 
   const { data: impactRows, error: impactError } = await supabase
@@ -26,12 +32,13 @@ export async function POST() {
 
   const detailsMap = new Map<string, MatchDto>();
   const timelinesMap = new Map<string, MatchTimelineDto>();
+  const cacheMap = new Map<string, { match_data: MatchDto; timeline_data: MatchTimelineDto }>();
 
   const CHUNK = 50;
   for (let i = 0; i < uniqueMatchIds.length; i += CHUNK) {
     const chunk = uniqueMatchIds.slice(i, i + CHUNK);
 
-    const [{ data: details }, { data: timelines }] = await Promise.all([
+    const [{ data: details }, { data: timelines }, { data: cacheRows }] = await Promise.all([
       supabase
         .from("match_details")
         .select("match_id, match_data")
@@ -39,6 +46,10 @@ export async function POST() {
       supabase
         .from("match_timelines")
         .select("match_id, timeline_data")
+        .in("match_id", chunk),
+      supabase
+        .from("match_cache")
+        .select("match_id, match_data, timeline_data")
         .in("match_id", chunk),
     ]);
 
@@ -48,14 +59,21 @@ export async function POST() {
     for (const t of timelines ?? []) {
       timelinesMap.set(t.match_id, t.timeline_data as MatchTimelineDto);
     }
+    for (const c of cacheRows ?? []) {
+      cacheMap.set(c.match_id, {
+        match_data: c.match_data as MatchDto,
+        timeline_data: c.timeline_data as MatchTimelineDto,
+      });
+    }
   }
 
   const rows: PlayerMatchRow[] = [];
   const skipped: string[] = [];
 
   for (const { match_id, puuid } of impactRows) {
-    const matchDetails = detailsMap.get(match_id);
-    const matchTimeline = timelinesMap.get(match_id);
+    const cache = cacheMap.get(match_id);
+    const matchDetails = cache?.match_data ?? detailsMap.get(match_id);
+    const matchTimeline = cache?.timeline_data ?? timelinesMap.get(match_id);
 
     if (!matchDetails || !matchTimeline) {
       skipped.push(match_id);
@@ -94,12 +112,19 @@ export async function POST() {
         game_duration: matchDetails.info.gameDuration,
       });
     } catch (err) {
+      console.error("Backfill row reconstruction failed:", err);
       skipped.push(`${match_id}:${puuid}`);
     }
   }
 
   for (let i = 0; i < rows.length; i += CHUNK) {
-    await upsertPlayerMatchBatch(rows.slice(i, i + CHUNK));
+    const upsertError = await upsertPlayerMatchBatch(rows.slice(i, i + CHUNK));
+    if (upsertError) {
+      return NextResponse.json(
+        { error: "Backfill upsert failed", detail: upsertError },
+        { status: 500 }
+      );
+    }
   }
 
   return NextResponse.json({
