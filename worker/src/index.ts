@@ -126,7 +126,7 @@ export default {
       );
     }
 
-    // Route: GET /api/matches/{puuid}?count=10&type=ranked&start=0
+    // Route: GET /api/matches/{puuid}?count=10&start=0&type=ranked (type defaults to ranked)
     const matchesMatch = path.match(/^\/api\/matches\/([^/]+)$/);
     if (matchesMatch) {
       const puuid = safeDecode(matchesMatch[1]);
@@ -134,7 +134,7 @@ export default {
       const start = url.searchParams.get("start") ?? "0";
       const type = url.searchParams.get("type") ?? "ranked";
       return proxyToRiot(
-        `/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids?type=${type}&start=${start}&count=${count}`,
+        `/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids?type=${encodeURIComponent(type)}&start=${start}&count=${count}`,
         env.RIOT_API_KEY,
         rateLimitHeaders
       );
