@@ -1,5 +1,7 @@
 import type { ImpactCategory, MatchSummary } from "./types";
 
+export type { ImpactCategory };
+
 export type ImpactCounts = Record<ImpactCategory, number>;
 
 export function classifyMatch(match: MatchSummary): ImpactCategory {

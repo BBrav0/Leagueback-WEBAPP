@@ -14,8 +14,10 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const limit = limitParam ? parseInt(limitParam, 10) : 20;
-  const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
+  const parsedLimit = limitParam ? parseInt(limitParam, 10) : 20;
+  const parsedOffset = offsetParam ? parseInt(offsetParam, 10) : 0;
+  const limit = Math.min(Math.max(Number.isNaN(parsedLimit) ? 20 : parsedLimit, 1), 100);
+  const offset = Number.isNaN(parsedOffset) ? 0 : Math.max(parsedOffset, 0);
 
   try {
     const { matches, totalCount, hasMore } = await getPlayerMatchesPaginated(

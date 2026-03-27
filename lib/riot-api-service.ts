@@ -60,13 +60,16 @@ export async function getAccountByRiotId(
   const account: AccountDto = await res.json();
 
   // Cache in Supabase — must await on Vercel serverless
-  await getSupabaseServer()
+  const { error: accountCacheError } = await getSupabaseServer()
     .from("accounts")
     .upsert({
       puuid: account.puuid,
       game_name: account.gameName,
       tag_line: account.tagLine,
     });
+  if (accountCacheError) {
+    console.error("accounts cache upsert failed:", accountCacheError.message);
+  }
 
   return account;
 }
@@ -111,9 +114,12 @@ export async function getMatchDetails(
   const matchDto: MatchDto = await res.json();
 
   // Cache in Supabase — must await on Vercel serverless
-  await getSupabaseServer()
+  const { error: detailsCacheError } = await getSupabaseServer()
     .from("match_details")
     .upsert({ match_id: matchId, match_data: matchDto });
+  if (detailsCacheError) {
+    console.error("match_details cache upsert failed:", detailsCacheError.message);
+  }
 
   return matchDto;
 }
@@ -143,9 +149,12 @@ export async function getMatchTimeline(
   const timelineDto: MatchTimelineDto = await res.json();
 
   // Cache in Supabase — must await on Vercel serverless
-  await getSupabaseServer()
+  const { error: timelineCacheError } = await getSupabaseServer()
     .from("match_timelines")
     .upsert({ match_id: matchId, timeline_data: timelineDto });
+  if (timelineCacheError) {
+    console.error("match_timelines cache upsert failed:", timelineCacheError.message);
+  }
 
   return timelineDto;
 }

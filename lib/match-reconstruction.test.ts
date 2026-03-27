@@ -32,6 +32,7 @@ function makeMatchDetails(): MatchDto {
       ],
       teams: [{ teamId: 100, win: true }],
       gameDuration: 125,
+      gameCreation: 0,
     },
   };
 }

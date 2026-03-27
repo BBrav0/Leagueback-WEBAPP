@@ -57,9 +57,6 @@ const pieConfig = {
   },
 } as const
 
-// LocalStorage key for match impact cache
-const IMPACT_CACHE_KEY = "matchImpactCache_v1" as const;
-
 function safeDecodeURIComponent(value: string): string {
   try {
     return decodeURIComponent(value);
@@ -79,25 +76,6 @@ function parsePlayerFromUrl(pathname: string, hash: string): { gameName: string;
     gameName: routeGameName ? safeDecodeURIComponent(routeGameName) : "",
     tagLine: rawHash ? safeDecodeURIComponent(rawHash) : "",
   };
-}
-
-function loadImpactCache(): Record<string, ImpactCategory> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = localStorage.getItem(IMPACT_CACHE_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, ImpactCategory>) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveImpactCache(cache: Record<string, ImpactCategory>) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(IMPACT_CACHE_KEY, JSON.stringify(cache));
-  } catch {
-    // ignore
-  }
 }
 
 /**
@@ -134,10 +112,10 @@ const ImpactPieChart = memo(function ImpactPieChart({ counts }: { counts: Impact
 
   // Stable formatter: keeps slice % labels without recharts animation cost (isAnimationActive={false}).
   const renderSliceLabel = useCallback(
-    ({ name, value }: { name: string; value: number }) => {
-      const pct = total > 0 ? (value / total) * 100 : 0;
-      const config = pieConfig[name as keyof typeof pieConfig];
-      if (!config) return `${value}`;
+    ({ name, value }: { name?: string; value?: number }) => {
+      const pct = total > 0 ? ((value ?? 0) / total) * 100 : 0;
+      const config = pieConfig[(name ?? "") as keyof typeof pieConfig];
+      if (!config) return `${value ?? 0}`;
       return `${config.label} ${pct.toFixed(0)}%`;
     },
     [total]

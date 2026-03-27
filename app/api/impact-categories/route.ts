@@ -16,7 +16,8 @@ export async function GET(request: NextRequest) {
   try {
     let categories;
     if (limitParam) {
-      const limit = parseInt(limitParam, 10);
+      const parsed = parseInt(limitParam, 10);
+      const limit = Math.min(Math.max(Number.isNaN(parsed) ? 10 : parsed, 1), 500);
       categories = await getRecentImpactCategories(puuid, limit);
     } else {
       categories = await getImpactCategoriesForUser(puuid);

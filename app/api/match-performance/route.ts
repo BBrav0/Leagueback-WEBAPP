@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: false,
         error: "Could not retrieve match details.",
-      });
+      }, { status: 404 });
     }
 
     const userParticipant = matchDetails.info.participants.find(
@@ -44,14 +44,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: false,
         error: "User not found in match.",
-      });
+      }, { status: 400 });
     }
 
     if (!matchTimeline) {
       return NextResponse.json({
         success: false,
         error: "Could not retrieve match timeline data.",
-      });
+      }, { status: 404 });
     }
 
     const matchSummary = reconstructMatchSummary(
@@ -107,6 +107,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
-    });
+    }, { status: 500 });
   }
 }
