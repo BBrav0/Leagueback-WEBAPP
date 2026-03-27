@@ -5,6 +5,12 @@ import * as RechartsPrimitive from "recharts"
 
 import { cn } from "@/lib/utils"
 
+// Explicit generic args required for recharts 3.7.x compat (Payload had no defaults until 3.8.x)
+type TooltipPayloadItem = RechartsPrimitive.TooltipPayloadEntry<
+  number | string | ReadonlyArray<number | string>,
+  number | string
+>
+
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const
 
@@ -106,7 +112,7 @@ const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<typeof RechartsPrimitive.Tooltip> & {
     active?: boolean
-    payload?: RechartsPrimitive.TooltipPayload
+    payload?: ReadonlyArray<TooltipPayloadItem>
     label?: string | number
   } &
     React.ComponentProps<"div"> & {
@@ -189,7 +195,7 @@ const ChartTooltipContent = React.forwardRef<
       >
         {!nestLabel ? tooltipLabel : null}
         <div className="grid gap-1.5">
-          {payload.map((item: RechartsPrimitive.TooltipPayloadEntry, index: number) => {
+          {payload.map((item: TooltipPayloadItem, index: number) => {
             const key = `${nameKey || item.name || item.dataKey || "value"}`
             const itemConfig = getPayloadConfigFromPayload(config, item, key)
             const indicatorColor = color || (item.payload as Record<string, unknown>)?.fill || item.color
