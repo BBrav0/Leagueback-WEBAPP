@@ -1,0 +1,162 @@
+{
+  "groupId": "history-ux-main",
+  "testedAt": "2026-03-30T08:15:15.710737+00:00",
+  "isolation": {
+    "appUrl": "http://127.0.0.1:3005",
+    "missionDir": "C:\\Users\\bendc\\.factory\\missions\\7b970ada-3b1a-476d-827a-4cd2a618e64e",
+    "fixtureIdentity": "Validation Fixture#LOCAL",
+    "validationPath": "browser automation with deterministic fixture and local API evidence"
+  },
+  "toolsUsed": [
+    "agent-browser",
+    "python urllib",
+    "repo Read/Grep"
+  ],
+  "assertionResults": [
+    {
+      "id": "VAL-HISTORY-001",
+      "status": "pass",
+      "reason": "Validated in browser automation against the deterministic fixture route. Changing Result from All results to Victories immediately changed the badge/count from 2 loaded matches to 1 loaded match and reduced the visible cards to the Ahri victory card; zero-result messaging also appeared predictably when a conflicting impact-category filter was added.",
+      "evidence": {
+        "method": "browser automation",
+        "screenshots": [
+          "history-ux/history-ux-main/direct-route-loaded.png",
+          "history-ux/history-ux-main/filtered-victories.png",
+          "history-ux/history-ux-main/filtered-zero-results.png"
+        ],
+        "consoleErrors": "none via agent-browser errors after filter interactions",
+        "network": "Local fixture-backed route /player/Validation%20Fixture#LOCAL plus read-only API confirmation from /api/stored-matches?puuid=validation-fixture-puuid&limit=20&offset=0 showing two loaded matches",
+        "notes": [
+          "filtered-victories screenshot/body text showed Showing 1 of 2 loaded matches and Export scope: 1 filtered loaded match",
+          "filtered-zero-results screenshot/body text showed Showing 0 of 2 loaded matches with the truthful empty-state copy"
+        ]
+      }
+    },
+    {
+      "id": "VAL-HISTORY-002",
+      "status": "pass",
+      "reason": "Validated in browser automation. After enabling Compact cards, a page reload preserved the compactCards preference in localStorage and the explicit deep-linked player route still reloaded Validation Fixture#LOCAL rather than any persisted identity.",
+      "evidence": {
+        "method": "browser automation",
+        "screenshots": [
+          "history-ux/history-ux-main/compact-enabled.png",
+          "history-ux/history-ux-main/post-refresh-state.png"
+        ],
+        "consoleErrors": "none via agent-browser errors after reload",
+        "network": "Reload stayed on http://127.0.0.1:3005/player/Validation%20Fixture#LOCAL; /api/account for Validation Fixture#LOCAL returned the fixture account",
+        "localState": "Before reload localStorage stored compactCards=true; after reload the same key remained with compactCards true while saved lookups still contained Validation Fixture#LOCAL only"
+      }
+    },
+    {
+      "id": "VAL-HISTORY-003",
+      "status": "pass",
+      "reason": "Validated in browser automation. After creating a zero-result filtered state, clicking Reset saved filters restored default filter values, removed the active-filter badge, restored both loaded matches, and reset persisted history preferences back to defaults.",
+      "evidence": {
+        "method": "browser automation",
+        "screenshots": [
+          "history-ux/history-ux-main/filtered-zero-results.png",
+          "history-ux/history-ux-main/after-reset.png"
+        ],
+        "consoleErrors": "none via agent-browser errors during reset flow",
+        "localState": "Post-reset localStorage value became the default history-preferences object with compactCards false",
+        "notes": [
+          "after-reset body text showed Showing 2 of 2 loaded matches and both Ahri and Leona cards returned"
+        ]
+      }
+    },
+    {
+      "id": "VAL-HISTORY-004",
+      "status": "pass",
+      "reason": "Validated in browser automation. Export control was enabled when filtered loaded history contained matches and became disabled when filters reduced the visible loaded result set to zero; the UI labeled the scope truthfully as filtered loaded matches.",
+      "evidence": {
+        "method": "browser automation",
+        "screenshots": [
+          "history-ux/history-ux-main/direct-route-loaded.png",
+          "history-ux/history-ux-main/filtered-victories.png",
+          "history-ux/history-ux-main/filtered-zero-results.png"
+        ],
+        "consoleErrors": "none via agent-browser errors after export-state checks",
+        "uiState": [
+          "Unfiltered state showed Export scope: 2 filtered loaded matches with enabled export button",
+          "Victory-filtered state showed Export scope: 1 filtered loaded match",
+          "Zero-result state exposed exportDisabled=true in DOM inspection"
+        ],
+        "fallbackEvidence": "history-export.test.ts confirms export rows are built from filtered loaded history and deduplicated in loaded order"
+      }
+    },
+    {
+      "id": "VAL-CROSS-002",
+      "status": "fail",
+      "reason": "Validated in browser automation and source inspection. The explicit deep-linked route correctly remained the source of truth for player identity, but persisted saved lookups/history preferences did not survive a revisit when preseeded localStorage was reloaded on the deep link: the app replaced the seeded values with default history preferences and only the active Validation Fixture lookup. This violates the coexistence requirement for preserved recent/history preferences.",
+      "evidence": {
+        "method": "browser automation + source inspection",
+        "screenshots": [
+          "history-ux/history-ux-main/direct-route-loaded.png",
+          "history-ux/history-ux-main/preferences-applied-deeplink.png"
+        ],
+        "consoleErrors": "none via agent-browser errors",
+        "localState": "Preseeded localStorage with Saved Person plus Validation Fixture and non-default history preferences before reload; after reload localStorage reverted to defaults and saved lookups only contained Validation Fixture#LOCAL while URL still stayed on the deep link",
+        "sourceEvidence": [
+          "components/dashboard/lol-stats-dashboard.tsx loads persisted preferences on mount then saves current state on every change",
+          "saved-lookups.ts subscribes to storage, but observed runtime revisit still rewrote seeded values during route-driven search"
+        ]
+      }
+    },
+    {
+      "id": "VAL-CROSS-003",
+      "status": "blocked",
+      "reason": "The assigned deterministic fixture/runtime only exposes two stored matches with hasMore=false and no reachable older-history append path, so the mixed stored-plus-appended history flow could not be achieved through the real surface on this host. I used the approved fallback path to verify deterministic pagination/export logic evidence instead, but could not execute the full mixed append UI flow end-to-end.",
+      "evidence": {
+        "method": "approved fallback (tests + local API evidence)",
+        "screenshots": [
+          "history-ux/history-ux-main/direct-route-loaded.png",
+          "history-ux/history-ux-main/filtered-zero-results.png"
+        ],
+        "consoleErrors": "none from the exercised browser states",
+        "network": "/api/stored-matches?puuid=validation-fixture-puuid&limit=1&offset=0 returned hasMore=true for page 1 and offset=1 returned hasMore=false for page 2; no API-backed older-history append was available for the fixture",
+        "testEvidence": [
+          "lib/history-export.test.ts: deduplicates mixed loaded history while preserving first-seen order",
+          "lib/history-export.test.ts: maps filtered loaded history into truthful export rows",
+          "lib/validation-fixture.test.ts: validates paged stored matches shape for the fixture"
+        ],
+        "constraint": "No browser-visible Load more or older-history append path was available with the provided fixture or current runtime data"
+      }
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Form-field fill on the home route did not activate the Analyze button reliably through direct fill commands, so validation pivoted to the explicit deep-linked player route permitted by mission guidance.",
+      "resolved": true,
+      "resolution": "Used /player/Validation%20Fixture#LOCAL as the primary browser entry for repeatable assertion coverage.",
+      "affectedAssertions": [
+        "VAL-HISTORY-001",
+        "VAL-HISTORY-002",
+        "VAL-HISTORY-003",
+        "VAL-HISTORY-004",
+        "VAL-CROSS-002"
+      ]
+    },
+    {
+      "description": "agent-browser network request capture returned no requests for this local Next.js session, so request evidence was supplemented with read-only local API calls and source inspection.",
+      "resolved": true,
+      "resolution": "Used python urllib against local /api/account, /api/stored-matches, and /api/match-details endpoints as deterministic fallback evidence.",
+      "affectedAssertions": [
+        "VAL-HISTORY-001",
+        "VAL-HISTORY-002",
+        "VAL-HISTORY-004",
+        "VAL-CROSS-002",
+        "VAL-CROSS-003"
+      ]
+    }
+  ],
+  "blockers": [
+    {
+      "description": "Mixed stored-history plus appended older-history UI path was not reachable with the deterministic fixture because the loaded dataset is capped at two matches and older-history append is unavailable (stored pages end at hasMore=false, no API append path surfaced).",
+      "affectedAssertions": [
+        "VAL-CROSS-003"
+      ],
+      "quickFixAttempted": "Checked fixture source, exercised paged /api/stored-matches offsets 0 and 1, and reviewed export tests for fallback evidence; no non-disruptive way to create appended history in this isolation context."
+    }
+  ],
+  "summary": "Tested 6 assigned history UX assertions. Passed: VAL-HISTORY-001/002/003/004. Failed: VAL-CROSS-002 because persisted recent/history state did not coexist across revisit as required. Blocked: VAL-CROSS-003 because the provided fixture/runtime did not expose a real mixed stored+older-history append path; fallback test/API evidence was collected instead."
+}
