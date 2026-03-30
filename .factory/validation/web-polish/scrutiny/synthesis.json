@@ -1,0 +1,53 @@
+{
+  "milestone": "web-polish",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "pnpm test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "pnpm run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "pnpm run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 1,
+    "failed": 1,
+    "failedFeatures": [
+      "web-copy-and-empty-state-polish"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "web-copy-and-empty-state-polish",
+      "severity": "blocking",
+      "description": "Older-history errors can still surface raw Error.message text instead of the polished Leagueback fallback wording, so the copy pass did not guarantee truthful user-facing fallback language on that path."
+    },
+    {
+      "featureId": "web-copy-and-empty-state-polish",
+      "severity": "blocking",
+      "description": "The details panel still showed implementation-facing cache source labels such as 'Cached match data' and 'Legacy cached match data', which left product UI copy inconsistent with the web-polish scope."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Clarify in the web-feature-worker skill whether copy-only UI polish work may rely on source review alone or must still capture browser/dev-server runtime evidence when agent-browser is unavailable.",
+      "evidence": "The failed review for web-copy-and-empty-state-polish noted that the worker handoff only cited source review for runtime verification, leaving expectations for copy-only polish validation ambiguous under the current fallback guidance.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}

@@ -33,7 +33,7 @@ Use this skill for features that change:
    - detail/fallback behavior.
 4. Implement the smallest coherent change set that makes the new tests pass and preserves existing behavior.
 5. For UI features, verify truthful copy and fallback behavior alongside the happy path. Placeholder text is not acceptable on mission-covered surfaces.
-6. Use `agent-browser` to manually verify the real web flow on the configured mission port whenever it is available. If mission guidance documents an approved temporary fallback, use that fallback instead and capture explicit dev-server evidence plus the limits of what was not interactively proven. On this Windows host, if the documented stop helper fails through the exec wrapper, reuse the already-running validated server when safe or fall back to a plain `netstat` + `taskkill` port cleanup flow instead of inventing a new port.
+6. Use `agent-browser` to manually verify the real web flow on the configured mission port whenever it is available. If mission guidance documents an approved temporary fallback, use that fallback instead and capture explicit dev-server evidence plus the limits of what was not interactively proven. This still applies to copy-only polish work: do not rely on source review alone when the user-facing wording/state can be exercised on the running app. On this Windows host, if the documented stop helper fails through the exec wrapper, reuse the already-running validated server when safe or fall back to a plain `netstat` + `taskkill` port cleanup flow instead of inventing a new port.
 7. Run the relevant validators during iteration, then the committed mission gates before finishing:
    - lint/static-check,
    - typecheck,

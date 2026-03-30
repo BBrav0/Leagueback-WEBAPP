@@ -1,0 +1,15 @@
+{
+  "featureId": "web-polish-copy-truthfulness-fix",
+  "reviewedAt": "2026-03-30T09:28:44Z",
+  "commitId": "391ffd8af3f00936334179ca75c2bf7ca7d800d3",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix fully addresses the prior scrutiny gaps. The dashboard no longer exposes raw details-source identifiers in the visible badge, and the older-history fallback now uses explicit Leagueback wording while leaving underlying behavior unchanged. I did not find any blocking or non-blocking regressions within the scoped copy-truthfulness contract.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": ".factory/validation/web-polish/scrutiny/reviews/web-copy-and-empty-state-polish.json",
+  "summary": "Reviewed the feature metadata, handoff, transcript skeleton, commit diff, relevant dashboard code, and shared-state docs. The commit cleanly fixes both prior copy-truthfulness findings and stays within the scoped UI-label/copy surface, so this review passes."
+}
