@@ -63,6 +63,7 @@ Validation surface, setup notes, and concurrency guidance for this mission.
 - Returning-player searches where Supabase already has stored history, so freshness reconciliation must be proven against existing DB-backed data instead of a first-load/new-player path
 - When browser automation is unavailable, capture equivalent dev-server evidence and state clearly which interactions were validated through the approved fallback path
 - For the match-card metadata follow-up, validate through the stored-history route the user actually sees: confirm `/api/stored-matches` and the rendered cards show persisted role/damage metadata plus truthful current-rank copy, not transient analysis-only values.
+- User-approved temporary limitation: if Riot's live rank API is still returning rate-limit/forbidden responses, do not block implementation completion on real-player rank proof in this milestone. Capture the unavailable fallback behavior plus validator evidence, and leave the deferred live-rank validation feature/assertion pending for a later follow-up once the external API recovers.
 
 ## Returning-player freshness validation note
 

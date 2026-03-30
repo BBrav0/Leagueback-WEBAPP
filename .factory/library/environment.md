@@ -22,6 +22,7 @@ Environment variables, external dependencies, and setup notes.
 - Supabase is the backing data store for cached accounts, cached matches, and precomputed player match rows.
 - The live Supabase project for this mission is `LeagueBack` (`lovbyjahuxfokpbkxviz`); schema changes should be applied there via tracked migrations.
 - Riot data is fetched through the configured Riot proxy / worker URL; this mission should reuse the existing proxy setup.
+- For Cloudflare worker deploys in this mission, Wrangler auth resolves to account ID `84abf047ff97885a578db1fff2bdb463`; non-interactive deploys should set `CLOUDFLARE_ACCOUNT_ID` (or equivalent config) to that account so `riot-proxy` deploys do not stall on multi-account selection.
 
 ## Platform notes
 
