@@ -22,6 +22,7 @@ import {
   type ImpactCategory,
   type ImpactCounts,
 } from "@/lib/impact-stats"
+import { loadSavedLookups, saveSuccessfulLookup, type SavedLookup } from "@/lib/saved-lookups"
 import { cn } from "@/lib/utils"
 import { rateLimiter } from "@/lib/rate-limiter"
 
@@ -315,6 +316,7 @@ export default function Component() {
   const router = useRouter();
   const pathname = usePathname();
   const [matchesData, setMatchesData] = useState<MatchSummary[]>([]);
+  const [savedLookups, setSavedLookups] = useState<SavedLookup[]>([]);
   const [impactCounts, setImpactCounts] = useState<ImpactCounts>({
     impactWins: 0,
     impactLosses: 0,
@@ -352,6 +354,10 @@ export default function Component() {
   useEffect(() => {
     matchesDataRef.current = matchesData;
   }, [matchesData]);
+
+  useEffect(() => {
+    setSavedLookups(loadSavedLookups());
+  }, []);
 
   const syncImpactStats = useCallback(async (puuid: string, matches: MatchSummary[]) => {
     try {
@@ -438,6 +444,8 @@ export default function Component() {
     setError(null);
     setHasSearched(true);
     setFetchingMatchesFromApi(false);
+    setMatchesData([]);
+    setCurrentPuuid(null);
     setImpactCounts({
       impactWins: 0,
       impactLosses: 0,
@@ -464,6 +472,12 @@ export default function Component() {
         throw new Error("Failed to get account information");
       }
 
+      setSavedLookups(
+        saveSuccessfulLookup({
+          gameName: normalizedGameName,
+          tagLine: normalizedTagLine,
+        })
+      );
       setCurrentPuuid(account.puuid);
 
       // Fetch first page of stored matches from DB
@@ -599,6 +613,10 @@ export default function Component() {
 
   const handleSearch = async () => {
     await runSearch(gameName, tagLine, { syncUrl: true });
+  };
+
+  const handleSavedLookupClick = async (lookup: SavedLookup) => {
+    await runSearch(lookup.gameName, lookup.tagLine, { syncUrl: true });
   };
 
   const handleLoadMore = async () => {
@@ -892,6 +910,36 @@ export default function Component() {
             </div>
           </CardContent>
         </Card>
+
+        {savedLookups.length > 0 && (
+          <Card className="bg-slate-800/50 border-slate-600/50">
+            <CardHeader>
+              <CardTitle className="text-white">Recent Riot IDs</CardTitle>
+              <CardDescription className="text-slate-300">
+                Successful lookups are saved on this device only.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-3">
+                {savedLookups.map((lookup) => {
+                  const key = `${lookup.gameName}#${lookup.tagLine}`;
+                  return (
+                    <Button
+                      key={key}
+                      type="button"
+                      variant="outline"
+                      onClick={() => void handleSavedLookupClick(lookup)}
+                      className="border-slate-600 bg-slate-900/60 text-slate-100 hover:bg-slate-700 hover:text-white"
+                    >
+                      {lookup.gameName}
+                      <span className="text-slate-400">#{lookup.tagLine}</span>
+                    </Button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Error Display */}
         {error && (
