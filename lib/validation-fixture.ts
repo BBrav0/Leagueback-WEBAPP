@@ -380,7 +380,11 @@ export function getValidationFixtureMatchHistory(
   count: number,
   start: number
 ): string[] {
-  return VALIDATION_FIXTURE_APPENDED_MATCHES.slice(start, start + count).map((match) => match.id);
+  const appendedStart = Math.max(start - VALIDATION_FIXTURE_MATCHES.length, 0);
+
+  return VALIDATION_FIXTURE_APPENDED_MATCHES.slice(appendedStart, appendedStart + count).map(
+    (match) => match.id
+  );
 }
 
 export function getValidationFixtureMatchSummary(matchId: string): MatchSummary | null {

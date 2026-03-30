@@ -48,11 +48,17 @@ describe("validation fixture path", () => {
 
   it("exposes deterministic older-history IDs for the append path", () => {
     expect(VALIDATION_FIXTURE_APPENDED_MATCHES).toHaveLength(2);
+    expect(getValidationFixtureMatchHistory(5, VALIDATION_FIXTURE_MATCHES.length)).toEqual([
+      "VALIDATION_APPEND_003",
+      "VALIDATION_APPEND_004",
+    ]);
+    expect(getValidationFixtureMatchHistory(1, VALIDATION_FIXTURE_MATCHES.length + 1)).toEqual([
+      "VALIDATION_APPEND_004",
+    ]);
     expect(getValidationFixtureMatchHistory(5, 0)).toEqual([
       "VALIDATION_APPEND_003",
       "VALIDATION_APPEND_004",
     ]);
-    expect(getValidationFixtureMatchHistory(1, 1)).toEqual(["VALIDATION_APPEND_004"]);
   });
 
   it("resolves appended fixture matches into match summaries for mixed export/filter flows", () => {
