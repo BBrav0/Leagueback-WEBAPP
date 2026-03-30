@@ -1,0 +1,15 @@
+commands:
+  install: pnpm install --frozen-lockfile
+  lint: pnpm run lint
+  static-check: pnpm run static-check
+  typecheck: pnpm run typecheck
+  test: pnpm test
+  build: pnpm run build
+
+services:
+  web:
+    start: powershell -NoProfile -Command "pnpm run dev"
+    stop: powershell -NoProfile -Command "$pids = Get-NetTCPConnection -LocalPort 3005 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; foreach ($proc in $pids) { Stop-Process -Id $proc -Force }"
+    healthcheck: powershell -NoProfile -Command "$resp = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:3005; if ($resp.StatusCode -lt 200 -or $resp.StatusCode -ge 400) { exit 1 }"
+    port: 3005
+    depends_on: []

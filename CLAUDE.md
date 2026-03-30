@@ -4,6 +4,8 @@
 
 **Purpose:** League of Legends ranked match analysis tool. Players look up their Riot ID and see their match history with an "impact score" that measures their contribution relative to team average.
 
+**Product Scope:** Browser-only Next.js application. Non-web runtime targets are outside this repository’s scope.
+
 **Stack:**
 - Next.js 16 (App Router) + React 18 + TypeScript
 - Supabase (PostgreSQL) for caching and precomputed match data
