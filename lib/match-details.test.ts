@@ -49,6 +49,7 @@ describe("buildMatchDetailsData", () => {
 
     expect(details.status).toBe("ready");
     expect(details.statusLabel).toBe("Full match details loaded from cached raw match data.");
+    expect(details.fallbackReason).toBe("none");
     expect(details.source).toBe("match_cache");
     expect(details.teams).toEqual([
       { teamId: 100, result: "Victory", resultLabel: "Victory" },
@@ -79,6 +80,7 @@ describe("buildMatchDetailsData", () => {
       status: "unavailable",
       statusLabel:
         "Full match details are unavailable because cached raw match data has not been saved for this match yet.",
+      fallbackReason: "missing_raw_data",
       source: "none",
       teams: [
         {
@@ -96,7 +98,7 @@ describe("buildMatchDetailsData", () => {
     });
   });
 
-  it("marks partial participant records explicitly when core fields are missing", () => {
+  it("returns a truthful partial fallback state when raw details are incomplete", () => {
     const matchDetails = makeMatchDetails();
     matchDetails.info.participants[1] = {
       ...matchDetails.info.participants[1],
@@ -110,6 +112,12 @@ describe("buildMatchDetailsData", () => {
     const details = buildMatchDetailsData("match-3", "user-1", matchDetails, "legacy_cache");
     const partialParticipant = details.participants[1];
 
+    expect(details.status).toBe("partial");
+    expect(details.fallbackReason).toBe("partial_raw_data");
+    expect(details.statusLabel).toBe(
+      "Partial match details loaded from cached raw match data. Some player or team fields are unavailable."
+    );
+
     expect(partialParticipant).toMatchObject({
       summonerName: "Summoner unavailable",
       championName: "Champion unavailable",
@@ -121,5 +129,22 @@ describe("buildMatchDetailsData", () => {
       isCurrentPlayer: false,
       isMissingCoreData: true,
     });
+  });
+
+  it("returns a truthful partial fallback state when team results are missing", () => {
+    const matchDetails = makeMatchDetails();
+    matchDetails.info.teams = [];
+
+    const details = buildMatchDetailsData("match-4", "user-1", matchDetails, "match_cache");
+
+    expect(details.status).toBe("partial");
+    expect(details.fallbackReason).toBe("partial_raw_data");
+    expect(details.statusLabel).toBe(
+      "Partial match details loaded from cached raw match data. Some player or team fields are unavailable."
+    );
+    expect(details.teams).toEqual([
+      { teamId: 100, result: "Unknown", resultLabel: "Team result unavailable" },
+      { teamId: 200, result: "Unknown", resultLabel: "Team result unavailable" },
+    ]);
   });
 });

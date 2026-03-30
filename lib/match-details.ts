@@ -75,6 +75,27 @@ function buildTeamSummaries(matchDetails: MatchDto | null): MatchDetailsTeamSumm
   }));
 }
 
+function hasPartialRawDetails(matchDetails: MatchDto | null): boolean {
+  if (!matchDetails?.info?.participants?.length) {
+    return false;
+  }
+
+  const hasParticipantGaps = matchDetails.info.participants.some((participant) => {
+    const missingSummoner = !participant.summonerName?.trim();
+    const missingChampion = !participant.championName?.trim();
+    const missingTeamId =
+      typeof participant.teamId !== "number" || Number.isNaN(participant.teamId);
+    const missingParticipantId =
+      typeof participant.participantId !== "number" || Number.isNaN(participant.participantId);
+
+    return missingSummoner || missingChampion || missingTeamId || missingParticipantId;
+  });
+
+  const hasTeamCoverage = Array.isArray(matchDetails.info.teams) && matchDetails.info.teams.length > 0;
+
+  return hasParticipantGaps || !hasTeamCoverage;
+}
+
 function buildParticipantSummary(
   participant: MatchDto["info"]["participants"][number],
   currentPuuid: string
@@ -124,6 +145,7 @@ export function buildUnavailableMatchDetailsData(matchId: string): MatchDetailsD
     status: "unavailable",
     statusLabel:
       "Full match details are unavailable because cached raw match data has not been saved for this match yet.",
+    fallbackReason: "missing_raw_data",
     source: "none",
     teams: [
       {
@@ -154,10 +176,15 @@ export function buildMatchDetailsData(
     };
   }
 
+  const isPartialRawData = hasPartialRawDetails(matchDetails);
+
   return {
     matchId,
-    status: "ready",
-    statusLabel: "Full match details loaded from cached raw match data.",
+    status: isPartialRawData ? "partial" : "ready",
+    statusLabel: isPartialRawData
+      ? "Partial match details loaded from cached raw match data. Some player or team fields are unavailable."
+      : "Full match details loaded from cached raw match data.",
+    fallbackReason: isPartialRawData ? "partial_raw_data" : "none",
     source,
     teams: buildTeamSummaries(matchDetails),
     participants: matchDetails.info.participants.map((participant) =>

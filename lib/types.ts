@@ -133,8 +133,9 @@ export interface MatchDetailsParticipantSummary {
 
 export interface MatchDetailsData {
   matchId: string;
-  status: "ready" | "unavailable";
+  status: "ready" | "partial" | "unavailable";
   statusLabel: string;
+  fallbackReason: "none" | "partial_raw_data" | "missing_raw_data";
   source: "match_cache" | "legacy_cache" | "none";
   teams: MatchDetailsTeamSummary[];
   participants: MatchDetailsParticipantSummary[];
