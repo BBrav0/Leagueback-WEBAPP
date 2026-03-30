@@ -242,4 +242,32 @@ describe("BackendBridge", () => {
     expect(analyze).toHaveBeenCalledTimes(1);
     expect(analyze).toHaveBeenCalledWith("stale-recent", "p1");
   });
+
+  it("syncNewHeadMatchesFromRiot treats multiple stale rows as independently detectable", async () => {
+    vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue(["head", "stale-a", "stale-b"]);
+    vi.spyOn(BackendBridge, "fetchExistingMatchIdsForPlayer").mockResolvedValue(
+      new Set(["head", "stale-a", "stale-b"])
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ staleMatchIds: ["stale-a", "stale-b"] }),
+      })
+    );
+    const analyze = vi
+      .spyOn(BackendBridge, "analyzeMatchPerformance")
+      .mockResolvedValue({ success: true, matchSummary: sampleMatch });
+
+    const result = await BackendBridge.syncNewHeadMatchesFromRiot("p1", 12, {
+      recentWindowSize: 3,
+      analyzeDelayMs: 0,
+    });
+
+    expect(result.refreshedStaleCount).toBe(2);
+    expect(result.failedStaleRefreshAttempts).toBe(0);
+    expect(analyze).toHaveBeenCalledTimes(2);
+    expect(analyze).toHaveBeenNthCalledWith(1, "stale-a", "p1");
+    expect(analyze).toHaveBeenNthCalledWith(2, "stale-b", "p1");
+  });
 });

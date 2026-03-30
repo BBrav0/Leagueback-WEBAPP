@@ -10,6 +10,7 @@ import {
 import {
   getMatchCacheEntry,
   getPlayerSyncMetadata,
+  getPlayerMatchRowsForStaleCheck,
   upsertPlayerMatch,
   upsertPlayerSyncMetadata,
 } from "@/lib/database-queries";
@@ -94,6 +95,8 @@ export async function GET(request: NextRequest) {
 
     const persistError = await upsertPlayerMatch(row);
     const existingSyncMetadata = await getPlayerSyncMetadata(userPuuid);
+    const existingRecentRows = await getPlayerMatchRowsForStaleCheck(userPuuid, [matchId]);
+    const existingRow = existingRecentRows[0] ?? null;
     let cacheErrorMessage: string | undefined;
     if (!cacheEntry.matchData || !cacheEntry.timelineData) {
       const { error: cacheError } = await getSupabaseServer()
@@ -105,13 +108,46 @@ export async function GET(request: NextRequest) {
       cacheErrorMessage = cacheError?.message;
     }
 
+    const latestDbCreatedAt = existingSyncMetadata?.latest_db_match_created_at ?? null;
+    const latestRiotCreatedAt = existingSyncMetadata?.latest_riot_match_created_at ?? null;
+    const nextLatestDbCreatedAt =
+      latestDbCreatedAt === null || row.game_creation >= latestDbCreatedAt
+        ? row.game_creation
+        : latestDbCreatedAt;
+    const nextLatestDbMatchId =
+      latestDbCreatedAt === null || row.game_creation >= latestDbCreatedAt
+        ? matchId
+        : existingSyncMetadata?.latest_db_match_id ?? matchId;
+    const nextLatestRiotCreatedAt =
+      latestRiotCreatedAt === null || row.game_creation >= latestRiotCreatedAt
+        ? row.game_creation
+        : latestRiotCreatedAt;
+    const nextLatestRiotMatchId =
+      latestRiotCreatedAt === null || row.game_creation >= latestRiotCreatedAt
+        ? matchId
+        : existingSyncMetadata?.latest_riot_match_id ?? matchId;
+    const matchFreshness = {
+      ...(existingSyncMetadata?.notes ?? {}),
+      perMatchDerivationVersions: {
+        ...((existingSyncMetadata?.notes?.perMatchDerivationVersions as Record<string, string> | undefined) ?? {}),
+        [matchId]: CURRENT_DERIVATION_VERSION,
+      },
+      perMatchUpdatedAt: {
+        ...((existingSyncMetadata?.notes?.perMatchUpdatedAt as Record<string, string> | undefined) ?? {}),
+        [matchId]: new Date().toISOString(),
+      },
+      perMatchPreviousUpdatedAt: {
+        ...((existingSyncMetadata?.notes?.perMatchPreviousUpdatedAt as Record<string, string> | undefined) ?? {}),
+        ...(existingRow?.updated_at ? { [matchId]: existingRow.updated_at } : {}),
+      },
+    };
+
     const syncMetadataPersistError = await upsertPlayerSyncMetadata({
       puuid: userPuuid,
-      latest_db_match_id: matchId,
-      latest_db_match_created_at: row.game_creation,
-      latest_riot_match_id: existingSyncMetadata?.latest_riot_match_id ?? matchId,
-      latest_riot_match_created_at:
-        existingSyncMetadata?.latest_riot_match_created_at ?? row.game_creation,
+      latest_db_match_id: nextLatestDbMatchId,
+      latest_db_match_created_at: nextLatestDbCreatedAt,
+      latest_riot_match_id: nextLatestRiotMatchId,
+      latest_riot_match_created_at: nextLatestRiotCreatedAt,
       recent_match_window: existingSyncMetadata?.recent_match_window ?? 25,
       reconciled_through_match_created_at: Math.max(
         row.game_creation,
@@ -123,7 +159,7 @@ export async function GET(request: NextRequest) {
       last_stale_derived_refresh_at: new Date().toISOString(),
       last_full_refresh_at: existingSyncMetadata?.last_full_refresh_at ?? null,
       last_riot_sync_at: existingSyncMetadata?.last_riot_sync_at ?? null,
-      notes: existingSyncMetadata?.notes ?? {},
+      notes: matchFreshness,
     });
 
     return NextResponse.json({

@@ -44,6 +44,13 @@ export interface PlayerSyncMetadataRow {
   notes?: Record<string, unknown>;
 }
 
+export interface PlayerMatchStaleCheckRow {
+  match_id: string;
+  game_creation: number;
+  game_duration: number;
+  updated_at?: string | null;
+}
+
 function rowToMatchSummary(row: PlayerMatchRow): MatchSummary {
   const metadata = buildMatchMetadata({
     gameCreation: row.game_creation,
@@ -160,6 +167,28 @@ export async function upsertPlayerSyncMetadata(
   }
 
   return null;
+}
+
+export async function getPlayerMatchRowsForStaleCheck(
+  puuid: string,
+  matchIds: string[]
+): Promise<PlayerMatchStaleCheckRow[]> {
+  if (matchIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await getSupabaseServer()
+    .from("player_matches")
+    .select("match_id, game_creation, game_duration, updated_at")
+    .eq("puuid", puuid)
+    .in("match_id", matchIds);
+
+  if (error) {
+    console.error("Error fetching player matches for stale check:", error);
+    return [];
+  }
+
+  return (data as PlayerMatchStaleCheckRow[] | null) ?? [];
 }
 
 /**

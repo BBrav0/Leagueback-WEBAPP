@@ -1,10 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase-server";
+import { getPlayerMatchRowsForStaleCheck, type PlayerSyncMetadataRow } from "@/lib/database-queries";
 
 const CURRENT_DERIVATION_VERSION = "match-summary-v2";
 
 function isValidMatchId(matchId: string): boolean {
   return /^[A-Z0-9_]+$/i.test(matchId);
+}
+
+function readPerMatchRecord(
+  notes: PlayerSyncMetadataRow["notes"],
+  key: string
+): Record<string, string> {
+  const value = notes?.[key];
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -30,35 +45,25 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseServer();
-    const [{ data: playerRows, error: playerRowsError }, { data: syncMetadata, error: syncError }] =
+    const [{ data: syncMetadata, error: syncError }] =
       await Promise.all([
         supabase
-          .from("player_matches")
-          .select("match_id, game_creation, game_duration")
-          .eq("puuid", puuid)
-          .in("match_id", matchIds),
-        supabase
           .from("player_sync_metadata")
-          .select("derivation_version, recent_match_window")
+          .select("derivation_version, recent_match_window, notes")
           .eq("puuid", puuid)
           .maybeSingle(),
       ]);
-
-    if (playerRowsError) {
-      console.error("Error fetching player rows for stale detection:", playerRowsError);
-      return NextResponse.json(
-        { error: "Failed to inspect player match freshness." },
-        { status: 500 }
-      );
-    }
 
     if (syncError) {
       console.error("Error fetching player sync metadata for stale detection:", syncError);
     }
 
+    const playerRows = await getPlayerMatchRowsForStaleCheck(puuid, matchIds);
     const rowByMatchId = new Map(
-      (playerRows ?? []).map((row) => [row.match_id as string, row as { match_id: string; game_creation: number; game_duration: number }])
+      playerRows.map((row) => [row.match_id, row])
     );
+    const perMatchDerivationVersions = readPerMatchRecord(syncMetadata?.notes, "perMatchDerivationVersions");
+    const perMatchUpdatedAt = readPerMatchRecord(syncMetadata?.notes, "perMatchUpdatedAt");
 
     const staleMatchIds: string[] = [];
 
@@ -92,7 +97,12 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      if ((syncMetadata?.derivation_version ?? null) !== derivationVersion) {
+      if ((perMatchDerivationVersions[matchId] ?? syncMetadata?.derivation_version ?? null) !== derivationVersion) {
+        staleMatchIds.push(matchId);
+        continue;
+      }
+
+      if (row.updated_at && perMatchUpdatedAt[matchId] && row.updated_at !== perMatchUpdatedAt[matchId]) {
         staleMatchIds.push(matchId);
       }
     }
