@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { BackendBridge, MatchSummary } from "@/lib/bridge"
+import type { MatchDetailsData, MatchDetailsParticipantSummary, MatchDetailsTeamSummary } from "@/lib/bridge"
 import {
   deriveImpactCountsFromMatches,
   type ImpactCategory,
@@ -25,6 +26,8 @@ import {
 import { loadSavedLookups, saveSuccessfulLookup, type SavedLookup } from "@/lib/saved-lookups"
 import { cn } from "@/lib/utils"
 import { rateLimiter } from "@/lib/rate-limiter"
+import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 
 
 const chartConfig = {
@@ -258,9 +261,168 @@ function MatchChart({ data }: { data: MatchSummary["data"] }) {
   )
 }
 
-const MatchCard = memo(function MatchCard({ match }: { match: MatchSummary }) {
+const teamCardStyles: Record<MatchDetailsTeamSummary["result"], string> = {
+  Victory: "border-emerald-500/40 bg-emerald-500/10",
+  Defeat: "border-rose-500/40 bg-rose-500/10",
+  Unknown: "border-slate-600/60 bg-slate-900/40",
+};
+
+function MatchDetailsLoadingState() {
+  return (
+    <div className="space-y-4 rounded-lg border border-slate-700/70 bg-slate-900/40 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <Skeleton className="h-5 w-40 bg-slate-700/70" />
+        <Skeleton className="h-4 w-24 bg-slate-700/60" />
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, teamIndex) => (
+          <div
+            key={`team-skeleton-${teamIndex}`}
+            className="space-y-3 rounded-lg border border-slate-700/60 bg-slate-800/50 p-4"
+          >
+            <Skeleton className="h-5 w-32 bg-slate-700/60" />
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((__, rowIndex) => (
+                <Skeleton
+                  key={`participant-skeleton-${teamIndex}-${rowIndex}`}
+                  className="h-14 w-full bg-slate-700/50"
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MatchDetailsFallback({ details }: { details: MatchDetailsData }) {
+  return (
+    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100">
+      <div className="font-medium text-amber-50">Match details unavailable</div>
+      <p className="mt-2">{details.statusLabel}</p>
+    </div>
+  );
+}
+
+function ParticipantRow({ participant }: { participant: MatchDetailsParticipantSummary }) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg border px-3 py-3",
+        participant.isCurrentPlayer
+          ? "border-sky-400/60 bg-sky-500/10 ring-1 ring-sky-300/30"
+          : "border-slate-700/70 bg-slate-900/50"
+      )}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-white">{participant.summonerName}</span>
+            {participant.isCurrentPlayer && (
+              <Badge className="bg-sky-500/20 text-sky-100 hover:bg-sky-500/20">
+                You
+              </Badge>
+            )}
+            {participant.isMissingCoreData && (
+              <Badge variant="outline" className="border-amber-400/40 text-amber-100">
+                Partial data
+              </Badge>
+            )}
+          </div>
+          <div className="text-xs text-slate-300">
+            {participant.championName} • {participant.roleLabel}
+          </div>
+        </div>
+        <div className="text-right text-xs text-slate-300">
+          <div>{participant.kdaLabel}</div>
+          <div>{participant.visionScoreLabel}</div>
+        </div>
+      </div>
+      <div className="mt-2 text-xs text-slate-400">{participant.damageToChampionsLabel}</div>
+    </div>
+  );
+}
+
+function MatchDetailsContent({ details }: { details: MatchDetailsData }) {
+  if (details.status === "unavailable") {
+    return <MatchDetailsFallback details={details} />;
+  }
+
+  const participantsByTeam = details.teams.map((team) => ({
+    team,
+    participants: details.participants.filter((participant) => participant.teamId === team.teamId),
+  }));
+
+  return (
+    <div className="space-y-4 rounded-lg border border-slate-700/70 bg-slate-900/40 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-medium text-white">Match details</div>
+          <div className="text-xs text-slate-400">{details.statusLabel}</div>
+        </div>
+        <Badge variant="outline" className="border-slate-600 text-slate-200">
+          Source: {details.source.replace("_", " ")}
+        </Badge>
+      </div>
+      <Separator className="bg-slate-700/60" />
+      <div className="grid gap-4 xl:grid-cols-2">
+        {participantsByTeam.map(({ team, participants }) => (
+          <div
+            key={team.teamId}
+            className={cn("rounded-lg border p-4", teamCardStyles[team.result])}
+          >
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-white">
+                Team {team.teamId === 100 ? "Blue" : team.teamId === 200 ? "Red" : team.teamId}
+              </div>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-xs",
+                  team.result === "Victory"
+                    ? "border-emerald-300/50 text-emerald-100"
+                    : team.result === "Defeat"
+                      ? "border-rose-300/50 text-rose-100"
+                      : "border-slate-500/60 text-slate-200"
+                )}
+              >
+                {team.resultLabel}
+              </Badge>
+            </div>
+            <div className="space-y-3">
+              {participants.map((participant) => (
+                <ParticipantRow
+                  key={`${participant.teamId}-${participant.participantId}`}
+                  participant={participant}
+                />
+              ))}
+              {participants.length === 0 && (
+                <div className="rounded-lg border border-slate-700/60 bg-slate-900/50 px-3 py-4 text-sm text-slate-300">
+                  Team participant details are unavailable for this side of the match.
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const MatchCard = memo(function MatchCard({
+  match,
+  currentPuuid,
+}: {
+  match: MatchSummary;
+  currentPuuid: string | null;
+}) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [showChart, setShowChart] = useState(false);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsData, setDetailsData] = useState<MatchDetailsData | null>(null);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
 
   useEffect(() => {
     const el = cardRef.current;
@@ -279,6 +441,37 @@ const MatchCard = memo(function MatchCard({ match }: { match: MatchSummary }) {
     observer.observe(el);
     return () => observer.disconnect();
   }, [showChart]);
+
+  const handleToggleDetails = useCallback(async () => {
+    if (isDetailsOpen) {
+      setIsDetailsOpen(false);
+      return;
+    }
+
+    setIsDetailsOpen(true);
+
+    if (detailsData || detailsLoading || !currentPuuid) {
+      return;
+    }
+
+    setDetailsLoading(true);
+    setDetailsError(null);
+
+    try {
+      const response = await BackendBridge.getMatchDetails(match.id, currentPuuid);
+      if (!response) {
+        throw new Error("Could not load match details for this card.");
+      }
+
+      setDetailsData(response.details);
+    } catch (error) {
+      setDetailsError(
+        error instanceof Error ? error.message : "Could not load match details for this card."
+      );
+    } finally {
+      setDetailsLoading(false);
+    }
+  }, [currentPuuid, detailsData, detailsLoading, isDetailsOpen, match.id]);
 
   return (
     <div ref={cardRef}>
@@ -333,11 +526,32 @@ const MatchCard = memo(function MatchCard({ match }: { match: MatchSummary }) {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="text-slate-300 text-sm font-medium">Performance Timeline</div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-slate-300 text-sm font-medium">Performance Timeline</div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleToggleDetails()}
+                className="border-slate-600 bg-slate-900/60 text-slate-100 hover:bg-slate-700 hover:text-white"
+              >
+                {isDetailsOpen ? "Hide match details" : "View match details"}
+              </Button>
+            </div>
             {showChart ? (
               <MatchChart data={match.data} />
             ) : (
               <div className="h-[250px] w-full animate-pulse rounded-md bg-slate-700/50" />
+            )}
+            {isDetailsOpen && (
+              detailsLoading ? (
+                <MatchDetailsLoadingState />
+              ) : detailsError ? (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100">
+                  {detailsError}
+                </div>
+              ) : detailsData ? (
+                <MatchDetailsContent details={detailsData} />
+              ) : null
             )}
           </div>
         </CardContent>
@@ -1008,7 +1222,7 @@ export default function Component() {
             {/* Match cards */}
             <div className="md:w-3/5 space-y-6">
               {matchesData.map((match) => (
-                <MatchCard key={match.id} match={match} />
+                <MatchCard key={match.id} match={match} currentPuuid={currentPuuid} />
               ))}
               
               {/* Infinite scroll sentinel for DB matches */}

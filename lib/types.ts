@@ -140,6 +140,10 @@ export interface MatchDetailsData {
   participants: MatchDetailsParticipantSummary[];
 }
 
+export interface MatchDetailsResponse {
+  details: MatchDetailsData;
+}
+
 export interface PerformanceAnalysisResult {
   success: boolean;
   matchSummary?: MatchSummary;

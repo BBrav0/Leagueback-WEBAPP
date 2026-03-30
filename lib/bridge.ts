@@ -1,10 +1,20 @@
 import type {
   AccountData,
+  MatchDetailsResponse,
   MatchSummary,
   PerformanceAnalysisResult,
 } from "./types";
 
-export type { AccountData, ChartDataPoint, MatchSummary, PerformanceAnalysisResult } from "./types";
+export type {
+  AccountData,
+  ChartDataPoint,
+  MatchDetailsData,
+  MatchDetailsParticipantSummary,
+  MatchDetailsResponse,
+  MatchDetailsTeamSummary,
+  MatchSummary,
+  PerformanceAnalysisResult,
+} from "./types";
 
 export class BackendBridge {
   static async getAccount(
@@ -142,6 +152,33 @@ export class BackendBridge {
     } catch (error) {
       console.error("Error calling getStoredMatches:", error);
       return { matches: [], totalCount: 0, hasMore: false };
+    }
+  }
+
+  static async getMatchDetails(
+    matchId: string,
+    userPuuid: string
+  ): Promise<MatchDetailsResponse | null> {
+    try {
+      const res = await fetch(
+        `/api/match-details?matchId=${encodeURIComponent(matchId)}&userPuuid=${encodeURIComponent(userPuuid)}`
+      );
+
+      if (!res.ok) {
+        console.error("Failed to get match details", res.status);
+        return null;
+      }
+
+      const data = (await res.json()) as MatchDetailsResponse & { error?: string };
+      if (data.error) {
+        console.error("Backend error:", data.error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error("Error calling getMatchDetails:", error);
+      return null;
     }
   }
 
