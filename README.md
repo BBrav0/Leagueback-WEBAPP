@@ -1,84 +1,104 @@
 # Leagueback
 
-> Quantify your personal impact in every League of Legends match.
+Leagueback is a web-only Next.js app for League of Legends ranked match analysis.
+Players search by Riot ID, open shareable player routes, and review match history,
+impact score summaries, and supporting charts sourced through the existing
+Supabase cache and Riot proxy workflow.
 
-Leagueback crunches in-game statistics to tell you—clearly and objectively—whether you carried, inted, or did everything humanly possible. Stop staring at raw KDA; start understanding your real contribution.
+## Current product summary
 
-## How It Works
+Leagueback currently ships a browser-first experience built around:
 
-In Solo Queue roughly **40% of matches** are effectively predetermined, while only **20%** hinge on your individual performance. Leagueback analyses each game and classifies it into one of four outcomes:
+- Riot ID account lookup
+- Deep-linkable player routes at `/player/{gameName}#{tagLine}`
+- Stored ranked match history loading with older-history expansion
+- Match summary cards plus impact/lifetime analytics charts
+- Supabase-backed caching and API orchestration for Riot data
 
-| Outcome          | Meaning                                                     |
-| ---------------- | ----------------------------------------------------------- |
-| Impact Win       | Your play tipped the scales and secured the victory.        |
-| Guaranteed Win   | Your team would have won with or without you.               |
-| Impact Loss      | Your mistakes directly cost your team the game.            |
-| Guaranteed Loss  | Even Faker couldn't have saved this one.                    |
+## Shipped today
 
-The app surfaces these insights through clean charts and dashboards so you can focus your practice where it matters most.
+The current repository state supports these user-visible behaviors:
 
-## Features
+- Search for a player by Riot ID from the home page
+- Load the same player directly from a player route without re-submitting the form
+- View stored match history and load additional history as available
+- See impact category statistics, lifetime analytics, and related dashboard charts
+- Use the existing web API routes backed by Supabase and the Riot proxy worker
 
-- 📊 **Performance dashboard** contrasting you vs. team averages
-- 💾 **Local match cache** for ultra-fast history look-ups
-- 🥧 **Pie chart** summarising total impact wins & losses
-- 🛠️ **Settings panel**: clear cache
+## Backlog / not shipped yet
 
-## Coming Soon
+The roadmap backlog is still focused on web-only improvements, including:
 
-- ⚡ **Real-time impact score** updated during the match
-- 🗺️ **Objective, turret, and lane weighting** for an even smarter algorithm
-- 🖼️ **Rank icons, scoreboard, and additional UI polish**
-- 📈 **Algorithm smoothing** for fairer score curves
+- richer match-card metadata and truthful rank fallback states
+- deeper match-details views
+- saved lookups, filters, and persisted history preferences
+- loaded-history export and broader copy/fallback polish
 
-## Installation
+These are planned web UX improvements only. This repo does **not** currently ship
+desktop, Electron, mobile-native, or algorithm-change work.
 
-### Prerequisites
+## Local setup
 
-- Node.js 18+ and npm (or your preferred package manager)
+Leagueback uses `pnpm` as the committed package manager and local workflow.
 
-### Setup
+### 1. Install dependencies
 
 ```bash
-# Clone the repository
-git clone https://github.com/BBrav0/Leagueback-WEBAPP.git
-cd Leagueback-WEBAPP
+pnpm install --frozen-lockfile
+```
 
-# Install dependencies
-npm install
+### 2. Create local environment variables
 
-# Set up environment variables
+Copy `.env.example` to `.env.local` and replace the placeholder values with your
+local/project secrets:
+
+```bash
 cp .env.example .env.local
-# Edit .env.local with your Supabase credentials and Riot Proxy URL
-
-# Run the development server
-npm run dev
 ```
 
-The app will be available at `http://localhost:3000`.
+Required variables are:
 
-### Build for Production
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `BACKFILL_SECRET`
+- `RIOT_PROXY_URL` (optional if using the default proxy URL)
+
+### 3. Start the web app
+
+The committed local dev command uses the mission port `3005`:
 
 ```bash
-# Build the application
-npm run build
-
-# Start the production server
-npm start
+pnpm run dev
 ```
 
-## Architecture
+Then open `http://localhost:3005`.
 
-This web application consists of:
+## Validation workflow
 
-- **Frontend**: Next.js 16 with React, TypeScript, and Tailwind CSS
-- **API Proxy**: Cloudflare Worker for secure Riot API access
-- **Database**: Supabase for caching match data and impact categories
+The committed validation commands for this repo are:
 
-## Contributing
+```bash
+pnpm run lint
+pnpm run static-check
+pnpm run typecheck
+pnpm test
+pnpm run build
+```
 
-Pull requests are welcome! Feel free to open an issue for feature requests, bug reports, or general discussion.
+CI runs the same validation flow from `.github/workflows/ci.yml`.
+
+## Architecture notes
+
+- Framework: Next.js 16 App Router + React + TypeScript
+- Styling/UI: Tailwind CSS + Radix UI / shadcn components
+- Data/cache: Supabase
+- Riot access: Cloudflare Worker proxy
+- Hosting target: Vercel
 
 ## Disclaimer
 
-Leagueback isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends. All in-game content, imagery, and names are registered trademarks of Riot Games, Inc.
+Leagueback isn't endorsed by Riot Games. All in-game names and imagery belong to
+Riot Games.
