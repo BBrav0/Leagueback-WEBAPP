@@ -34,6 +34,11 @@ import {
   type HistoryPreferences,
 } from "@/lib/history-preferences"
 import {
+  buildHistoryExportFileName,
+  createLoadedHistoryExportRows,
+  serializeHistoryExportRowsToCsv,
+} from "@/lib/history-export"
+import {
   isValidationFixtureIdentity,
   VALIDATION_FIXTURE_ACCOUNT,
   VALIDATION_FIXTURE_DETAILS,
@@ -96,6 +101,22 @@ function formatDurationLabel(durationSeconds: number): string {
   const minutes = Math.floor(safeDuration / 60);
   const seconds = safeDuration % 60;
   return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+}
+
+function mergeMatchesInLoadedOrder(existing: MatchSummary[], incoming: MatchSummary[]): MatchSummary[] {
+  const merged = [...existing];
+  const seen = new Set(existing.map((match) => match.id));
+
+  for (const match of incoming) {
+    if (seen.has(match.id)) {
+      continue;
+    }
+
+    seen.add(match.id);
+    merged.push(match);
+  }
+
+  return merged;
 }
 
 function safeDecodeURIComponent(value: string): string {
@@ -656,6 +677,13 @@ export default function Component() {
     [historyPreferences]
   );
 
+  const exportRows = useMemo(
+    () => createLoadedHistoryExportRows(filteredMatches),
+    [filteredMatches]
+  );
+
+  const canExportLoadedHistory = exportRows.length > 0;
+
   const championFilterOptions = useMemo(() => {
     return Array.from(new Set(matchesData.map((match) => match.champion).filter(Boolean))).sort((a, b) =>
       a.localeCompare(b)
@@ -965,6 +993,21 @@ export default function Component() {
     setHistoryPreferences(resetHistoryPreferences());
   }, []);
 
+  const handleExportLoadedHistory = useCallback(() => {
+    if (!canExportLoadedHistory || typeof window === "undefined") {
+      return;
+    }
+
+    const csv = serializeHistoryExportRowsToCsv(exportRows);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const objectUrl = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = buildHistoryExportFileName(gameName, tagLine);
+    anchor.click();
+    window.URL.revokeObjectURL(objectUrl);
+  }, [canExportLoadedHistory, exportRows, gameName, tagLine]);
+
   const handleLoadMore = async () => {
     if (!currentPuuid || loadingMore || !allDbMatchesLoaded) return;
 
@@ -992,11 +1035,13 @@ export default function Component() {
         return;
       }
 
-      const merged = [...matchesDataRef.current, ...result.matches];
+      const merged = mergeMatchesInLoadedOrder(matchesDataRef.current, result.matches);
       setMatchesData(merged);
 
       // Newly fetched matches are stored in DB by match-performance route
-      setTotalDbMatches(prev => prev + result.matches.length);
+      setTotalDbMatches(prev => prev + result.matches.filter((match) =>
+        !matchesDataRef.current.some((existing) => existing.id === match.id)
+      ).length);
 
       await syncImpactStats(currentPuuid, merged);
 
@@ -1070,8 +1115,11 @@ export default function Component() {
     try {
       const result = await BackendBridge.getStoredMatches(currentPuuid, 20, loadedDbMatches);
 
-      setMatchesData(prev => [...prev, ...result.matches]);
-      const newLoaded = loadedDbMatches + result.matches.length;
+      setMatchesData(prev => mergeMatchesInLoadedOrder(prev, result.matches));
+      const uniqueIncomingCount = result.matches.filter((match) =>
+        !matchesDataRef.current.some((existing) => existing.id === match.id)
+      ).length;
+      const newLoaded = loadedDbMatches + uniqueIncomingCount;
       setLoadedDbMatches(newLoaded);
       setHasMoreDbMatches(result.hasMore);
 
@@ -1301,6 +1349,9 @@ export default function Component() {
                   <Badge variant="secondary" className="bg-slate-700/70 text-slate-100 hover:bg-slate-700/70">
                     Showing {filteredMatches.length} of {matchesData.length} loaded matches
                   </Badge>
+                  <Badge variant="outline" className="border-emerald-400/40 text-emerald-100">
+                    Export scope: {exportRows.length} filtered loaded match{exportRows.length === 1 ? "" : "es"}
+                  </Badge>
                   {activeHistoryFilterCount > 0 && (
                     <Badge variant="outline" className="border-sky-400/40 text-sky-100">
                       {activeHistoryFilterCount} active filter{activeHistoryFilterCount === 1 ? "" : "s"}
@@ -1377,7 +1428,7 @@ export default function Component() {
                   </Select>
                 </div>
               </div>
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-end">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto] lg:items-end">
                 <div className="space-y-2">
                   <Label className="text-white">Sort order</Label>
                   <Select
@@ -1411,6 +1462,14 @@ export default function Component() {
                     aria-label="Toggle compact cards"
                   />
                 </div>
+                <Button
+                  type="button"
+                  onClick={handleExportLoadedHistory}
+                  disabled={!canExportLoadedHistory}
+                  className="bg-emerald-600 text-white hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-400"
+                >
+                  Export filtered loaded history
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
