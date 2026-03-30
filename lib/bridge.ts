@@ -4,6 +4,7 @@ import type {
   MatchSummary,
   PerformanceAnalysisResult,
 } from "./types";
+import { getValidationFixtureMatchSummary, VALIDATION_FIXTURE_ACCOUNT } from "./validation-fixture";
 
 export type {
   AccountData,
@@ -69,6 +70,21 @@ export class BackendBridge {
     matchId: string,
     userPuuid: string
   ): Promise<PerformanceAnalysisResult | null> {
+    if (userPuuid === VALIDATION_FIXTURE_ACCOUNT.puuid) {
+      const matchSummary = getValidationFixtureMatchSummary(matchId);
+      if (!matchSummary) {
+        return {
+          success: false,
+          error: `Fixture match ${matchId} is unavailable.`,
+        };
+      }
+
+      return {
+        success: true,
+        matchSummary,
+      };
+    }
+
     try {
       const res = await fetch(
         `/api/match-performance?matchId=${encodeURIComponent(matchId)}&userPuuid=${encodeURIComponent(userPuuid)}`

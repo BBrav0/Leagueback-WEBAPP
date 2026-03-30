@@ -92,6 +92,25 @@ describe("BackendBridge", () => {
     expect(result.nextStart).toBe(2);
   });
 
+  it("getPlayerMatchDataBatch returns deterministic appended fixture matches without HTTP calls", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ["VALIDATION_APPEND_003", "VALIDATION_APPEND_004"],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await BackendBridge.getPlayerMatchDataBatch("validation-fixture-puuid", 0, 5, 0);
+
+    expect(result.matches.map((match) => match.id)).toEqual([
+      "VALIDATION_APPEND_003",
+      "VALIDATION_APPEND_004",
+    ]);
+    expect(result.hasMore).toBe(false);
+    expect(result.nextStart).toBe(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/match-history?puuid=validation-fixture-puuid");
+  });
+
   it("syncNewHeadMatchesFromRiot skips all Riot calls when player has no stored rows", async () => {
     const hist = vi.spyOn(BackendBridge, "getMatchHistory");
 

@@ -44,6 +44,7 @@ import {
   VALIDATION_FIXTURE_ACCOUNT,
   VALIDATION_FIXTURE_DETAILS,
   VALIDATION_FIXTURE_IMPACT_COUNTS,
+  VALIDATION_FIXTURE_MIXED_IMPACT_COUNTS,
 } from "@/lib/validation-fixture"
 import { cn } from "@/lib/utils"
 import { rateLimiter } from "@/lib/rate-limiter"
@@ -867,7 +868,7 @@ export default function Component() {
 
       if (account.puuid === VALIDATION_FIXTURE_ACCOUNT.puuid) {
         setImpactCounts(VALIDATION_FIXTURE_IMPACT_COUNTS.pie);
-        setLifetimeCounts(VALIDATION_FIXTURE_IMPACT_COUNTS.lifetime);
+        setLifetimeCounts(VALIDATION_FIXTURE_MIXED_IMPACT_COUNTS.lifetime);
       }
 
       // Dismiss full-screen "Analyzing" as soon as account + first DB page are known.
@@ -1053,7 +1054,12 @@ export default function Component() {
         !matchesDataRef.current.some((existing) => existing.id === match.id)
       ).length);
 
-      await syncImpactStats(currentPuuid, merged);
+      if (currentPuuid === VALIDATION_FIXTURE_ACCOUNT.puuid) {
+        setImpactCounts(deriveImpactCountsFromMatches(merged).pie);
+        setLifetimeCounts(VALIDATION_FIXTURE_MIXED_IMPACT_COUNTS.lifetime);
+      } else {
+        await syncImpactStats(currentPuuid, merged);
+      }
 
       // Check if API has more
       const apiHasMore = await BackendBridge.checkApiHasMore(currentPuuid, result.nextStart);
@@ -1362,6 +1368,11 @@ export default function Component() {
                   <Badge variant="outline" className="border-emerald-400/40 text-emerald-100">
                     Export scope: {exportRows.length} filtered loaded match{exportRows.length === 1 ? "" : "es"}
                   </Badge>
+                  {isValidationFixtureActive && allDbMatchesLoaded && hasMoreMatches && (
+                    <Badge variant="outline" className="border-sky-400/40 text-sky-100">
+                      Validation fixture older-history append ready
+                    </Badge>
+                  )}
                   {activeHistoryFilterCount > 0 && (
                     <Badge variant="outline" className="border-sky-400/40 text-sky-100">
                       {activeHistoryFilterCount} active filter{activeHistoryFilterCount === 1 ? "" : "s"}

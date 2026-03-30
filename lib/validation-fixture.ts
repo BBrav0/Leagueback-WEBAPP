@@ -75,6 +75,70 @@ export const VALIDATION_FIXTURE_MATCHES: MatchSummary[] = [
   },
 ];
 
+export const VALIDATION_FIXTURE_APPENDED_MATCHES: MatchSummary[] = [
+  {
+    id: "VALIDATION_APPEND_003",
+    summonerName: "Validation Fixture",
+    champion: "Sejuani",
+    rank: null,
+    rankLabel: "Rank unavailable for this validation fixture match.",
+    kda: "5/5/14",
+    cs: 156,
+    visionScore: 31,
+    gameResult: "Victory",
+    gameTime: "33:28",
+    playedAt: "Validation fixture • 3 days ago",
+    durationSeconds: 2008,
+    role: "JUNGLE",
+    roleLabel: "Role: Jungle",
+    damageToChampions: 18440,
+    damageToChampionsLabel: "18,440 damage to champions",
+    impactCategory: "guaranteedWins",
+    impactCategoryLabel: "Guaranteed Win",
+    data: [
+      { minute: 5, yourImpact: 49.5, teamImpact: 48.8 },
+      { minute: 10, yourImpact: 52.7, teamImpact: 50.1 },
+      { minute: 15, yourImpact: 54.8, teamImpact: 51.2 },
+      { minute: 20, yourImpact: 57.2, teamImpact: 52.6 },
+      { minute: 25, yourImpact: 59.1, teamImpact: 53.8 },
+      { minute: 30, yourImpact: 61.6, teamImpact: 55.1 },
+      { minute: 35, yourImpact: 63.2, teamImpact: 56.4 },
+    ],
+    yourImpact: 63.2,
+    teamImpact: 56.4,
+  },
+  {
+    id: "VALIDATION_APPEND_004",
+    summonerName: "Validation Fixture",
+    champion: "Thresh",
+    rank: null,
+    rankLabel: "Rank unavailable for this validation fixture match.",
+    kda: "1/7/16",
+    cs: 42,
+    visionScore: 58,
+    gameResult: "Defeat",
+    gameTime: "29:54",
+    playedAt: "Validation fixture • 5 days ago",
+    durationSeconds: 1794,
+    role: "UTILITY",
+    roleLabel: "Role: Support",
+    damageToChampions: 7140,
+    damageToChampionsLabel: "7,140 damage to champions",
+    impactCategory: "impactLosses",
+    impactCategoryLabel: "Impact Loss",
+    data: [
+      { minute: 5, yourImpact: 46.2, teamImpact: 49.4 },
+      { minute: 10, yourImpact: 45.7, teamImpact: 50.6 },
+      { minute: 15, yourImpact: 44.3, teamImpact: 51.9 },
+      { minute: 20, yourImpact: 42.4, teamImpact: 53.2 },
+      { minute: 25, yourImpact: 40.8, teamImpact: 54.1 },
+      { minute: 35, yourImpact: 39.6, teamImpact: 55.4 },
+    ],
+    yourImpact: 39.6,
+    teamImpact: 55.4,
+  },
+];
+
 export const VALIDATION_FIXTURE_DETAILS: Record<string, MatchDetailsData> = {
   VALIDATION_READY_001: {
     matchId: "VALIDATION_READY_001",
@@ -296,6 +360,11 @@ export const VALIDATION_FIXTURE_DETAILS: Record<string, MatchDetailsData> = {
 
 export const VALIDATION_FIXTURE_IMPACT_COUNTS = deriveImpactCountsFromMatches(VALIDATION_FIXTURE_MATCHES);
 
+export const VALIDATION_FIXTURE_MIXED_IMPACT_COUNTS = deriveImpactCountsFromMatches([
+  ...VALIDATION_FIXTURE_MATCHES,
+  ...VALIDATION_FIXTURE_APPENDED_MATCHES,
+]);
+
 export function getValidationFixtureStoredMatches(
   limit: number,
   offset: number
@@ -305,4 +374,19 @@ export function getValidationFixtureStoredMatches(
   const hasMore = offset + matches.length < totalCount;
 
   return { matches, totalCount, hasMore };
+}
+
+export function getValidationFixtureMatchHistory(
+  count: number,
+  start: number
+): string[] {
+  return VALIDATION_FIXTURE_APPENDED_MATCHES.slice(start, start + count).map((match) => match.id);
+}
+
+export function getValidationFixtureMatchSummary(matchId: string): MatchSummary | null {
+  return (
+    [...VALIDATION_FIXTURE_MATCHES, ...VALIDATION_FIXTURE_APPENDED_MATCHES].find(
+      (match) => match.id === matchId
+    ) ?? null
+  );
 }

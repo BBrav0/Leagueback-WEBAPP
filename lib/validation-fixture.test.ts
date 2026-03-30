@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  VALIDATION_FIXTURE_APPENDED_MATCHES,
   isValidationFixtureIdentity,
   VALIDATION_FIXTURE_DETAILS,
   VALIDATION_FIXTURE_MATCHES,
+  getValidationFixtureMatchHistory,
+  getValidationFixtureMatchSummary,
   getValidationFixtureStoredMatches,
 } from "./validation-fixture";
 
@@ -41,5 +44,24 @@ describe("validation fixture path", () => {
       totalCount: 2,
       hasMore: false,
     });
+  });
+
+  it("exposes deterministic older-history IDs for the append path", () => {
+    expect(VALIDATION_FIXTURE_APPENDED_MATCHES).toHaveLength(2);
+    expect(getValidationFixtureMatchHistory(5, 0)).toEqual([
+      "VALIDATION_APPEND_003",
+      "VALIDATION_APPEND_004",
+    ]);
+    expect(getValidationFixtureMatchHistory(1, 1)).toEqual(["VALIDATION_APPEND_004"]);
+  });
+
+  it("resolves appended fixture matches into match summaries for mixed export/filter flows", () => {
+    expect(getValidationFixtureMatchSummary("VALIDATION_APPEND_003")).toEqual(
+      VALIDATION_FIXTURE_APPENDED_MATCHES[0]
+    );
+    expect(getValidationFixtureMatchSummary("VALIDATION_FALLBACK_002")).toEqual(
+      VALIDATION_FIXTURE_MATCHES[1]
+    );
+    expect(getValidationFixtureMatchSummary("missing")).toBeNull();
   });
 });

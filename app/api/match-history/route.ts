@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMatchHistory } from "@/lib/riot-api-service";
+import {
+  getValidationFixtureMatchHistory,
+  VALIDATION_FIXTURE_ACCOUNT,
+} from "@/lib/validation-fixture";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -12,6 +16,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    if (puuid === VALIDATION_FIXTURE_ACCOUNT.puuid) {
+      return NextResponse.json(getValidationFixtureMatchHistory(count, start));
+    }
+
     const matchIds = await getMatchHistory(puuid, count, start);
     return NextResponse.json(matchIds);
   } catch (error) {
