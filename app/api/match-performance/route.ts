@@ -156,7 +156,7 @@ export async function GET(request: NextRequest) {
       },
       perMatchPreviousUpdatedAt: {
         ...((existingSyncMetadata?.notes?.perMatchPreviousUpdatedAt as Record<string, string> | undefined) ?? {}),
-        ...(existingRow?.updated_at ? { [matchId]: existingRow.updated_at } : {}),
+        ...(existingRow?.created_at ? { [matchId]: existingRow.created_at } : {}),
       },
     };
 

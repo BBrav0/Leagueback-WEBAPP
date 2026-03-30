@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      if (row.updated_at && perMatchUpdatedAt[matchId] && row.updated_at !== perMatchUpdatedAt[matchId]) {
+      if (row.created_at && perMatchUpdatedAt[matchId] && row.created_at !== perMatchUpdatedAt[matchId]) {
         staleMatchIds.push(matchId);
       }
     }

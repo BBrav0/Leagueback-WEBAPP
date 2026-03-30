@@ -5,6 +5,36 @@ import type { LeagueEntryDto } from "./rank-snapshot";
 const WORKER_URL =
   process.env.RIOT_PROXY_URL ?? "https://riot-proxy.riot-proxy.workers.dev";
 
+async function getCachedSummonerIdByPuuid(
+  puuid: string
+): Promise<string | undefined> {
+  const { data, error } = await getSupabaseServer()
+    .from("accounts")
+    .select("summoner_id")
+    .eq("puuid", puuid)
+    .maybeSingle();
+
+  if (error) {
+    console.error("accounts summoner_id lookup failed:", error.message);
+    return undefined;
+  }
+
+  return data?.summoner_id?.trim() || undefined;
+}
+
+async function cacheSummonerIdForPuuid(
+  puuid: string,
+  summonerId: string
+): Promise<void> {
+  const { error } = await getSupabaseServer()
+    .from("accounts")
+    .upsert({ puuid, summoner_id: summonerId }, { onConflict: "puuid" });
+
+  if (error) {
+    console.error("accounts summoner_id cache upsert failed:", error.message);
+  }
+}
+
 export async function getAccountByRiotId(
   gameName: string,
   tagLine: string
@@ -84,6 +114,11 @@ export async function getAccountByRiotId(
 export async function getSummonerIdByPuuid(
   puuid: string
 ): Promise<string | undefined> {
+  const cachedSummonerId = await getCachedSummonerIdByPuuid(puuid);
+  if (cachedSummonerId) {
+    return cachedSummonerId;
+  }
+
   const res = await fetch(
     `${WORKER_URL}/api/summoner/by-puuid/${encodeURIComponent(puuid)}`
   );
@@ -98,6 +133,9 @@ export async function getSummonerIdByPuuid(
 
   const data = (await res.json()) as { id?: string };
   const summonerId = data.id?.trim();
+  if (summonerId) {
+    await cacheSummonerIdForPuuid(puuid, summonerId);
+  }
   return summonerId || undefined;
 }
 

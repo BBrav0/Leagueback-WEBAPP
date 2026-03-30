@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockedSingle = vi.fn();
+const mockedMaybeSingle = vi.fn();
 const mockedIlikeTag = vi.fn();
 const mockedIlikeName = vi.fn();
 const mockedSelect = vi.fn();
@@ -32,7 +33,23 @@ describe("riot-api-service account summonerId wiring", () => {
     mockedSelect.mockReturnValue({ ilike: mockedIlikeName });
     mockedIlikeName.mockReturnValue({ ilike: mockedIlikeTag });
     mockedIlikeTag.mockReturnValue({ single: mockedSingle });
+    mockedSelect.mockImplementation((columns: string) => {
+      if (columns === "puuid, game_name, tag_line, summoner_id") {
+        return { ilike: mockedIlikeName };
+      }
+
+      if (columns === "summoner_id") {
+        return {
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: mockedMaybeSingle,
+          }),
+        };
+      }
+
+      throw new Error(`Unexpected select columns: ${columns}`);
+    });
     mockedUpsert.mockResolvedValue({ error: null });
+    mockedMaybeSingle.mockResolvedValue({ data: null, error: null });
   });
 
   it("hydrates a missing summonerId from the worker by puuid before caching", async () => {
@@ -95,5 +112,39 @@ describe("riot-api-service account summonerId wiring", () => {
 
     expect(account.summonerId).toBe("cached-summoner-id");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("reuses a cached summonerId by puuid before calling the worker summoner lookup", async () => {
+    mockedSingle.mockResolvedValueOnce({ data: null });
+    mockedMaybeSingle.mockResolvedValueOnce({
+      data: {
+        summoner_id: "cached-by-puuid-summoner-id",
+      },
+      error: null,
+    });
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          puuid: "puuid-1",
+          gameName: "Bumsdito",
+          tagLine: "3005",
+        }),
+      });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getAccountByRiotId } = await import("./riot-api-service");
+    const account = await getAccountByRiotId("Bumsdito", "3005");
+
+    expect(account.summonerId).toBe("cached-by-puuid-summoner-id");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mockedUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        puuid: "puuid-1",
+        summoner_id: "cached-by-puuid-summoner-id",
+      })
+    );
   });
 });

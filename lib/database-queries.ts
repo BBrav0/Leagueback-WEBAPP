@@ -52,7 +52,7 @@ export interface PlayerMatchStaleCheckRow {
   match_id: string;
   game_creation: number;
   game_duration: number;
-  updated_at?: string | null;
+  created_at?: string | null;
 }
 
 function rowToMatchSummary(row: PlayerMatchRow): MatchSummary {
@@ -190,7 +190,7 @@ export async function getPlayerMatchRowsForStaleCheck(
 
   const { data, error } = await getSupabaseServer()
     .from("player_matches")
-    .select("match_id, game_creation, game_duration, updated_at")
+    .select("match_id, game_creation, game_duration, created_at")
     .eq("puuid", puuid)
     .in("match_id", matchIds);
 
