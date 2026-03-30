@@ -188,9 +188,9 @@ const ImpactPieChart = memo(function ImpactPieChart({ counts }: { counts: Impact
   if (total === 0) {
     return (
       <div className="flex h-[300px] w-full flex-col items-center justify-center gap-2 text-center">
-        <p className="text-slate-400 text-sm">No categorized matches yet</p>
+        <p className="text-slate-400 text-sm">No categorized matches are loaded yet.</p>
         <p className="text-slate-500 text-xs max-w-xs">
-          Stats appear after matches are analyzed and saved, or from your loaded match list.
+          This chart updates after Leagueback loads analyzed matches from stored history or the Riot sync flow.
         </p>
       </div>
     );
@@ -515,13 +515,13 @@ const MatchCard = memo(function MatchCard({
 
       const response = await BackendBridge.getMatchDetails(match.id, currentPuuid);
       if (!response) {
-        throw new Error("Could not load match details for this card.");
+        throw new Error("Leagueback could not load details for this match.");
       }
 
       setDetailsData(response.details);
     } catch (error) {
       setDetailsError(
-        error instanceof Error ? error.message : "Could not load match details for this card."
+        error instanceof Error ? error.message : "Leagueback could not load details for this match."
       );
     } finally {
       setDetailsLoading(false);
@@ -755,7 +755,7 @@ export default function Component() {
     const normalizedTagLine = rawTagLine.trim();
 
     if (!normalizedGameName || !normalizedTagLine) {
-      setError("Please enter both game name and tag line");
+      setError("Enter both parts of the Riot ID before searching.");
       return;
     }
 
@@ -967,11 +967,11 @@ export default function Component() {
       if (storedResult.totalCount === 0 && !apiHasMore) {
         const apiCheck = await BackendBridge.checkApiHasMore(account.puuid, 0);
         if (!apiCheck) {
-          setError("No matches found for this player");
+          setError("No ranked match history is available for this Riot ID yet.");
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch match data");
+      setError(err instanceof Error ? err.message : "Leagueback could not load this player's match history.");
       setMatchesData([]);
       setCurrentPuuid(null);
     } finally {
@@ -1252,8 +1252,8 @@ export default function Component() {
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
         <div className="space-y-2">
-          <h1 className="text-4xl font-bold text-white">League of Legends Match History</h1>
-          <p className="text-blue-200">Performance Timeline & Impact Analysis</p>
+          <h1 className="text-4xl font-bold text-white">Leagueback web match history</h1>
+          <p className="text-blue-200">Search a Riot ID to review ranked history, match details, and impact trends in your browser.</p>
         </div>
 
         {/* Search Form */}
@@ -1261,9 +1261,9 @@ export default function Component() {
           <CardHeader>
             <div className="flex justify-between items-start">
               <div>
-                <CardTitle className="text-white">Enter Summoner Information</CardTitle>
+                <CardTitle className="text-white">Search a Riot ID</CardTitle>
                 <CardDescription className="text-slate-300">
-                  Enter your Riot ID to analyze your recent ranked matches
+                  Enter the game name and tag line for the player you want to review.
                 </CardDescription>
               </div>
               {rateLimitStatus && (
@@ -1286,13 +1286,13 @@ export default function Component() {
           <CardContent>
             <div className="flex gap-4 items-end">
               <div className="flex-1">
-                <Label htmlFor="gameName" className="text-white">Riot User</Label>
+                <Label htmlFor="gameName" className="text-white">Game name</Label>
                 <Input
                   id="gameName"
                   value={gameName}
                   onChange={(e) => setGameName(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Riot User"
+                  placeholder="Enter game name"
                   className="bg-slate-700 border-slate-600 text-white placeholder-slate-400"
                 />
               </div>
@@ -1300,7 +1300,7 @@ export default function Component() {
                 <span className="text-white text-xl font-semibold">#</span>
               </div>
               <div className="flex-1">
-                <Label htmlFor="tagLine" className="text-white">Tag Line</Label>
+                <Label htmlFor="tagLine" className="text-white">Tag line</Label>
                 <Input
                   id="tagLine"
                   value={tagLine}
@@ -1315,7 +1315,7 @@ export default function Component() {
                 disabled={loading || !gameName || !tagLine}
                 className="px-8"
               >
-                {loading ? "Loading..." : "Analyze"}
+                {loading ? "Loading player..." : "Search"}
               </Button>
             </div>
           </CardContent>
@@ -1516,7 +1516,7 @@ export default function Component() {
         {hasSearched && fetchingMatchesFromApi && (
           <Alert className="border-blue-600/50 bg-slate-800/50">
             <AlertDescription className="text-slate-200 text-sm">
-              Fetching match data from Riot (this can take a minute)…
+              Leagueback is requesting additional match data from Riot. This can take about a minute.
             </AlertDescription>
           </Alert>
         )}
@@ -1525,8 +1525,8 @@ export default function Component() {
         {loading && (
           <Card className="bg-slate-800/50 border-slate-600/50">
             <CardContent className="p-8 text-center">
-              <div className="text-white text-lg">Analyzing matches...</div>
-              <div className="text-slate-300 text-sm mt-2">This may take a few moments</div>
+              <div className="text-white text-lg">Loading player history…</div>
+              <div className="text-slate-300 text-sm mt-2">Leagueback is loading the account and first match results for this Riot ID.</div>
             </CardContent>
           </Card>
         )}
@@ -1551,7 +1551,7 @@ export default function Component() {
                   <CardContent className="p-8 text-center">
                     <div className="text-slate-200 text-lg">No loaded matches match these filters</div>
                     <div className="mt-2 text-sm text-slate-400">
-                      Adjust your result, impact category, or champion filters, or reset saved filters to return to the full loaded history.
+                      Change the current result, impact category, or champion filters, or reset saved filters to show the full loaded history again.
                     </div>
                   </CardContent>
                 </Card>
@@ -1562,7 +1562,7 @@ export default function Component() {
                 <div ref={scrollSentinelRef} className="flex min-h-16 flex-col items-center justify-center py-4">
                   <div className="text-slate-400 text-sm">
                     {loadingDbMatches
-                      ? "Loading more matches..."
+                      ? "Loading another page of stored matches..."
                       : `Loaded ${loadedDbMatches} of ${totalDbMatches} stored matches`}
                   </div>
                 </div>
@@ -1589,7 +1589,7 @@ export default function Component() {
                   ))}
                   <div className="flex min-h-12 items-center justify-center rounded-md border border-slate-700/60 bg-slate-800/40 px-4">
                     <div className="text-slate-300 text-sm">
-                      Loading next matches, rendering cards before more scrolling…
+                      Leagueback is rendering the next set of match cards before more scrolling is available.
                     </div>
                   </div>
                 </div>
@@ -1610,10 +1610,10 @@ export default function Component() {
                     disabled={loadingMore || !hasMoreMatches}
                     className="px-8"
                   >
-                    {loadingMore ? "Loading more matches..." : "Load More Matches"}
+                    {loadingMore ? "Loading more matches..." : "Load more matches from Riot"}
                   </Button>
                   {loadingMore && (
-                    <div className="text-slate-300 text-sm">Processing matches, please wait...</div>
+                    <div className="text-slate-300 text-sm">Analyzing the newly requested Riot matches before adding them to the dashboard.</div>
                   )}
                 </div>
               )}
@@ -1684,11 +1684,11 @@ export default function Component() {
         {hasSearched && !loading && !fetchingMatchesFromApi && matchesData.length === 0 && !error && (
           <Card className="bg-slate-800/50 border-slate-600/50">
             <CardContent className="p-8 text-center flex flex-col items-center gap-4">
-              <div className="text-slate-300 text-lg">No match data found</div>
+              <div className="text-slate-300 text-lg">No loaded match history is available yet</div>
               <div className="text-slate-400 text-sm">
                 {hasMoreMatches
-                  ? "Fetch matches from Riot using the button below."
-                  : "Try a different summoner name or check your spelling"}
+                  ? "Request matches from Riot to add the first set of loaded history for this player."
+                  : "Check the Riot ID spelling or search for a different player."}
               </div>
               {allDbMatchesLoaded && hasMoreMatches && (
                 <Button
@@ -1696,7 +1696,7 @@ export default function Component() {
                   disabled={loadingMore || !hasMoreMatches}
                   className="px-8"
                 >
-                  {loadingMore ? "Loading more matches..." : "Load More Matches"}
+                  {loadingMore ? "Loading more matches..." : "Load more matches from Riot"}
                 </Button>
               )}
             </CardContent>
