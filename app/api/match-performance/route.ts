@@ -3,6 +3,7 @@ import {
   getMatchDetails,
   getMatchTimeline,
   getCurrentRankEntries,
+  getSummonerIdByPuuid,
 } from "@/lib/riot-api-service";
 import {
   reconstructMatchSummary,
@@ -71,9 +72,10 @@ export async function GET(request: NextRequest) {
       matchTimeline
     );
 
-    const rankSnapshot = selectCurrentRankSnapshot(
-      await getCurrentRankEntries(userParticipant.puuid)
-    );
+    const summonerId = await getSummonerIdByPuuid(userParticipant.puuid);
+    const rankSnapshot = summonerId
+      ? selectCurrentRankSnapshot(await getCurrentRankEntries(summonerId))
+      : null;
 
     if (rankSnapshot) {
       matchSummary.rank = rankSnapshot.rank;

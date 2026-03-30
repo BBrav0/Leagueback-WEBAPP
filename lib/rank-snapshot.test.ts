@@ -36,4 +36,17 @@ describe("selectCurrentRankSnapshot", () => {
       ])
     ).toBeNull();
   });
+
+  it("ignores unsupported queue entries while still preferring a supported fallback", () => {
+    const snapshot = selectCurrentRankSnapshot([
+      { queueType: "RANKED_TFT", tier: "CHALLENGER", rank: "I", leaguePoints: 999 },
+      { queueType: "RANKED_FLEX_SR", tier: "GOLD", rank: "III", leaguePoints: 44 },
+    ]);
+
+    expect(snapshot).toEqual({
+      rank: "Gold III 44 LP",
+      rankQueue: "RANKED_FLEX_SR",
+      rankLabel: "Current rank snapshot (Flex)",
+    });
+  });
 });

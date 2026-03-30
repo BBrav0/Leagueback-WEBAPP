@@ -61,6 +61,10 @@ export async function getAccountByRiotId(
 
   const account: AccountDto = await res.json();
 
+  if (!account.summonerId) {
+    account.summonerId = await getSummonerIdByPuuid(account.puuid);
+  }
+
   // Cache in Supabase — must await on Vercel serverless
   const { error: accountCacheError } = await getSupabaseServer()
     .from("accounts")
@@ -75,6 +79,26 @@ export async function getAccountByRiotId(
   }
 
   return account;
+}
+
+export async function getSummonerIdByPuuid(
+  puuid: string
+): Promise<string | undefined> {
+  const res = await fetch(
+    `${WORKER_URL}/api/summoner/by-puuid/${encodeURIComponent(puuid)}`
+  );
+
+  if (!res.ok) {
+    if (res.status === 404) {
+      return undefined;
+    }
+
+    throw new Error(`Failed to get summoner data. Status: ${res.status}`);
+  }
+
+  const data = (await res.json()) as { id?: string };
+  const summonerId = data.id?.trim();
+  return summonerId || undefined;
 }
 
 export async function getMatchHistory(
