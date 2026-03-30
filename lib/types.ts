@@ -6,6 +6,7 @@ export interface AccountDto {
   tagLine: string;
   summonerId?: string;
   riotId?: string;
+  rankLookupId?: string;
 }
 
 // Alias used by bridge.ts / frontend

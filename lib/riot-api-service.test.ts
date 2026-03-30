@@ -105,6 +105,7 @@ describe("riot-api-service account summonerId wiring", () => {
       tagLine: "3005",
       summonerId: "real-summoner-id",
       riotId: "Bumsdito#3005",
+      rankLookupId: "real-summoner-id",
     });
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
@@ -137,6 +138,7 @@ describe("riot-api-service account summonerId wiring", () => {
     const account = await getAccountByRiotId("Bumsdito", "3005");
 
     expect(account.summonerId).toBe("cached-summoner-id");
+    expect(account.rankLookupId).toBe("cached-summoner-id");
     expect(account.riotId).toBe("Bumsdito#3005");
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -166,6 +168,7 @@ describe("riot-api-service account summonerId wiring", () => {
     const account = await getAccountByRiotId("Bumsdito", "3005");
 
     expect(account.summonerId).toBe("cached-by-puuid-summoner-id");
+    expect(account.rankLookupId).toBe("cached-by-puuid-summoner-id");
     expect(account.riotId).toBe("Bumsdito#3005");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(mockedUpsert).toHaveBeenCalledWith(
@@ -220,6 +223,7 @@ describe("riot-api-service account summonerId wiring", () => {
     const account = await getAccountByRiotId("Bumsdito", "3005");
 
     expect(account.summonerId).toBe("match-cache-summoner-id");
+    expect(account.rankLookupId).toBe("match-cache-summoner-id");
     expect(account.riotId).toBe("Bumsdito#3005");
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(mockedUpsert).toHaveBeenCalledWith(
@@ -231,5 +235,32 @@ describe("riot-api-service account summonerId wiring", () => {
       }),
       expect.anything()
     );
+  });
+
+  it("falls back to puuid as rankLookupId when no summonerId is available", async () => {
+    mockedSingle.mockResolvedValueOnce({ data: null });
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          puuid: "puuid-1",
+          gameName: "Bumsdito",
+          tagLine: "3005",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+      });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getAccountByRiotId } = await import("./riot-api-service");
+    const account = await getAccountByRiotId("Bumsdito", "3005");
+
+    expect(account.summonerId).toBeUndefined();
+    expect(account.rankLookupId).toBe("puuid-1");
+    expect(account.riotId).toBe("Bumsdito#3005");
   });
 });

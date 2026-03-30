@@ -99,6 +99,7 @@ export async function getAccountByRiotId(
       tagLine: cached.tag_line,
       summonerId: cached.summoner_id ?? undefined,
       riotId: `${cached.game_name}#${cached.tag_line}`,
+      rankLookupId: cached.summoner_id ?? cached.puuid,
     };
   }
 
@@ -144,6 +145,8 @@ export async function getAccountByRiotId(
       await cacheSummonerIdForPuuid(account.puuid, account.summonerId, account);
     }
   }
+
+  account.rankLookupId = account.summonerId ?? account.puuid;
 
   // Cache in Supabase — must await on Vercel serverless
   const { error: accountCacheError } = await getSupabaseServer()
