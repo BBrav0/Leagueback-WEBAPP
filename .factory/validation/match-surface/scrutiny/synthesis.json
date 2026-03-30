@@ -1,0 +1,72 @@
+{
+  "milestone": "match-surface",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "pnpm test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "pnpm run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "pnpm run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 4,
+    "passed": 2,
+    "failed": 2,
+    "failedFeatures": [
+      "match-details-data-pipeline",
+      "match-details-ui-and-flow"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "match-details-data-pipeline",
+      "severity": "blocking",
+      "description": "lib/match-details.ts returns an unavailable payload with a cache-miss label even when a raw match record exists but is incomplete, so the details fallback reason is not truthful for partial-data cases."
+    },
+    {
+      "featureId": "match-details-ui-and-flow",
+      "severity": "blocking",
+      "description": "vitest.config.ts only includes lib/**/*.test.ts, so the new app/api/match-details/route.test.ts file is never executed by pnpm test and the feature's claimed route-level automated coverage is ineffective."
+    }
+  ],
+  "appliedUpdates": [
+    {
+      "target": "library",
+      "description": "Documented match-details raw source precedence and the need for truthful missing-vs-partial fallback semantics in .factory/library/architecture.md.",
+      "sourceFeature": "match-details-data-pipeline"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add explicit Windows-safe guidance for setup steps that currently mention .factory/init.sh so workers do not attempt to run the POSIX shell script directly on this mission host.",
+      "evidence": "The search-saved-lookups-and-route-synchronization review noted the worker had to work around a failed .factory/init.sh attempt on Windows, and .factory/library/environment.md already records that the mission host is Windows.",
+      "isSystemic": true
+    },
+    {
+      "target": ".factory/skills/web-feature-worker/SKILL.md",
+      "suggestion": "Warn workers that the committed Vitest config currently only includes lib/**/*.test.ts and they must either keep tests within that scope or update the committed test configuration when adding route/component tests.",
+      "evidence": "The match-details-ui-and-flow review found that app/api/match-details/route.test.ts is outside vitest.config.ts include globs, so pnpm test did not run the new test despite the worker handoff claiming route coverage.",
+      "isSystemic": true
+    },
+    {
+      "target": ".factory/skills/web-feature-worker/SKILL.md",
+      "suggestion": "Reinforce that web-feature workers must run the committed lint/static-check gate in addition to typecheck/tests/build before handoff unless the orchestrator explicitly waives it.",
+      "evidence": "The match-card-metadata-and-truthful-rank review found the worker handoff omitted pnpm run lint/static-check even though .factory/services.yaml and the skill both describe lint/static-check as required validation gates.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}
