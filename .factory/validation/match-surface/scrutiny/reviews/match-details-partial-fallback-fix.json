@@ -1,0 +1,15 @@
+{
+  "featureId": "match-details-partial-fallback-fix",
+  "reviewedAt": "2026-03-30T07:00:00Z",
+  "commitId": "64ffd23",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix resolves the prior scrutiny failure. The mapper now distinguishes true raw-data misses from incomplete raw payloads via explicit `status` and `fallbackReason` fields, preserves the unavailable path for real cache misses, and adds targeted tests for both participant-gap and missing-team partial cases.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "C:\\Users\\bendc\\Documents\\GitHub\\Leagueback-WEBAPP\\.factory\\validation\\match-surface\\scrutiny\\reviews\\match-details-data-pipeline.json",
+  "summary": "Pass. I reviewed the prior failure, the fix feature transcript skeleton and handoff, the original pipeline diff (2b17b9c), the fix diff (64ffd23), and the current match-details mapper/tests. The new partial fallback semantics adequately address the missing-vs-partial raw detail labeling bug without regressing the true missing-data fallback path."
+}
