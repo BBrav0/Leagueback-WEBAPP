@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { MatchDto, MatchTimelineDto } from "./types";
 import {
+  buildMatchMetadata,
   determineImpactCategory,
   reconstructMatchSummary,
 } from "./match-reconstruction";
@@ -104,9 +105,19 @@ describe("reconstructMatchSummary", () => {
     expect(summary.id).toBe("m-42");
     expect(summary.summonerName).toBe("PlayerOne");
     expect(summary.champion).toBe("Ahri");
+    expect(summary.rank).toBeNull();
+    expect(summary.rankLabel).toBe("Rank unavailable for this match");
     expect(summary.kda).toBe("10/2/7");
     expect(summary.gameResult).toBe("Victory");
     expect(summary.gameTime).toBe("02:05");
+    expect(summary.playedAt).toBe("Played time unavailable");
+    expect(summary.durationSeconds).toBe(125);
+    expect(summary.role).toBe("MIDDLE");
+    expect(summary.roleLabel).toBe("Mid");
+    expect(summary.damageToChampions).toBe(10000);
+    expect(summary.damageToChampionsLabel).toBe("10,000 damage to champions");
+    expect(summary.impactCategory).toBe("impactWins");
+    expect(summary.impactCategoryLabel).toBe("Impact win");
     expect(summary.cs).toBe(92);
     expect(summary.teamImpact).toBe(4.2);
     expect(summary.yourImpact).toBe(7.3);
@@ -114,5 +125,26 @@ describe("reconstructMatchSummary", () => {
       { minute: 5, yourImpact: 1.1, teamImpact: 0.9 },
       { minute: 10, yourImpact: 2.2, teamImpact: 1.3 },
     ]);
+  });
+
+  it("builds truthful fallback metadata when fields are unavailable", () => {
+    expect(
+      buildMatchMetadata({
+        gameDuration: 600,
+        teamPosition: "",
+        impactCategory: "guaranteedLosses",
+      })
+    ).toEqual({
+      rank: null,
+      rankLabel: "Rank unavailable for this match",
+      playedAt: "Played time unavailable",
+      durationSeconds: 600,
+      role: null,
+      roleLabel: "Role unavailable",
+      damageToChampions: null,
+      damageToChampionsLabel: "Damage unavailable",
+      impactCategory: "guaranteedLosses",
+      impactCategoryLabel: "Guaranteed loss",
+    });
   });
 });

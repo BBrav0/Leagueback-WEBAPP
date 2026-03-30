@@ -58,6 +58,20 @@ const pieConfig = {
   },
 } as const
 
+const impactBadgeStyles: Record<ImpactCategory, string> = {
+  impactWins: "bg-emerald-500/15 text-emerald-200 border-emerald-400/40",
+  impactLosses: "bg-rose-500/15 text-rose-200 border-rose-400/40",
+  guaranteedWins: "bg-sky-500/15 text-sky-200 border-sky-400/40",
+  guaranteedLosses: "bg-amber-500/15 text-amber-100 border-amber-400/40",
+};
+
+function formatDurationLabel(durationSeconds: number): string {
+  const safeDuration = Math.max(durationSeconds, 0);
+  const minutes = Math.floor(safeDuration / 60);
+  const seconds = safeDuration % 60;
+  return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+}
+
 function safeDecodeURIComponent(value: string): string {
   try {
     return decodeURIComponent(value);
@@ -270,9 +284,9 @@ const MatchCard = memo(function MatchCard({ match }: { match: MatchSummary }) {
     <div ref={cardRef}>
       <Card className="bg-slate-800/50 border-slate-600/50 w-full">
         <CardHeader>
-          <div className="flex justify-between items-start">
-            <div>
-              <CardTitle className="text-white flex items-center gap-3">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-3">
+              <CardTitle className="text-white flex flex-wrap items-center gap-3">
                 {match.champion}
                 <Badge
                   variant={match.gameResult === "Victory" ? "default" : "destructive"}
@@ -280,11 +294,31 @@ const MatchCard = memo(function MatchCard({ match }: { match: MatchSummary }) {
                 >
                   {match.gameResult}
                 </Badge>
+                <Badge
+                  variant="outline"
+                  className={cn("border", impactBadgeStyles[match.impactCategory])}
+                >
+                  {match.impactCategoryLabel}
+                </Badge>
               </CardTitle>
-              <CardDescription className="text-slate-300 mt-1">
+              <CardDescription className="text-slate-300">
                 {match.summonerName} ⏱️ {match.gameTime} ⚔️ {match.kda}  <br />
                 🧙 {match.cs} 🔎 {match.visionScore}
               </CardDescription>
+              <div className="flex flex-wrap gap-2 text-xs text-slate-200">
+                <Badge variant="secondary" className="bg-slate-700/70 text-slate-100 hover:bg-slate-700/70">
+                  Played {match.playedAt}
+                </Badge>
+                <Badge variant="secondary" className="bg-slate-700/70 text-slate-100 hover:bg-slate-700/70">
+                  Duration {formatDurationLabel(match.durationSeconds)}
+                </Badge>
+                <Badge variant="secondary" className="bg-slate-700/70 text-slate-100 hover:bg-slate-700/70">
+                  {match.roleLabel}
+                </Badge>
+                <Badge variant="secondary" className="bg-slate-700/70 text-slate-100 hover:bg-slate-700/70">
+                  {match.damageToChampionsLabel}
+                </Badge>
+              </div>
             </div>
             <div className="text-right space-y-1">
               <div className="text-slate-300 text-sm">
@@ -292,7 +326,7 @@ const MatchCard = memo(function MatchCard({ match }: { match: MatchSummary }) {
                 Average Teammate Score: { match.teamImpact.toFixed(2) }
               </div>
               <div className="text-slate-400 text-xs">
-                {match.rank}
+                {match.rankLabel}
               </div>
             </div>
           </div>

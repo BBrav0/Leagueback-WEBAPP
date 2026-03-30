@@ -1,5 +1,6 @@
 import { getSupabaseServer } from "./supabase-server";
 import type { MatchDto, MatchTimelineDto, ImpactCategory, MatchSummary } from "./types";
+import { buildMatchMetadata } from "./match-reconstruction";
 
 export interface PlayerMatchRow {
   match_id: string;
@@ -20,11 +21,17 @@ export interface PlayerMatchRow {
 }
 
 function rowToMatchSummary(row: PlayerMatchRow): MatchSummary {
+  const metadata = buildMatchMetadata({
+    gameCreation: row.game_creation,
+    gameDuration: row.game_duration,
+    impactCategory: row.impact_category,
+  });
+
   return {
     id: row.match_id,
     summonerName: row.summoner_name,
     champion: row.champion,
-    rank: "Feature coming soon \u{1F440}",
+    ...metadata,
     kda: row.kda,
     cs: row.cs,
     visionScore: row.vision_score,
