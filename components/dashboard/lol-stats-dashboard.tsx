@@ -24,6 +24,12 @@ import {
   type ImpactCounts,
 } from "@/lib/impact-stats"
 import { loadSavedLookups, saveSuccessfulLookup, type SavedLookup } from "@/lib/saved-lookups"
+import {
+  isValidationFixtureIdentity,
+  VALIDATION_FIXTURE_ACCOUNT,
+  VALIDATION_FIXTURE_DETAILS,
+  VALIDATION_FIXTURE_IMPACT_COUNTS,
+} from "@/lib/validation-fixture"
 import { cn } from "@/lib/utils"
 import { rateLimiter } from "@/lib/rate-limiter"
 import { Separator } from "@/components/ui/separator"
@@ -413,9 +419,11 @@ function MatchDetailsContent({ details }: { details: MatchDetailsData }) {
 const MatchCard = memo(function MatchCard({
   match,
   currentPuuid,
+  fixtureDetailsByMatchId,
 }: {
   match: MatchSummary;
   currentPuuid: string | null;
+  fixtureDetailsByMatchId?: Record<string, MatchDetailsData>;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [showChart, setShowChart] = useState(false);
@@ -458,6 +466,11 @@ const MatchCard = memo(function MatchCard({
     setDetailsError(null);
 
     try {
+      if (fixtureDetailsByMatchId?.[match.id]) {
+        setDetailsData(fixtureDetailsByMatchId[match.id]);
+        return;
+      }
+
       const response = await BackendBridge.getMatchDetails(match.id, currentPuuid);
       if (!response) {
         throw new Error("Could not load match details for this card.");
@@ -471,7 +484,7 @@ const MatchCard = memo(function MatchCard({
     } finally {
       setDetailsLoading(false);
     }
-  }, [currentPuuid, detailsData, detailsLoading, isDetailsOpen, match.id]);
+  }, [currentPuuid, detailsData, detailsLoading, fixtureDetailsByMatchId, isDetailsOpen, match.id]);
 
   return (
     <div ref={cardRef}>
@@ -593,6 +606,7 @@ export default function Component() {
   const [allDbMatchesLoaded, setAllDbMatchesLoaded] = useState(false);
   const [loadingDbMatches, setLoadingDbMatches] = useState(false);
   const [fetchingMatchesFromApi, setFetchingMatchesFromApi] = useState(false);
+  const [isValidationFixtureActive, setIsValidationFixtureActive] = useState(false);
   const scrollSentinelRef = useRef<HTMLDivElement>(null);
   const autoSearchKeyRef = useRef<string | null>(null);
   const matchesDataRef = useRef<MatchSummary[]>([]);
@@ -665,6 +679,26 @@ export default function Component() {
       return;
     }
 
+    if (isValidationFixtureIdentity(normalizedGameName, normalizedTagLine)) {
+      if (options?.syncUrl !== false) {
+        const nextUrl = `/player/${encodeURIComponent(VALIDATION_FIXTURE_ACCOUNT.gameName)}#${encodeURIComponent(VALIDATION_FIXTURE_ACCOUNT.tagLine)}`;
+        if (typeof window !== "undefined") {
+          const currentUrl = `${window.location.pathname}${window.location.hash}`;
+          if (currentUrl !== nextUrl) {
+            autoSearchKeyRef.current = `${VALIDATION_FIXTURE_ACCOUNT.gameName}#${VALIDATION_FIXTURE_ACCOUNT.tagLine}`;
+            router.push(nextUrl);
+          }
+        }
+      }
+
+      setGameName(VALIDATION_FIXTURE_ACCOUNT.gameName);
+      setTagLine(VALIDATION_FIXTURE_ACCOUNT.tagLine);
+      setLoading(false);
+      setLoadingMore(false);
+      setLoadingDbMatches(false);
+      setFetchingMatchesFromApi(false);
+    }
+
     const routeKey = `${normalizedGameName}#${normalizedTagLine}`;
     if (options?.syncUrl !== false) {
       autoSearchKeyRef.current = routeKey;
@@ -691,6 +725,7 @@ export default function Component() {
     setLoading(true);
     setError(null);
     setHasSearched(true);
+    setIsValidationFixtureActive(false);
     setFetchingMatchesFromApi(false);
     setMatchesData([]);
     setCurrentPuuid(null);
@@ -727,6 +762,7 @@ export default function Component() {
         })
       );
       setCurrentPuuid(account.puuid);
+      setIsValidationFixtureActive(account.puuid === VALIDATION_FIXTURE_ACCOUNT.puuid);
 
       // Fetch first page of stored matches from DB
       const storedResult = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
@@ -749,6 +785,11 @@ export default function Component() {
       }
 
       let matchesForStats = storedResult.matches;
+
+      if (account.puuid === VALIDATION_FIXTURE_ACCOUNT.puuid) {
+        setImpactCounts(VALIDATION_FIXTURE_IMPACT_COUNTS.pie);
+        setLifetimeCounts(VALIDATION_FIXTURE_IMPACT_COUNTS.lifetime);
+      }
 
       // Dismiss full-screen "Analyzing" as soon as account + first DB page are known.
       // Riot backfill (if any) is indicated by `fetchingMatchesFromApi` so we avoid
@@ -834,7 +875,9 @@ export default function Component() {
         }
       }
 
-      await syncImpactStats(account.puuid, matchesForStats);
+      if (account.puuid !== VALIDATION_FIXTURE_ACCOUNT.puuid) {
+        await syncImpactStats(account.puuid, matchesForStats);
+      }
 
       setRateLimitStatus({
         remaining: rateLimiter.getStatus().remaining,
@@ -1222,7 +1265,12 @@ export default function Component() {
             {/* Match cards */}
             <div className="md:w-3/5 space-y-6">
               {matchesData.map((match) => (
-                <MatchCard key={match.id} match={match} currentPuuid={currentPuuid} />
+                <MatchCard
+                  key={match.id}
+                  match={match}
+                  currentPuuid={currentPuuid}
+                  fixtureDetailsByMatchId={isValidationFixtureActive ? VALIDATION_FIXTURE_DETAILS : undefined}
+                />
               ))}
               
               {/* Infinite scroll sentinel for DB matches */}

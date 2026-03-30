@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMatchDetailsData } from "@/lib/database-queries";
+import {
+  VALIDATION_FIXTURE_ACCOUNT,
+  VALIDATION_FIXTURE_DETAILS,
+} from "@/lib/validation-fixture";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -14,6 +18,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    if (userPuuid === VALIDATION_FIXTURE_ACCOUNT.puuid && VALIDATION_FIXTURE_DETAILS[matchId]) {
+      return NextResponse.json({ details: VALIDATION_FIXTURE_DETAILS[matchId] });
+    }
+
     const details = await getMatchDetailsData(matchId, userPuuid);
     return NextResponse.json({ details });
   } catch (error) {

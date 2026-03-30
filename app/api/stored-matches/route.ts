@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPlayerMatchesPaginated } from "@/lib/database-queries";
+import {
+  getValidationFixtureStoredMatches,
+  VALIDATION_FIXTURE_ACCOUNT,
+} from "@/lib/validation-fixture";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -20,6 +24,10 @@ export async function GET(request: NextRequest) {
   const offset = Number.isNaN(parsedOffset) ? 0 : Math.max(parsedOffset, 0);
 
   try {
+    if (puuid === VALIDATION_FIXTURE_ACCOUNT.puuid) {
+      return NextResponse.json(getValidationFixtureStoredMatches(limit, offset));
+    }
+
     const { matches, totalCount, hasMore } = await getPlayerMatchesPaginated(
       puuid,
       limit,

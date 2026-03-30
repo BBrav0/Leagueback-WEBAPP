@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { VALIDATION_FIXTURE_ACCOUNT } from "@/lib/validation-fixture";
 
 const getMatchDetailsData = vi.fn();
 
@@ -52,5 +53,23 @@ describe("GET /api/match-details", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Missing matchId or userPuuid",
     });
+  });
+
+  it("returns fixture details through the runtime route without hitting the database helper", async () => {
+    const { GET } = await import("./route");
+    const response = await GET(
+      new Request(
+        `http://localhost/api/match-details?matchId=VALIDATION_READY_001&userPuuid=${VALIDATION_FIXTURE_ACCOUNT.puuid}`
+      ) as never
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      details: {
+        matchId: "VALIDATION_READY_001",
+        status: "ready",
+      },
+    });
+    expect(getMatchDetailsData).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAccountByRiotId } from "@/lib/riot-api-service";
+import {
+  isValidationFixtureIdentity,
+  VALIDATION_FIXTURE_ACCOUNT,
+} from "@/lib/validation-fixture";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -16,6 +20,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    if (isValidationFixtureIdentity(gameName, tagLine)) {
+      return NextResponse.json(VALIDATION_FIXTURE_ACCOUNT);
+    }
+
     const account = await getAccountByRiotId(gameName, tagLine);
     return NextResponse.json(account);
   } catch (error) {
