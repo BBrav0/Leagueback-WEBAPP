@@ -69,6 +69,7 @@ Validation surface, setup notes, and concurrency guidance for this mission.
 - Do not mutate application data or local persisted browser state unless an assertion explicitly requires it.
 - Treat port `3005` as the only supported validation target for this milestone.
 - If port `3005` is already occupied, either intentionally reuse the running app after confirming it serves the current repo or free the listener with the documented `cmd`/`netstat` stop helper from `.factory/services.yaml` before starting a new session.
+- If recent runtime behavior contradicts direct API checks or freshly landed fixture logic, restart the local app from the manifest before marking an assertion blocked so validators do not rely on stale dev-server state.
 
 ## Flow Validator Guidance: terminal
 

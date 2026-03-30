@@ -1,29 +1,21 @@
 {
   "milestone": "history-ux",
-  "round": 2,
+  "round": 3,
   "status": "fail",
   "assertionsSummary": {
-    "total": 6,
-    "passed": 4,
-    "failed": 1,
+    "total": 2,
+    "passed": 1,
+    "failed": 0,
     "blocked": 1
   },
   "passedAssertions": [
-    "VAL-HISTORY-001",
-    "VAL-HISTORY-002",
-    "VAL-HISTORY-003",
-    "VAL-HISTORY-004"
+    "VAL-CROSS-002"
   ],
-  "failedAssertions": [
-    {
-      "id": "VAL-CROSS-002",
-      "reason": "Validated in browser automation and source inspection. The explicit deep-linked route correctly remained the source of truth for player identity, but persisted saved lookups/history preferences did not survive a revisit when preseeded localStorage was reloaded on the deep link: the app replaced the seeded values with default history preferences and only the active Validation Fixture lookup. This violates the coexistence requirement for preserved recent/history preferences."
-    }
-  ],
+  "failedAssertions": [],
   "blockedAssertions": [
     {
       "id": "VAL-CROSS-003",
-      "blockedBy": "The assigned deterministic fixture/runtime only exposes two stored matches with hasMore=false and no reachable older-history append path, so the mixed stored-plus-appended history flow could not be achieved through the real surface on this host. I used the approved fallback path to verify deterministic pagination/export logic evidence instead, but could not execute the full mixed append UI flow end-to-end."
+      "blockedBy": "The current local runtime never exposed the required older-history append-ready UI or Load More Matches control after stored-history exhaustion, so the real mixed stored-plus-appended validation flow could not be executed end to end on this host."
     }
   ],
   "appliedUpdates": [],

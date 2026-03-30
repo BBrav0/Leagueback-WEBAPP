@@ -1,0 +1,15 @@
+{
+  "featureId": "history-route-revisit-storage-ordering-fix",
+  "reviewedAt": "2026-03-30T08:59:10Z",
+  "commitId": "c04c14b9b150309394e1d7d5079218e384c84b55",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix is narrowly scoped and matches the feature contract: the dashboard now defers its initial history-preferences write until hydration has completed or real stored state already exists, which prevents default route-state from clobbering persisted revisit preferences while preserving route-driven player loading. Supporting regression tests cover both halves of the reported regression by proving preseeded history preferences survive a deep-link revisit and that a routed successful lookup prepends the active player without wiping prior saved lookups.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "C:\\Users\\bendc\\Documents\\GitHub\\Leagueback-WEBAPP\\.factory\\validation\\history-ux\\scrutiny\\reviews\\history-route-persistence-coexistence-fix.json",
+  "summary": "Reviewed the rerun handoff, transcript skeleton, prior review context, user-testing rerun evidence, and commit c04c14b. The implementation satisfies the deep-link revisit storage-ordering requirements and I found no blocking or non-blocking issues in scope."
+}
