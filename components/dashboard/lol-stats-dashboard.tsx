@@ -395,6 +395,13 @@ function MatchDetailsContent({ details }: { details: MatchDetailsData }) {
     return <MatchDetailsFallback details={details} />;
   }
 
+  const sourceLabel =
+    details.source === "match_cache"
+      ? "Cached match data"
+      : details.source === "legacy_cache"
+        ? "Legacy cached match data"
+        : null;
+
   const participantsByTeam = details.teams.map((team) => ({
     team,
     participants: details.participants.filter((participant) => participant.teamId === team.teamId),
@@ -407,9 +414,11 @@ function MatchDetailsContent({ details }: { details: MatchDetailsData }) {
           <div className="text-sm font-medium text-white">Match details</div>
           <div className="text-xs text-slate-400">{details.statusLabel}</div>
         </div>
-        <Badge variant="outline" className="border-slate-600 text-slate-200">
-          Source: {details.source.replace("_", " ")}
-        </Badge>
+        {sourceLabel ? (
+          <Badge variant="outline" className="border-slate-600 text-slate-200">
+            {sourceLabel}
+          </Badge>
+        ) : null}
       </div>
       <Separator className="bg-slate-700/60" />
       <div className="grid gap-4 xl:grid-cols-2">
@@ -1071,7 +1080,11 @@ export default function Component() {
         resetAt: rateLimiter.getStatus().resetAt,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load more matches");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Leagueback could not load more older matches right now. Please try again in a moment."
+      );
     } finally {
       setLoadingMore(false);
     }
