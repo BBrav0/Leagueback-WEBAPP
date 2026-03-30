@@ -1,0 +1,39 @@
+{
+  "featureId": "leagueback-player-sync-metadata",
+  "reviewedAt": "2026-03-30T18:46:24Z",
+  "commitId": "c8d23285366a7fd32191dfdfd708f1800c17149b",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The migration itself adds the intended durable Supabase freshness table safely, but the same feature commit also wires metadata writes and stale-row detection logic that do not yet satisfy the feature intent for accurate per-player Riot/DB refresh tracking.",
+    "issues": [
+      {
+        "file": "app/api/match-performance/route.ts",
+        "line": 112,
+        "severity": "blocking",
+        "description": "New player_sync_metadata rows never record the actual latest Riot head match. On first write, latest_riot_match_id/latest_riot_match_created_at are defaulted to the currently analyzed match, which is often just a missing or stale row being backfilled rather than the Riot window head. That makes the durable freshness metadata inaccurate and prevents the schema from truthfully tracking per-player refresh state required by this feature."
+      },
+      {
+        "file": "app/api/player-matches/stale-ids/route.ts",
+        "line": 95,
+        "severity": "blocking",
+        "description": "Stale detection treats derivation_version as a single player-wide flag. If one stale row is refreshed and match-performance updates player_sync_metadata.derivation_version, this route stops flagging the player's other older rows even though they were never recomputed. The feature description explicitly calls for schema support needed for stale derived-row detection, and the current implementation cannot reliably detect stale rows on a per-match basis."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker used the web-feature-worker skill for a schema-only Supabase migration feature. The skill procedure is heavily UI/browser oriented and does not mention Supabase migration/advisor workflows, even though this milestone requires live database schema work.",
+      "evidence": "features.json assigns skillName web-feature-worker to leagueback-player-sync-metadata; transcript skeleton shows the worker following that skill while primarily using supabase migration tools."
+    },
+    {
+      "area": "knowledge",
+      "observation": "The mission library documents that durable sync state is needed, but it does not capture the important design constraint that stale derived detection must be match-specific rather than only player-wide. This gap likely contributed to the player-level derivation_version design flaw in the implementation.",
+      "evidence": "architecture.md says freshness follow-up needs durable sync state so missing recent matches and stale derived rows can be corrected, but no library note records a per-match freshness/versioning requirement; the implemented route only checks player_sync_metadata.derivation_version for all rows."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the handoff, transcript skeleton, migration, and commit c8d2328. The migration safely creates player_sync_metadata, but the feature fails review because the accompanying code records inaccurate latest-Riot metadata and uses only a player-level derivation version, which cannot truthfully support stale derived-row detection across multiple existing matches."
+}

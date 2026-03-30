@@ -1,0 +1,92 @@
+{
+  "milestone": "data-freshness-followup",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "pnpm test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "pnpm run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "pnpm run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 3,
+    "passed": 0,
+    "failed": 3,
+    "failedFeatures": [
+      "leagueback-player-sync-metadata",
+      "returning-player-recent-reconciliation",
+      "returning-player-stale-derived-refresh"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "leagueback-player-sync-metadata",
+      "severity": "blocking",
+      "description": "player_sync_metadata writes in app/api/match-performance/route.ts record latest_riot_match_id/latest_riot_match_created_at from whichever match is currently analyzed, so backfilled stale or missing rows can incorrectly become the durable Riot-head metadata."
+    },
+    {
+      "featureId": "leagueback-player-sync-metadata",
+      "severity": "blocking",
+      "description": "app/api/player-matches/stale-ids/route.ts uses a single player-level derivation_version, so refreshing one stale row can prevent other stale rows for that player from being detected even if they were never recomputed."
+    },
+    {
+      "featureId": "returning-player-recent-reconciliation",
+      "severity": "blocking",
+      "description": "components/dashboard/lol-stats-dashboard.tsx only reloads stored matches when analyzedCount > 0, so stale-row-only refreshes are not surfaced in the DB-first view after reconciliation."
+    },
+    {
+      "featureId": "returning-player-recent-reconciliation",
+      "severity": "blocking",
+      "description": "components/dashboard/lol-stats-dashboard.tsx hardcodes the recent reconciliation window at the call site instead of wiring a tracked bounded recent-window value through freshness metadata."
+    },
+    {
+      "featureId": "returning-player-recent-reconciliation",
+      "severity": "blocking",
+      "description": "The reviewed evidence proves recent Riot-vs-stored comparison but does not prove missing recent matches were backfilled into LeagueBack and then surfaced through the DB-first route without duplicates."
+    },
+    {
+      "featureId": "returning-player-stale-derived-refresh",
+      "severity": "blocking",
+      "description": "components/dashboard/lol-stats-dashboard.tsx only reloads stored history when analyzedCount > 0, so stale-only reanalysis leaves the current visible history stale and fails to surface refreshed derived rows."
+    },
+    {
+      "featureId": "returning-player-stale-derived-refresh",
+      "severity": "blocking",
+      "description": "app/api/match-performance/route.ts overwrites latest_db_match_id/latest_db_match_created_at on every reanalysis, allowing older stale rows processed later to move durable latest-db metadata backward."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Add Supabase migration/advisor workflow guidance, or use a dedicated database-focused skill, for features that primarily modify live schema rather than UI behavior.",
+      "evidence": "leagueback-player-sync-metadata was assigned web-feature-worker even though the implementation centered on repo migrations and live Supabase schema work, and the reviewer flagged the current skill as UI/browser-oriented.",
+      "isSystemic": false
+    },
+    {
+      "target": "library",
+      "suggestion": "Document that returning-player stale detection must be match-specific and that stale-only refreshes must reload visible stored history while keeping latest-db metadata monotonic during stale reanalysis.",
+      "evidence": "Both leagueback-player-sync-metadata and returning-player-stale-derived-refresh failed because player-level metadata and stale-only refresh semantics were underspecified in shared architecture notes.",
+      "isSystemic": true
+    },
+    {
+      "target": "library",
+      "suggestion": "Record a stable returning-player validation account and the expected live evidence pattern for data-freshness follow-up work.",
+      "evidence": "returning-player-recent-reconciliation review noted the worker had to rediscover a suitable returning-player account and hand-build comparison evidence before validation.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}
