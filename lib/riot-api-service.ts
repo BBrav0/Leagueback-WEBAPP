@@ -80,11 +80,37 @@ export async function getMatchHistory(
   start: number = 0
 ): Promise<string[]> {
   // Always fetch fresh — new matches may have appeared
-  const res = await fetch(
-    `${WORKER_URL}/api/matches/${encodeURIComponent(puuid)}?type=ranked&count=${count}&start=${start}`
-  );
+  const requestUrl = `${WORKER_URL}/api/matches/${encodeURIComponent(puuid)}?type=ranked&count=${count}&start=${start}`;
+  const res = await fetch(requestUrl);
   if (!res.ok) {
-    throw new Error(`Failed to get match history. Status: ${res.status}`);
+    const bodyText = await res.text();
+    let detail = "";
+    if (bodyText) {
+      try {
+        const parsed = JSON.parse(bodyText) as {
+          error?: string;
+          status?: { message?: string; status_code?: number };
+        };
+        detail = parsed.error ?? parsed.status?.message ?? bodyText;
+      } catch {
+        detail = bodyText;
+      }
+    }
+
+    console.error("Failed to get match history from Riot proxy", {
+      status: res.status,
+      requestUrl,
+      puuid,
+      start,
+      count,
+      detail,
+    });
+
+    throw new Error(
+      detail
+        ? `Failed to get match history. Status: ${res.status} — ${detail}`
+        : `Failed to get match history. Status: ${res.status}`
+    );
   }
   return res.json();
 }

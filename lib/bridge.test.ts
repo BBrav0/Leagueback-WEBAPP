@@ -140,18 +140,47 @@ describe("BackendBridge", () => {
     expect(analyze).not.toHaveBeenCalled();
   });
 
+  it("syncNewHeadMatchesFromRiot reconciles missing recent matches even when the latest Riot head already exists in DB", async () => {
+    vi.spyOn(BackendBridge, "getMatchHistory")
+      .mockResolvedValueOnce(["head", "missing-recent", "anchor"])
+      .mockResolvedValueOnce(["older-anchor"]);
+    vi.spyOn(BackendBridge, "fetchExistingMatchIdsForPlayer")
+      .mockResolvedValueOnce(new Set(["head", "anchor"]))
+      .mockResolvedValueOnce(new Set(["older-anchor"]));
+    const analyze = vi
+      .spyOn(BackendBridge, "analyzeMatchPerformance")
+      .mockResolvedValue({ success: true, matchSummary: sampleMatch });
+
+    const result = await BackendBridge.syncNewHeadMatchesFromRiot("p1", 12, {
+      recentWindowSize: 3,
+      windowSize: 2,
+      analyzeDelayMs: 0,
+    });
+
+    expect(result).toEqual({
+      analyzedCount: 1,
+      skippedAlreadyFresh: false,
+      skippedNoHistory: false,
+      failedAnalyzeAttempts: 0,
+    });
+    expect(analyze).toHaveBeenCalledTimes(1);
+    expect(analyze).toHaveBeenCalledWith("missing-recent", "p1");
+  });
+
   it("syncNewHeadMatchesFromRiot analyzes only IDs before first anchor in window", async () => {
     vi.spyOn(BackendBridge, "getMatchHistory")
-      .mockResolvedValueOnce(["new1"])
-      .mockResolvedValueOnce(["new1", "new2", "anchor"]);
+      .mockResolvedValueOnce(["new1", "new2", "anchor"])
+      .mockResolvedValueOnce(["older-anchor"]);
     vi.spyOn(BackendBridge, "fetchExistingMatchIdsForPlayer")
-      .mockResolvedValueOnce(new Set())
-      .mockResolvedValueOnce(new Set(["anchor"]));
+      .mockResolvedValueOnce(new Set(["anchor"]))
+      .mockResolvedValueOnce(new Set(["older-anchor"]));
     const analyze = vi
       .spyOn(BackendBridge, "analyzeMatchPerformance")
       .mockResolvedValue({ success: true, matchSummary: sampleMatch });
 
     const r = await BackendBridge.syncNewHeadMatchesFromRiot("p1", 3, {
+      recentWindowSize: 3,
+      windowSize: 2,
       analyzeDelayMs: 0,
     });
 

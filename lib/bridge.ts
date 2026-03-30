@@ -238,6 +238,7 @@ export class BackendBridge {
     storedTotalCount: number,
     options: {
       windowSize?: number;
+      recentWindowSize?: number;
       /** Delay between each match-performance call (rate limiting). */
       analyzeDelayMs?: number;
       maxSyncRounds?: number;
@@ -250,6 +251,7 @@ export class BackendBridge {
     failedAnalyzeAttempts: number;
   }> {
     const windowSize = options.windowSize ?? 25;
+    const recentWindowSize = Math.max(options.recentWindowSize ?? windowSize, 1);
     const analyzeDelayMs = options.analyzeDelayMs ?? 1500;
     const maxSyncRounds = options.maxSyncRounds ?? 12;
 
@@ -262,8 +264,8 @@ export class BackendBridge {
       };
     }
 
-    const newestOnly = await this.getMatchHistory(puuid, 1, 0);
-    if (!newestOnly || newestOnly.length === 0) {
+    const recentRiotMatchIds = await this.getMatchHistory(puuid, recentWindowSize, 0);
+    if (!recentRiotMatchIds || recentRiotMatchIds.length === 0) {
       return {
         analyzedCount: 0,
         skippedAlreadyFresh: false,
@@ -272,9 +274,10 @@ export class BackendBridge {
       };
     }
 
-    const riotHeadId = newestOnly[0];
-    const headExisting = await this.fetchExistingMatchIdsForPlayer(puuid, [riotHeadId]);
-    if (headExisting.has(riotHeadId)) {
+    const recentExisting = await this.fetchExistingMatchIdsForPlayer(puuid, recentRiotMatchIds);
+    const missingRecentMatchIds = recentRiotMatchIds.filter((matchId) => !recentExisting.has(matchId));
+
+    if (missingRecentMatchIds.length === 0) {
       return {
         analyzedCount: 0,
         skippedAlreadyFresh: true,
@@ -285,19 +288,24 @@ export class BackendBridge {
 
     let analyzedCount = 0;
     let failedAnalyzeAttempts = 0;
-    let listOffset = 0;
+    let listOffset = recentRiotMatchIds.length;
+
+    for (let i = 0; i < missingRecentMatchIds.length; i++) {
+      const matchId = missingRecentMatchIds[i];
+      const analysis = await this.analyzeMatchPerformance(matchId, puuid);
+      if (analysis?.success && analysis.matchSummary) {
+        analyzedCount++;
+      } else {
+        failedAnalyzeAttempts++;
+      }
+      if (i < missingRecentMatchIds.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, analyzeDelayMs));
+      }
+    }
 
     for (let round = 0; round < maxSyncRounds; round++) {
       const windowIds = await this.getMatchHistory(puuid, windowSize, listOffset);
       if (!windowIds || windowIds.length === 0) {
-        if (round === 0) {
-          return {
-            analyzedCount: 0,
-            skippedAlreadyFresh: false,
-            skippedNoHistory: true,
-            failedAnalyzeAttempts,
-          };
-        }
         break;
       }
 
