@@ -9,7 +9,7 @@ commands:
 services:
   web:
     start: powershell -NoProfile -Command "pnpm run dev"
-    stop: powershell -NoProfile -Command "$pids = Get-NetTCPConnection -LocalPort 3005 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; foreach ($proc in $pids) { Stop-Process -Id $proc -Force }"
-    healthcheck: powershell -NoProfile -Command "$resp = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:3005; if ($resp.StatusCode -lt 200 -or $resp.StatusCode -ge 400) { exit 1 }"
+    stop: cmd /c "for /f \"tokens=5\" %a in ('netstat -ano ^| findstr :3005 ^| findstr LISTENING') do taskkill /F /PID %a"
+    healthcheck: curl -sf http://127.0.0.1:3005
     port: 3005
     depends_on: []

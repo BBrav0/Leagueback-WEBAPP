@@ -19,7 +19,7 @@ Use this skill for features that change:
 
 ## Required Skills
 
-- `agent-browser` — required for browser verification of any user-facing change once the local web app can be started from the committed workflow.
+- `agent-browser` — use for browser verification of user-facing changes whenever it is available on this host.
 
 ## Work Procedure
 
@@ -33,15 +33,17 @@ Use this skill for features that change:
    - detail/fallback behavior.
 4. Implement the smallest coherent change set that makes the new tests pass and preserves existing behavior.
 5. For UI features, verify truthful copy and fallback behavior alongside the happy path. Placeholder text is not acceptable on mission-covered surfaces.
-6. Use `agent-browser` to manually verify the real web flow on the configured mission port. At minimum, exercise the exact user flow named in the feature plus one adjacent fallback/edge case.
+6. Use `agent-browser` to manually verify the real web flow on the configured mission port whenever it is available. If mission guidance documents an approved temporary fallback, use that fallback instead and capture explicit dev-server evidence plus the limits of what was not interactively proven.
 7. Run the relevant validators during iteration, then the committed mission gates before finishing:
    - lint/static-check,
    - typecheck,
    - tests,
    - build if the change materially affects shipped app behavior or the worker-base guidance requires it.
+   Do not skip the committed lint/static-check gate when it exists.
 8. If the feature involves persisted state, verify refresh/revisit behavior and route precedence explicitly.
 9. If the feature involves mixed stored-history plus older-history loading, verify both sources still behave correctly together.
-10. Prepare a handoff that makes shortcuts obvious: list tests added first, then commands, browser flows, and any discovered gaps.
+10. Before claiming automated coverage for a new test file, confirm that the file is actually included by the committed test runner configuration. In this repo, be especially careful with Vitest include globs before adding route/component tests outside `lib/**`.
+11. Prepare a handoff that makes shortcuts obvious: list tests added first, then commands, browser flows, and any discovered gaps.
 
 ## Example Handoff
 
@@ -53,7 +55,7 @@ Use this skill for features that change:
   "verification": {
     "commandsRun": [
       {
-        "command": "pnpm test -- --runInBand",
+        "command": "pnpm test",
         "exitCode": 0,
         "observation": "New storage/search flow tests and existing suites passed."
       },

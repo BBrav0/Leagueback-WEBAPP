@@ -1,0 +1,41 @@
+{
+  "groupId": "platform-docs-validation",
+  "surface": "terminal",
+  "assertions": [
+    "VAL-PLATFORM-001",
+    "VAL-PLATFORM-002",
+    "VAL-PLATFORM-003",
+    "VAL-PLATFORM-004"
+  ],
+  "status": "pass",
+  "toolsUsed": [
+    "Read",
+    "Execute"
+  ],
+  "frictions": [
+    "Port 3005 was already occupied by an existing local node dev process, so startup evidence used the live server plus HTTP healthcheck instead of launching a second instance."
+  ],
+  "blockers": [],
+  "results": [
+    {
+      "id": "VAL-PLATFORM-001",
+      "status": "pass",
+      "reason": "README and .env.example describe the current web-only Next.js app, pnpm setup, env workflow, and shipped-vs-backlog sections truthfully."
+    },
+    {
+      "id": "VAL-PLATFORM-002",
+      "status": "pass",
+      "reason": "README and ROADMAP separate shipped behavior from backlog and remove desktop/native drift."
+    },
+    {
+      "id": "VAL-PLATFORM-003",
+      "status": "pass",
+      "reason": "package.json dev script is Windows-safe on port 3005, helper scripts align to that port, and local HTTP healthcheck returned 200."
+    },
+    {
+      "id": "VAL-PLATFORM-004",
+      "status": "pass",
+      "reason": "Committed validation commands in package.json, ci-validate.bat, README, and CI workflow are runnable and matched successful lint/static-check/typecheck/test/build runs."
+    }
+  ]
+}

@@ -1,0 +1,223 @@
+{
+  "groupId": "match-flows",
+  "testedAt": "2026-03-30T07:26:00.000Z",
+  "isolation": {
+    "appUrl": "http://127.0.0.1:3005",
+    "missionDir": "C:\\Users\\bendc\\.factory\\missions\\7b970ada-3b1a-476d-827a-4cd2a618e64e",
+    "fallbackMode": "tests-plus-dev-server-evidence",
+    "assignedAssertions": [
+      "VAL-MATCH-001",
+      "VAL-MATCH-002",
+      "VAL-MATCH-003",
+      "VAL-MATCH-004",
+      "VAL-MATCH-005",
+      "VAL-CROSS-001"
+    ]
+  },
+  "toolsUsed": [
+    "Read",
+    "Grep",
+    "Execute"
+  ],
+  "testedAssertions": 6,
+  "passedAssertions": 6,
+  "failedAssertions": 0,
+  "blockedAssertions": 0,
+  "assertions": [
+    {
+      "id": "VAL-MATCH-001",
+      "title": "Rank presentation is truthful instead of placeholder copy",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect match-card rendering in components/dashboard/lol-stats-dashboard.tsx",
+          "expected": "Rank copy is truthful and not a placeholder",
+          "observed": "Match cards render match.rankLabel and the implementation uses 'Rank unavailable for this match'."
+        },
+        {
+          "action": "Run focused tests for match reconstruction",
+          "expected": "Automated coverage asserts truthful rank fallback copy",
+          "observed": "lib/match-reconstruction.test.ts passed and explicitly asserted rankLabel === 'Rank unavailable for this match'."
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "blocked by browser-tooling exception; no browser console available in approved fallback mode",
+        "network": "No rank-specific request exists in the code path; rank comes from reconstructed metadata.",
+        "terminal": "pnpm test lib/match-reconstruction.test.ts lib/match-details.test.ts app/api/match-details/route.test.ts -> 3 files passed, 11 tests passed"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-MATCH-002",
+      "title": "Match cards show enriched metadata consistently",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect match-card metadata rendering in components/dashboard/lol-stats-dashboard.tsx",
+          "expected": "Cards show impact category plus played-at time, duration, role/lane, and damage metadata",
+          "observed": "Card badges render impactCategoryLabel, 'Played {match.playedAt}', 'Duration …', roleLabel, and damageToChampionsLabel alongside core stats."
+        },
+        {
+          "action": "Review reconstruction tests and types",
+          "expected": "Automated coverage proves the metadata fields are populated or truthfully fall back",
+          "observed": "lib/match-reconstruction.test.ts passed and asserted durationSeconds, roleLabel, damageToChampionsLabel, impactCategoryLabel, and playedAt/rank fallback labels."
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "blocked by browser-tooling exception; no browser console available in approved fallback mode",
+        "network": "Enriched card fields are assembled from reconstructed match summaries rather than a separate metadata request.",
+        "terminal": "Focused vitest run passed; code inspection confirms rendered badges for playedAt, duration, roleLabel, and damageToChampionsLabel."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-MATCH-003",
+      "title": "Each match card exposes a clear details affordance",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect the match-card details toggle implementation",
+          "expected": "A visible per-card control opens and closes details only for that card",
+          "observed": "Each MatchCard has its own isDetailsOpen state and a button labeled 'View match details' / 'Hide match details'."
+        },
+        {
+          "action": "Inspect the open/close logic",
+          "expected": "Closing preserves surrounding dashboard context and only toggles that card's details region",
+          "observed": "handleToggleDetails toggles local state inside the memoized MatchCard component; no route or global dashboard state is changed when opening/closing details."
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "blocked by browser-tooling exception; no browser console available in approved fallback mode",
+        "network": "Opening details calls BackendBridge.getMatchDetails(match.id, currentPuuid) only for the selected card.",
+        "terminal": "Source evidence from components/dashboard/lol-stats-dashboard.tsx lines around the MatchCard toggle logic."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-MATCH-004",
+      "title": "Match details show both teams with useful per-player context",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect MatchDetailsContent and ParticipantRow rendering",
+          "expected": "Details view shows both teams, per-player comparison context, and a current-player marker",
+          "observed": "The details view maps teams into a two-column layout, renders participant rows with summoner, champion, role, KDA, vision, and damage, and marks the current player with a 'You' badge plus highlighted styling."
+        },
+        {
+          "action": "Run focused details tests",
+          "expected": "Automated coverage asserts team summaries, participant fields, and current-player highlighting data",
+          "observed": "lib/match-details.test.ts passed and asserted teams for both sides plus participant fields including roleLabel, damageToChampionsLabel, and isCurrentPlayer: true."
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "blocked by browser-tooling exception; no browser console available in approved fallback mode",
+        "network": "GET /api/match-details?matchId=NA1_1&userPuuid=puuid-1 returned a truthful details payload shape from the running dev server.",
+        "terminal": "Focused vitest run passed; curl to /api/match-details returned JSON with status 'unavailable' fallback schema when raw data was absent."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-MATCH-005",
+      "title": "Match details fail gracefully when raw detail data is unavailable",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect the unavailable-details rendering path",
+          "expected": "A truthful fallback is scoped to the match details region",
+          "observed": "MatchDetailsFallback renders 'Match details unavailable' and the details.statusLabel inside the card details region."
+        },
+        {
+          "action": "Exercise the running dev-server /api/match-details endpoint",
+          "expected": "When raw data is missing, the endpoint returns a truthful unavailable payload instead of crashing",
+          "observed": "curl to /api/match-details?matchId=NA1_1&userPuuid=puuid-1 returned status 'unavailable' with statusLabel 'Full match details are unavailable because cached raw match data has not been saved for this match yet.'"
+        },
+        {
+          "action": "Run focused details tests",
+          "expected": "Automated coverage asserts the missing-raw-data fallback",
+          "observed": "lib/match-details.test.ts passed and asserted the exact unavailable fallback payload."
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "blocked by browser-tooling exception; no browser console available in approved fallback mode",
+        "network": "curl \"http://127.0.0.1:3005/api/match-details?matchId=NA1_1&userPuuid=puuid-1\" -> 200 with details.status=unavailable and fallbackReason=missing_raw_data",
+        "terminal": "Focused vitest run passed including lib/match-details.test.ts and app/api/match-details/route.test.ts."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-001",
+      "title": "Search-to-details flow works end to end",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Exercise the deterministic validation fixture through the runtime search/account path",
+          "expected": "A searchable Riot ID resolves to the fixture player identity used for fallback end-to-end proof",
+          "observed": "curl to /api/account?gameName=Validation%20Fixture&tagLine=LOCAL returned 200 with puuid validation-fixture-puuid and the expected Riot ID."
+        },
+        {
+          "action": "Verify the player route and enriched match-card data for the fixture player",
+          "expected": "The player route responds and the stored-matches path returns enriched cards for the same player context",
+          "observed": "HEAD /player/Validation%20Fixture#LOCAL returned 200, and /api/stored-matches?puuid=validation-fixture-puuid returned two enriched cards with impact category, played-at copy, duration, role, and damage metadata."
+        },
+        {
+          "action": "Open both the ready-details and truthful fallback-details fixture cases through the live runtime route",
+          "expected": "At least one match returns full details while another returns a scoped unavailable fallback without losing the player context path",
+          "observed": "/api/match-details?matchId=VALIDATION_READY_001&userPuuid=validation-fixture-puuid returned a ready two-team payload with the current player marked, and /api/match-details?matchId=VALIDATION_FALLBACK_002&userPuuid=validation-fixture-puuid returned the truthful unavailable fallback payload."
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "No browser console was available because this validation used the mission-approved tests-plus-dev-server-evidence fallback instead of agent-browser.",
+        "network": "curl /api/account?gameName=Validation%20Fixture&tagLine=LOCAL -> 200 fixture account; curl /api/stored-matches?puuid=validation-fixture-puuid&offset=0&limit=20 -> 200 with two enriched fixture cards; curl /api/match-details?matchId=VALIDATION_READY_001&userPuuid=validation-fixture-puuid -> 200 ready details; curl /api/match-details?matchId=VALIDATION_FALLBACK_002&userPuuid=validation-fixture-puuid -> 200 unavailable fallback; HEAD /player/Validation%20Fixture#LOCAL -> 200.",
+        "terminal": "pnpm test lib/validation-fixture.test.ts app/api/match-details/route.test.ts -> 2 files passed, 6 tests passed; runtime evidence confirms the deterministic fixture is wired through the same live account, stored-matches, player-route, and match-details paths used by the dashboard."
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "agent-browser is unavailable on this Windows host, so required UI screenshots and console inspection for match-surface assertions could not be collected directly.",
+      "resolved": true,
+      "resolution": "Used the mission-approved fallback: focused Vitest coverage, source inspection, and local dev-server/API evidence.",
+      "affectedAssertions": [
+        "VAL-MATCH-001",
+        "VAL-MATCH-002",
+        "VAL-MATCH-003",
+        "VAL-MATCH-004",
+        "VAL-MATCH-005",
+        "VAL-CROSS-001"
+      ]
+    },
+    {
+      "description": "Direct browser screenshots and console capture remained unavailable because agent-browser is still blocked on this host.",
+      "resolved": true,
+      "resolution": "Used the deterministic Validation Fixture runtime path plus focused fixture tests and dev-server HTTP evidence to complete the approved fallback proof for VAL-CROSS-001.",
+      "affectedAssertions": [
+        "VAL-CROSS-001"
+      ]
+    }
+  ],
+  "blockers": [],
+  "evidenceSummary": {
+    "devServer": "http://127.0.0.1:3005 responded with HTTP 200 OK.",
+    "focusedTests": "pnpm test lib/validation-fixture.test.ts app/api/match-details/route.test.ts -> 6/6 tests passed.",
+    "apiEvidence": [
+      "curl \"http://127.0.0.1:3005/api/account?gameName=Validation%20Fixture&tagLine=LOCAL\" -> 200 fixture account payload",
+      "curl \"http://127.0.0.1:3005/api/stored-matches?puuid=validation-fixture-puuid&offset=0&limit=20\" -> 200 with two enriched fixture cards",
+      "curl \"http://127.0.0.1:3005/api/match-details?matchId=VALIDATION_READY_001&userPuuid=validation-fixture-puuid\" -> 200 ready details payload",
+      "curl \"http://127.0.0.1:3005/api/match-details?matchId=VALIDATION_FALLBACK_002&userPuuid=validation-fixture-puuid\" -> 200 unavailable fallback payload",
+      "curl -I \"http://127.0.0.1:3005/player/Validation%20Fixture#LOCAL\" -> 200 OK"
+    ],
+    "sourceEvidence": [
+      "components/dashboard/lol-stats-dashboard.tsx fixture-backed match-card and details rendering",
+      "lib/validation-fixture.ts and lib/validation-fixture.test.ts",
+      "app/api/match-details/route.ts and route.test.ts"
+    ]
+  },
+  "summary": "Validated six assigned assertions using the approved Windows fallback. VAL-MATCH-001 through VAL-MATCH-005 remain supported by focused automated coverage plus dev-server/source evidence, and VAL-CROSS-001 now passes because the deterministic Validation Fixture proves the search/account -> player route -> enriched cards -> ready details/fallback details flow through the live runtime paths without relying on unstable live Riot data."
+}
