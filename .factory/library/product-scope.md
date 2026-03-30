@@ -23,6 +23,7 @@ Mission-specific product scope and worker-facing backlog framing.
 - Loaded-history export
 - Web-only copy and fallback-state polish
 - Returning-player freshness fixes that reconcile existing DB-backed history against Riot and keep the live LeagueBack database aligned with current app behavior
+- Match-card metadata follow-up so stored DB-backed cards preserve role/damage context and can show a truthful current-rank snapshot when Riot rank data is available
 
 ## Explicit exclusions
 

@@ -42,3 +42,5 @@ Architecture decisions, data flow notes, and implementation boundaries for this 
 - Returning-player stale detection must be match-specific, not only player-level. Refreshing one stale row must not mark the whole player fresh if other recent rows were never recomputed.
 - Durable freshness metadata must keep latest-head markers monotonic; reprocessing an older stale match must not move `latest_riot_*` or `latest_db_*` backward.
 - Stale-only refreshes still need to reload the visible DB-first history in the dashboard so the user sees refreshed derived rows immediately after reconciliation.
+- Stored match-card metadata must be persisted through `player_matches` and the DB-backed `/api/stored-matches` path. If role/lane or damage-to-champions are supported on cards, the stored-row mapper must preserve those fields instead of rebuilding every stored card with unavailable fallbacks.
+- Any rank shown on match cards in this mission must be modeled as a current rank snapshot sourced outside the match payload, not as historical per-match rank. Copy and persistence must make that distinction explicit so the UI does not imply unsupported match-time rank history.

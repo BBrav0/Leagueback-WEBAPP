@@ -62,6 +62,7 @@ Validation surface, setup notes, and concurrency guidance for this mission.
 - Missing raw detail data in the match-details surface
 - Returning-player searches where Supabase already has stored history, so freshness reconciliation must be proven against existing DB-backed data instead of a first-load/new-player path
 - When browser automation is unavailable, capture equivalent dev-server evidence and state clearly which interactions were validated through the approved fallback path
+- For the match-card metadata follow-up, validate through the stored-history route the user actually sees: confirm `/api/stored-matches` and the rendered cards show persisted role/damage metadata plus truthful current-rank copy, not transient analysis-only values.
 
 ## Returning-player freshness validation note
 
