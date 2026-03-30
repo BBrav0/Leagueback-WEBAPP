@@ -1,40 +1,28 @@
 {
   "featureId": "returning-player-recent-reconciliation",
-  "reviewedAt": "2026-03-30T18:50:00Z",
+  "reviewedAt": "2026-03-30T19:05:00Z",
   "commitId": "0234251b28095db25c21772572f3ea8a71a5a3d8",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
   "status": "fail",
   "codeReview": {
-    "summary": "The recent-window bridge fix and Riot-proxy diagnostics are implemented, but the feature still does not complete or prove the required DB-first backfill/update behavior in the actual returning-player flow. The dashboard only refreshes stored matches after newly inserted rows, and the handoff evidence never shows the DB-backed view after reconciliation, so VAL-FRESHNESS-001 and VAL-FRESHNESS-002 are not fully satisfied.",
+    "summary": "The bridge change correctly removes the old \"stored head means fresh\" shortcut and adds better Riot proxy diagnostics, but the reviewed evidence still does not prove the feature's required DB backfill-and-surface behavior on the real returning-player path. The implementation stops at comparing live Riot IDs against existing stored rows and never demonstrates that the missing recent matches were actually persisted into LeagueBack and then surfaced through the refreshed DB-first view without duplicates.",
     "issues": [
       {
         "file": "components/dashboard/lol-stats-dashboard.tsx",
-        "line": 901,
+        "line": 906,
         "severity": "blocking",
-        "description": "After `syncNewHeadMatchesFromRiot` completes, the UI only re-fetches `/api/stored-matches` when `syncResult.analyzedCount > 0`. If reconciliation only refreshes stale recent rows via `refreshedStaleCount`, the DB-first view keeps showing pre-refresh data even though the feature requires the refreshed returning-player view to reflect reconciled DB state."
-      },
-      {
-        "file": "components/dashboard/lol-stats-dashboard.tsx",
-        "line": 883,
-        "severity": "blocking",
-        "description": "The live call site still hardcodes `{ windowSize: 25, ... }` and never passes or reads a bounded `recentWindowSize` from the new freshness metadata. That means the app is not actually wiring the intended bounded recent-window reconciliation behavior through the real returning-player path; it is relying on the bridge default instead of the tracked metadata introduced for this milestone."
-      },
-      {
-        "file": "lib/bridge.ts",
-        "line": 289,
-        "severity": "blocking",
-        "description": "The bridge now analyzes missing recent Riot IDs, but the reviewed evidence stops at comparing pre-refresh `/api/stored-matches` output to `/api/match-history`. There is no end-to-end proof in the implementation or handoff that those missing recent matches were backfilled into `LeagueBack` and then surfaced through the DB-first route without duplicates, which is the core requirement of VAL-FRESHNESS-002."
+        "description": "After reconciliation, the dashboard only reloads `/api/stored-matches` if `syncResult.analyzedCount > 0 || syncResult.refreshedStaleCount > 0`, but the reviewed live evidence never proves that path ran successfully for the real returning-player account. The handoff shows `/api/stored-matches` was checked before reconciliation and `/api/match-history` was checked separately, yet it never re-reads stored history after the sync to prove the missing recent Riot matches were backfilled into LeagueBack and surfaced in the DB-first experience without duplicate rows. Because that proof is part of the feature's expected behavior, the implementation remains unverified for the blocking freshness contract."
       }
     ]
   },
   "sharedStateObservations": [
     {
       "area": "knowledge",
-      "observation": "The mission shared state does not currently record any stable returning-player validation account or the expected live evidence pattern for freshness backfill. The worker had to rediscover that `Bumsdito#3005` was a useful target and manually compare Supabase plus local API responses to assess the feature.",
-      "evidence": "Transcript skeleton for session `c2854830-1900-4d41-bff6-34ac99753f33` shows several custom Supabase/API inspection commands before validation, and neither `AGENTS.md` nor `.factory/library/user-testing.md` names a reusable returning-player fixture/account for data-freshness work."
+      "observation": "The mission library now names `Bumsdito#3005` as the preferred returning-player validation account, but it still does not spell out the minimum evidence needed to prove this feature: re-read the DB-backed route after reconciliation and confirm the formerly missing recent IDs are persisted there without duplication.",
+      "evidence": "`.factory/library/user-testing.md` documents the account and a general evidence pattern, while this feature handoff only shows pre-sync `/api/stored-matches` plus separate live `/api/match-history` output and never captures the required post-sync DB-first proof."
     }
   ],
   "addressesFailureFrom": null,
-  "summary": "Review failed: the commit improves recent-head reconciliation logic and Riot-proxy error details, but it does not complete or prove the required DB-first backfill/update behavior for returning players, so the VAL-FRESHNESS-001/002 intent remains unmet."
+  "summary": "Reviewed the feature record, handoff, transcript skeleton, skill guidance, and commit `0234251`. The code improves recent-window reconciliation logic and Riot proxy error detail, but the feature still fails review because the recorded live evidence does not prove missing recent matches were backfilled into `LeagueBack` and then surfaced through the refreshed DB-first route without duplicates."
 }

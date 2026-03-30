@@ -15,7 +15,8 @@ Use this skill for features that change:
 - local persisted UI state,
 - history filters/export behavior,
 - match summary/detail data mapping,
-- API routes or helpers that directly support those user-facing web features.
+- API routes or helpers that directly support those user-facing web features,
+- Supabase-backed schema/data-freshness behavior when the change exists to keep the user-facing DB-first match experience truthful.
 
 ## Required Skills
 
@@ -23,7 +24,7 @@ Use this skill for features that change:
 
 ## Work Procedure
 
-1. Read the assigned feature, `mission.md`, `AGENTS.md`, `.factory/library/*.md`, and the exact code paths the feature will touch.
+1. Read the assigned feature, `mission.md`, `AGENTS.md`, `.factory/library/*.md`, and the exact code paths the feature will touch. On this Windows host, treat `.factory/init.sh` as optional/no-op unless a compatible POSIX shell is explicitly available; do not invent ad hoc ways to execute it.
 2. Trace the current user flow before editing so you know what must be preserved (routing, mixed history loading, fallback states, persisted state, etc.).
 3. Write failing tests first whenever the behavior can be covered with unit/component tests:
    - mapping helpers,
@@ -34,16 +35,17 @@ Use this skill for features that change:
 4. Implement the smallest coherent change set that makes the new tests pass and preserves existing behavior.
 5. For UI features, verify truthful copy and fallback behavior alongside the happy path. Placeholder text is not acceptable on mission-covered surfaces.
 6. Use `agent-browser` to manually verify the real web flow on the configured mission port whenever it is available. If mission guidance documents an approved temporary fallback, use that fallback instead and capture explicit dev-server evidence plus the limits of what was not interactively proven. This still applies to copy-only polish work: do not rely on source review alone when the user-facing wording/state can be exercised on the running app. On this Windows host, if the documented stop helper fails through the exec wrapper, reuse the already-running validated server when safe or fall back to a plain `netstat` + `taskkill` port cleanup flow instead of inventing a new port.
-7. Run the relevant validators during iteration, then the committed mission gates before finishing:
+7. For backend-heavy or schema/data-freshness features, verify the live user-facing data path end to end instead of stopping at source review: inspect the relevant Supabase rows/API responses, confirm the DB-backed route reflects the change, and capture evidence that the dashboard or stored-history surface sees the updated state.
+8. Run the relevant validators during iteration, then the committed mission gates before finishing:
    - lint/static-check,
    - typecheck,
    - tests,
    - build if the change materially affects shipped app behavior or the worker-base guidance requires it.
    Do not skip the committed lint/static-check gate when it exists.
-8. If the feature involves persisted state, verify refresh/revisit behavior and route precedence explicitly. When browser automation is unavailable but mission guidance allows the fallback, prefer targeted regression coverage for storage helpers/events plus dev-server evidence over vague source-only claims.
-9. If the feature involves mixed stored-history plus older-history loading, verify both sources still behave correctly together.
-10. Before claiming automated coverage for a new test file, confirm that the file is actually included by the committed test runner configuration. In this repo, be especially careful with Vitest include globs before adding route/component tests outside `lib/**`.
-11. Prepare a handoff that makes shortcuts obvious: list tests added first, then commands, browser flows, and any discovered gaps.
+9. If the feature involves persisted state, verify refresh/revisit behavior and route precedence explicitly. When browser automation is unavailable but mission guidance allows the fallback, prefer targeted regression coverage for storage helpers/events plus dev-server evidence over vague source-only claims.
+10. If the feature involves mixed stored-history plus older-history loading, verify both sources still behave correctly together.
+11. Before claiming automated coverage for a new test file, confirm that the file is actually included by the committed test runner configuration. In this repo, be especially careful with Vitest include globs before adding route/component tests outside `lib/**`.
+12. Prepare a handoff that makes shortcuts obvious: list tests added first, then commands, browser flows, and any discovered gaps.
 
 ## Example Handoff
 

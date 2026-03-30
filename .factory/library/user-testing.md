@@ -63,6 +63,16 @@ Validation surface, setup notes, and concurrency guidance for this mission.
 - Returning-player searches where Supabase already has stored history, so freshness reconciliation must be proven against existing DB-backed data instead of a first-load/new-player path
 - When browser automation is unavailable, capture equivalent dev-server evidence and state clearly which interactions were validated through the approved fallback path
 
+## Returning-player freshness validation note
+
+- Preferred live validation account for the current data-freshness follow-up: `Bumsdito#3005` in the `LeagueBack` Supabase project.
+- Expected evidence pattern:
+  1. `/api/account` resolves the existing stored player,
+  2. `/api/stored-matches` shows existing DB-backed history,
+  3. `/api/match-history` returns live Riot IDs through the Cloudflare proxy,
+  4. the search/reconciliation path refreshes DB-backed history without duplicates,
+  5. stale-row-only refreshes still update the visible dashboard state.
+
 ## Flow Validator Guidance: browser
 
 - Use the shared local app at `http://127.0.0.1:3005`.

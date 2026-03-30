@@ -39,3 +39,6 @@ Architecture decisions, data flow notes, and implementation boundaries for this 
 - Current summary data and raw match detail data are separate concerns; details UI should use a deliberate mapping layer rather than overloading the summary shape.
 - Match-details raw source precedence is `match_cache` first, then legacy `match_details`, otherwise an explicit unavailable payload; details work should preserve truthful fallback semantics for both missing and partial raw data.
 - Current returning-player freshness logic is client-driven and treats \"latest stored match exists\" as effectively fresh. Follow-up work should preserve DB-first rendering but add bounded reconciliation against Riot plus durable sync state so missing recent matches and stale derived rows can be corrected against the existing database.
+- Returning-player stale detection must be match-specific, not only player-level. Refreshing one stale row must not mark the whole player fresh if other recent rows were never recomputed.
+- Durable freshness metadata must keep latest-head markers monotonic; reprocessing an older stale match must not move `latest_riot_*` or `latest_db_*` backward.
+- Stale-only refreshes still need to reload the visible DB-first history in the dashboard so the user sees refreshed derived rows immediately after reconciliation.

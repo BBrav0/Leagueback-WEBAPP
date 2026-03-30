@@ -1,0 +1,20 @@
+{
+  "milestone": "data-freshness-followup",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 3,
+    "passed": 3,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-FRESHNESS-001",
+    "VAL-FRESHNESS-002",
+    "VAL-FRESHNESS-003"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null
+}

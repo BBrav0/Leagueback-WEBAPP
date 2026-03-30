@@ -1,0 +1,15 @@
+{
+  "featureId": "returning-player-refresh-surfacing-fix",
+  "reviewedAt": "2026-03-30T19:12:45Z",
+  "commitId": "d83513d19e961845e8c09c7e6113f8ab069a21de",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix addresses the prior blocking scrutiny finding. The dashboard now reloads DB-first stored history after either newly analyzed matches or stale-only refreshes, and the bridge/API path propagates tracked recent_match_window metadata so reconciliation is driven by persisted freshness state instead of a hardcoded dashboard window. The handoff's live evidence also closes the earlier proof gap by showing pre-sync stored history, missing live Riot IDs, post-sync stored-history reread with those IDs surfaced at the head, and a duplicate-free top page.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": ".factory/validation/data-freshness-followup/scrutiny/reviews/returning-player-recent-reconciliation.json",
+  "summary": "Reviewed the fix feature metadata, prior failed review, handoff, transcript skeleton, skill guidance, and commit d83513d. The implementation and recorded live evidence now prove the DB-first reread/backfill behavior required for returning-player reconciliation, so this fix passes and addresses the earlier fail review for returning-player-recent-reconciliation."
+}

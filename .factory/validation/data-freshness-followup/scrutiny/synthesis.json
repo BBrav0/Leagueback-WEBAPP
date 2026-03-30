@@ -1,7 +1,7 @@
 {
   "milestone": "data-freshness-followup",
-  "round": 1,
-  "status": "fail",
+  "round": 3,
+  "status": "pass",
   "validatorsRun": {
     "test": {
       "passed": true,
@@ -21,72 +21,35 @@
   },
   "reviewsSummary": {
     "total": 3,
-    "passed": 0,
-    "failed": 3,
-    "failedFeatures": [
-      "leagueback-player-sync-metadata",
-      "returning-player-recent-reconciliation",
-      "returning-player-stale-derived-refresh"
-    ]
+    "passed": 3,
+    "failed": 0,
+    "failedFeatures": []
   },
-  "blockingIssues": [
-    {
-      "featureId": "leagueback-player-sync-metadata",
-      "severity": "blocking",
-      "description": "player_sync_metadata writes in app/api/match-performance/route.ts record latest_riot_match_id/latest_riot_match_created_at from whichever match is currently analyzed, so backfilled stale or missing rows can incorrectly become the durable Riot-head metadata."
-    },
-    {
-      "featureId": "leagueback-player-sync-metadata",
-      "severity": "blocking",
-      "description": "app/api/player-matches/stale-ids/route.ts uses a single player-level derivation_version, so refreshing one stale row can prevent other stale rows for that player from being detected even if they were never recomputed."
-    },
-    {
-      "featureId": "returning-player-recent-reconciliation",
-      "severity": "blocking",
-      "description": "components/dashboard/lol-stats-dashboard.tsx only reloads stored matches when analyzedCount > 0, so stale-row-only refreshes are not surfaced in the DB-first view after reconciliation."
-    },
-    {
-      "featureId": "returning-player-recent-reconciliation",
-      "severity": "blocking",
-      "description": "components/dashboard/lol-stats-dashboard.tsx hardcodes the recent reconciliation window at the call site instead of wiring a tracked bounded recent-window value through freshness metadata."
-    },
-    {
-      "featureId": "returning-player-recent-reconciliation",
-      "severity": "blocking",
-      "description": "The reviewed evidence proves recent Riot-vs-stored comparison but does not prove missing recent matches were backfilled into LeagueBack and then surfaced through the DB-first route without duplicates."
-    },
-    {
-      "featureId": "returning-player-stale-derived-refresh",
-      "severity": "blocking",
-      "description": "components/dashboard/lol-stats-dashboard.tsx only reloads stored history when analyzedCount > 0, so stale-only reanalysis leaves the current visible history stale and fails to surface refreshed derived rows."
-    },
-    {
-      "featureId": "returning-player-stale-derived-refresh",
-      "severity": "blocking",
-      "description": "app/api/match-performance/route.ts overwrites latest_db_match_id/latest_db_match_created_at on every reanalysis, allowing older stale rows processed later to move durable latest-db metadata backward."
-    }
-  ],
+  "blockingIssues": [],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [
     {
       "target": "skills",
-      "suggestion": "Add Supabase migration/advisor workflow guidance, or use a dedicated database-focused skill, for features that primarily modify live schema rather than UI behavior.",
-      "evidence": "leagueback-player-sync-metadata was assigned web-feature-worker even though the implementation centered on repo migrations and live Supabase schema work, and the reviewer flagged the current skill as UI/browser-oriented.",
+      "suggestion": "The worker used the web-feature-worker skill for a schema-only Supabase migration feature. The skill procedure is heavily UI/browser oriented and does not mention Supabase migration/advisor workflows, even though this milestone requires live database schema work.",
+      "evidence": "features.json assigns skillName web-feature-worker to leagueback-player-sync-metadata; transcript skeleton shows the worker following that skill while primarily using supabase migration tools.",
       "isSystemic": false
     },
     {
-      "target": "library",
-      "suggestion": "Document that returning-player stale detection must be match-specific and that stale-only refreshes must reload visible stored history while keeping latest-db metadata monotonic during stale reanalysis.",
-      "evidence": "Both leagueback-player-sync-metadata and returning-player-stale-derived-refresh failed because player-level metadata and stale-only refresh semantics were underspecified in shared architecture notes.",
-      "isSystemic": true
-    },
-    {
-      "target": "library",
-      "suggestion": "Record a stable returning-player validation account and the expected live evidence pattern for data-freshness follow-up work.",
-      "evidence": "returning-player-recent-reconciliation review noted the worker had to rediscover a suitable returning-player account and hand-build comparison evidence before validation.",
+      "target": "skills",
+      "suggestion": "The worker feedback shows a recurring startup pitfall on Windows: worker-base still lets sessions attempt .factory/init.sh in ways that are not appropriate for this host, even though mission guidance says to treat it as optional/no-op without a POSIX shell.",
+      "evidence": "Transcript skeleton for worker session 9a2caa52-cea5-4c64-beac-541a7ca62514 includes python3 C:\\Users\\bendc\\Documents\\GitHub\\Leagueback-WEBAPP\\.factory\\init.sh, and handoff.skillFeedback explicitly asks for clearer worker-base guidance for Windows.",
       "isSystemic": false
     }
   ],
-  "rejectedObservations": [],
-  "previousRound": null
+  "rejectedObservations": [
+    {
+      "observation": "The mission library now names `Bumsdito#3005` as the preferred returning-player validation account, but it still does not spell out the minimum evidence needed to prove this feature: re-read the DB-backed route after reconciliation and confirm the formerly missing recent IDs are persisted there without duplication.",
+      "reason": "already-documented-or-ambiguous"
+    },
+    {
+      "observation": "The mission library did not capture that stale derived detection must be match-specific rather than only player-wide.",
+      "reason": "already-documented"
+    }
+  ],
+  "previousRound": "C:/Users/bendc/Documents/GitHub/Leagueback-WEBAPP/.factory/validation/data-freshness-followup/scrutiny/synthesis.json"
 }

@@ -1,34 +1,21 @@
 {
   "featureId": "returning-player-stale-derived-refresh",
-  "reviewedAt": "2026-03-30T00:00:00Z",
+  "reviewedAt": "2026-03-30T19:03:01Z",
   "commitId": "9c2d0f1",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
-  "status": "fail",
+  "status": "pass",
   "codeReview": {
-    "summary": "The feature adds a stale-row detection path and metadata writes, but it does not refresh the visible returning-player history after stale-only reanalysis and it can regress freshness metadata by overwriting latest-db fields with older stale matches processed later in the loop.",
-    "issues": [
-      {
-        "file": "components/dashboard/lol-stats-dashboard.tsx",
-        "line": 897,
-        "severity": "blocking",
-        "description": "The dashboard only reloads stored matches when `syncResult.analyzedCount > 0`. If the returning-player refresh only updates stale existing rows, `refreshedStaleCount` increases but `analyzedCount` stays 0, so the UI continues showing the stale pre-refresh summaries for the current search session. That misses VAL-FRESHNESS-003's requirement that visible history reflects refreshed derived data after search completes."
-      },
-      {
-        "file": "app/api/match-performance/route.ts",
-        "line": 110,
-        "severity": "blocking",
-        "description": "Every match-performance reanalysis overwrites `player_sync_metadata.latest_db_match_id/latest_db_match_created_at` with the currently processed match. During stale refresh, older stale rows can be processed after the actual newest DB row, causing metadata to move backward to an older match. Subsequent freshness logic that depends on latest-db metadata can become inaccurate, so the durable sync state is not maintained truthfully."
-      }
-    ]
+    "summary": "The feature commit fixes the earlier player-wide derivation-version flaw by making stale detection match-specific via per-match metadata, and it correctly extends the returning-player sync path to reanalyze stale recent rows even when the recent Riot window is already stored. I did not find a remaining feature-specific correctness issue in this commit beyond the separate dashboard surfacing/monotonic-metadata problems already attributed to other freshness features.",
+    "issues": []
   },
   "sharedStateObservations": [
     {
-      "area": "knowledge",
-      "observation": "The repo library documents that returning-player freshness needs durable sync state, but it does not warn that stale-only refreshes must also trigger a visible stored-history reload and must preserve monotonic latest-db metadata when older rows are reprocessed.",
-      "evidence": "`.factory/library/architecture.md` mentions bounded reconciliation and durable sync state in general terms, while the bug appears in `components/dashboard/lol-stats-dashboard.tsx:897` and `app/api/match-performance/route.ts:110`."
+      "area": "skills",
+      "observation": "The worker feedback shows a recurring startup pitfall on Windows: worker-base still lets sessions attempt .factory/init.sh in ways that are not appropriate for this host, even though mission guidance says to treat it as optional/no-op without a POSIX shell.",
+      "evidence": "Transcript skeleton for worker session 9a2caa52-cea5-4c64-beac-541a7ca62514 includes python3 C:\\Users\\bendc\\Documents\\GitHub\\Leagueback-WEBAPP\\.factory\\init.sh, and handoff.skillFeedback explicitly asks for clearer worker-base guidance for Windows."
     }
   ],
   "addressesFailureFrom": null,
-  "summary": "Reviewed transcript skeleton, handoff, skill guidance, and commit `9c2d0f1`. The implementation correctly adds stale-row detection and a new stale-id route, but it fails VAL-FRESHNESS-003 because stale-only refreshes do not update the visible search result and because sync metadata can be rewritten to an older latest-db match during stale reanalysis."
+  "summary": "Reviewed the feature metadata, handoff, transcript skeleton, skill instructions, and commit 9c2d0f1. The implementation now detects stale rows on a per-match basis and reprocesses stale recent stored matches through the returning-player reconciliation path, so this feature passes review; the remaining freshness blockers live in adjacent dashboard/metadata behavior outside this commit."
 }

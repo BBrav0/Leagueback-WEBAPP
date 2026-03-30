@@ -1,0 +1,147 @@
+{
+  "feature": "data-freshness-followup",
+  "flowId": "data-freshness-main",
+  "appUrl": "http://127.0.0.1:3005",
+  "account": {
+    "riotId": "Bumsdito#3005",
+    "puuid": "0Ve4jH7Gtd8eZLCcLVmlNjX-B3yYdJUxRYx15CU9wro2R_eEnMx5eDUaZb0mtPvAyYMkod9TDdI9mQ"
+  },
+  "assertions": [
+    {
+      "id": "VAL-FRESHNESS-001",
+      "title": "Existing stored player search reconciles against live Riot history",
+      "status": "pass",
+      "decision": "pass",
+      "evidence": {
+        "commands": [
+          "python -c \"import urllib.request, json; data=json.load(urllib.request.urlopen('http://127.0.0.1:3005/api/account?gameName=Bumsdito&tagLine=3005', timeout=30)); print(json.dumps(data, indent=2))\"",
+          "python -c \"import urllib.request, json; puuid='0Ve4jH7Gtd8eZLCcLVmlNjX-B3yYdJUxRYx15CU9wro2R_eEnMx5eDUaZb0mtPvAyYMkod9TDdI9mQ'; data=json.load(urllib.request.urlopen(f'http://127.0.0.1:3005/api/stored-matches?puuid={puuid}&limit=10&offset=0', timeout=60)); print(json.dumps({'storedTop10':[m['id'] for m in data.get('matches',[])],'totalCount':data.get('totalCount')}, indent=2))\"",
+          "python -c \"import urllib.request, json; puuid='0Ve4jH7Gtd8eZLCcLVmlNjX-B3yYdJUxRYx15CU9wro2R_eEnMx5eDUaZb0mtPvAyYMkod9TDdI9mQ'; data=json.load(urllib.request.urlopen(f'http://127.0.0.1:3005/api/match-history?puuid={puuid}&count=10&start=0', timeout=90)); print(json.dumps(data, indent=2))\"",
+          "python -c \"import urllib.request, json; puuid='0Ve4jH7Gtd8eZLCcLVmlNjX-B3yYdJUxRYx15CU9wro2R_eEnMx5eDUaZb0mtPvAyYMkod9TDdI9mQ'; url=f'http://127.0.0.1:3005/api/match-performance?matchId=NA1_5524144855&userPuuid={puuid}'; data=json.load(urllib.request.urlopen(url, timeout=120)); print(json.dumps(data, indent=2))\""
+        ],
+        "observedOutputs": [
+          "GET / -> 200 and GET /player/Bumsdito%233005 -> 200 on the shared local app.",
+          "GET /api/account?gameName=Bumsdito&tagLine=3005 returned the existing stored account with puuid 0Ve4jH7Gtd8eZLCcLVmlNjX-B3yYdJUxRYx15CU9wro2R_eEnMx5eDUaZb0mtPvAyYMkod9TDdI9mQ.",
+          "Initial GET /api/stored-matches top 10 contained only two Mar 30 recent IDs followed by older Mar 24/Mar 18 rows, proving the player already had DB-backed stored history before reconciliation.",
+          "GET /api/match-history top 10 returned newer Riot IDs including NA1_5524144855 and NA1_5524114794 that were absent from the stored top page.",
+          "GET /api/match-performance?matchId=NA1_5524144855&userPuuid=... returned success with a reconstructed summary and syncMetadata.recentMatchWindow=25, exercising the reconciliation runtime for the returning player."
+        ],
+        "keyData": {
+          "initialStoredTop10": [
+            "NA1_5524772591",
+            "NA1_5524751003",
+            "NA1_5518873625",
+            "NA1_5518868960",
+            "NA1_5518854262",
+            "NA1_5518841113",
+            "NA1_5515103030",
+            "NA1_5515084877",
+            "NA1_5515071939",
+            "NA1_5515051334"
+          ],
+          "liveTop10": [
+            "NA1_5524772591",
+            "NA1_5524751003",
+            "NA1_5524144855",
+            "NA1_5524114794",
+            "NA1_5524091304",
+            "NA1_5523824955",
+            "NA1_5523791185",
+            "NA1_5523755935",
+            "NA1_5519761959",
+            "NA1_5519756542"
+          ],
+          "firstReconciledMatch": "NA1_5524144855"
+        }
+      }
+    },
+    {
+      "id": "VAL-FRESHNESS-002",
+      "title": "Missing recent matches surface in DB-backed history without duplicates",
+      "status": "pass",
+      "decision": "pass",
+      "evidence": {
+        "commands": [
+          "python -c \"import urllib.request, json; puuid='0Ve4jH7Gtd8eZLCcLVmlNjX-B3yYdJUxRYx15CU9wro2R_eEnMx5eDUaZb0mtPvAyYMkod9TDdI9mQ'; mids=['NA1_5524091304','NA1_5523824955','NA1_5523791185','NA1_5523755935','NA1_5519761959','NA1_5519756542']; out=[]\nfor mid in mids:\n data=json.load(urllib.request.urlopen(f'http://127.0.0.1:3005/api/match-performance?matchId={mid}&userPuuid={puuid}', timeout=120)); out.append({'matchId': mid, 'success': data.get('success'), 'summaryId': data.get('matchSummary',{}).get('id')})\nprint(json.dumps(out, indent=2))\"",
+          "python -c \"import urllib.request, json; puuid='0Ve4jH7Gtd8eZLCcLVmlNjX-B3yYdJUxRYx15CU9wro2R_eEnMx5eDUaZb0mtPvAyYMkod9TDdI9mQ'; data=json.load(urllib.request.urlopen(f'http://127.0.0.1:3005/api/stored-matches?puuid={puuid}&limit=10&offset=0', timeout=60)); print(json.dumps({'ids':[m['id'] for m in data.get('matches',[])],'count':len(data.get('matches',[])),'totalCount':data.get('totalCount')}, indent=2))\""
+        ],
+        "observedOutputs": [
+          "Six previously missing recent Riot IDs all returned success through /api/match-performance with summaryId equal to the requested matchId.",
+          "A post-reconciliation GET /api/stored-matches top 10 exactly matched the live Riot top 10 order.",
+          "No duplicate IDs appeared in the re-read stored top page.",
+          "totalCount grew from 61 before reconciliation to 69 after the missing recent rows were persisted."
+        ],
+        "keyData": {
+          "reconciledIds": [
+            "NA1_5524091304",
+            "NA1_5523824955",
+            "NA1_5523791185",
+            "NA1_5523755935",
+            "NA1_5519761959",
+            "NA1_5519756542"
+          ],
+          "postSyncStoredTop10": [
+            "NA1_5524772591",
+            "NA1_5524751003",
+            "NA1_5524144855",
+            "NA1_5524114794",
+            "NA1_5524091304",
+            "NA1_5523824955",
+            "NA1_5523791185",
+            "NA1_5523755935",
+            "NA1_5519761959",
+            "NA1_5519756542"
+          ],
+          "duplicatesInPostSyncTop10": [],
+          "totalCountBefore": 61,
+          "totalCountAfter": 69
+        }
+      }
+    },
+    {
+      "id": "VAL-FRESHNESS-003",
+      "title": "Stale derived rows refresh truthfully after recent-window reconciliation",
+      "status": "pass",
+      "decision": "pass",
+      "evidence": {
+        "commands": [
+          "python -c \"import urllib.request, json; puuid='0Ve4jH7Gtd8eZLCcLVmlNjX-B3yYdJUxRYx15CU9wro2R_eEnMx5eDUaZb0mtPvAyYMkod9TDdI9mQ'; req=urllib.request.Request('http://127.0.0.1:3005/api/player-matches/stale-ids', data=json.dumps({'puuid': puuid, 'matchIds': ['NA1_5524772591','NA1_5524751003','NA1_5524144855','NA1_5524114794','NA1_5524091304','NA1_5523824955','NA1_5523791185','NA1_5523755935','NA1_5519761959','NA1_5519756542']}).encode('utf-8'), headers={'Content-Type':'application/json'}); data=json.load(urllib.request.urlopen(req, timeout=120)); print(json.dumps(data, indent=2))\"",
+          "pnpm test",
+          "pnpm run typecheck"
+        ],
+        "observedOutputs": [
+          "POST /api/player-matches/stale-ids for the reconciled recent window returned {\"staleMatchIds\": []}, indicating no remaining stale derived rows after the refresh path ran.",
+          "Each reconciled /api/match-performance response included syncMetadata.recentMatchWindow=25, consistent with the persisted freshness window used for stale checks.",
+          "pnpm test passed with 10 files and 58 tests.",
+          "pnpm run typecheck passed with exit code 0."
+        ],
+        "keyData": {
+          "staleMatchIds": [],
+          "recentMatchWindow": 25,
+          "validators": {
+            "pnpm test": {
+              "passed": true,
+              "tests": 58
+            },
+            "pnpm run typecheck": {
+              "passed": true
+            }
+          }
+        }
+      }
+    }
+  ],
+  "toolsUsed": [
+    "Read",
+    "LS",
+    "Grep",
+    "Execute",
+    "TodoWrite"
+  ],
+  "blockers": [],
+  "frictions": [
+    "Browser automation remained unavailable on this Windows host, so validation used the approved tests-plus-dev-server-evidence fallback against the shared local app on port 3005.",
+    "The stale-id API is POST-only; a GET probe returned HTTP 405 before the correct POST validation call was used."
+  ],
+  "summary": "All three freshness assertions passed on the shared local app. The existing Bumsdito#3005 player started with older DB-backed history, live Riot history exposed missing recent IDs, runtime reconciliation persisted those IDs into the DB-backed top page without duplicates, and stale-row checks for the refreshed recent window returned no stale matches."
+}
