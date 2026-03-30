@@ -22,6 +22,7 @@ Mission-specific product scope and worker-facing backlog framing.
 - History filters, persisted preferences, reset controls
 - Loaded-history export
 - Web-only copy and fallback-state polish
+- Returning-player freshness fixes that reconcile existing DB-backed history against Riot and keep the live LeagueBack database aligned with current app behavior
 
 ## Explicit exclusions
 

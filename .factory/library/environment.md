@@ -20,6 +20,7 @@ Environment variables, external dependencies, and setup notes.
 ## External dependencies
 
 - Supabase is the backing data store for cached accounts, cached matches, and precomputed player match rows.
+- The live Supabase project for this mission is `LeagueBack` (`lovbyjahuxfokpbkxviz`); schema changes should be applied there via tracked migrations.
 - Riot data is fetched through the configured Riot proxy / worker URL; this mission should reuse the existing proxy setup.
 
 ## Platform notes

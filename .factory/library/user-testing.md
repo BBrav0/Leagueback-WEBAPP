@@ -60,6 +60,7 @@ Validation surface, setup notes, and concurrency guidance for this mission.
 - Stored-history loading vs appended older-history loading
 - Truthful fallback copy instead of placeholders
 - Missing raw detail data in the match-details surface
+- Returning-player searches where Supabase already has stored history, so freshness reconciliation must be proven against existing DB-backed data instead of a first-load/new-player path
 - When browser automation is unavailable, capture equivalent dev-server evidence and state clearly which interactions were validated through the approved fallback path
 
 ## Flow Validator Guidance: browser
