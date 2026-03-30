@@ -40,7 +40,7 @@ Use this skill for features that change:
    - tests,
    - build if the change materially affects shipped app behavior or the worker-base guidance requires it.
    Do not skip the committed lint/static-check gate when it exists.
-8. If the feature involves persisted state, verify refresh/revisit behavior and route precedence explicitly.
+8. If the feature involves persisted state, verify refresh/revisit behavior and route precedence explicitly. When browser automation is unavailable but mission guidance allows the fallback, prefer targeted regression coverage for storage helpers/events plus dev-server evidence over vague source-only claims.
 9. If the feature involves mixed stored-history plus older-history loading, verify both sources still behave correctly together.
 10. Before claiming automated coverage for a new test file, confirm that the file is actually included by the committed test runner configuration. In this repo, be especially careful with Vitest include globs before adding route/component tests outside `lib/**`.
 11. Prepare a handoff that makes shortcuts obvious: list tests added first, then commands, browser flows, and any discovered gaps.
