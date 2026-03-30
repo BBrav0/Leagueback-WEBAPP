@@ -25,6 +25,15 @@ import {
 } from "@/lib/impact-stats"
 import { loadSavedLookups, saveSuccessfulLookup, type SavedLookup } from "@/lib/saved-lookups"
 import {
+  countActiveHistoryFilters,
+  DEFAULT_HISTORY_PREFERENCES,
+  filterAndSortMatches,
+  loadHistoryPreferences,
+  resetHistoryPreferences,
+  saveHistoryPreferences,
+  type HistoryPreferences,
+} from "@/lib/history-preferences"
+import {
   isValidationFixtureIdentity,
   VALIDATION_FIXTURE_ACCOUNT,
   VALIDATION_FIXTURE_DETAILS,
@@ -34,6 +43,14 @@ import { cn } from "@/lib/utils"
 import { rateLimiter } from "@/lib/rate-limiter"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 
 
 const chartConfig = {
@@ -419,10 +436,12 @@ function MatchDetailsContent({ details }: { details: MatchDetailsData }) {
 const MatchCard = memo(function MatchCard({
   match,
   currentPuuid,
+  compactCards = false,
   fixtureDetailsByMatchId,
 }: {
   match: MatchSummary;
   currentPuuid: string | null;
+  compactCards?: boolean;
   fixtureDetailsByMatchId?: Record<string, MatchDetailsData>;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -489,7 +508,7 @@ const MatchCard = memo(function MatchCard({
   return (
     <div ref={cardRef}>
       <Card className="bg-slate-800/50 border-slate-600/50 w-full">
-        <CardHeader>
+        <CardHeader className={cn(compactCards ? "pb-4" : undefined)}>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-3">
               <CardTitle className="text-white flex flex-wrap items-center gap-3">
@@ -507,11 +526,11 @@ const MatchCard = memo(function MatchCard({
                   {match.impactCategoryLabel}
                 </Badge>
               </CardTitle>
-              <CardDescription className="text-slate-300">
+              <CardDescription className={cn("text-slate-300", compactCards ? "text-xs" : undefined)}>
                 {match.summonerName} ⏱️ {match.gameTime} ⚔️ {match.kda}  <br />
                 🧙 {match.cs} 🔎 {match.visionScore}
               </CardDescription>
-              <div className="flex flex-wrap gap-2 text-xs text-slate-200">
+              <div className={cn("flex flex-wrap gap-2 text-xs text-slate-200", compactCards ? "gap-1.5" : undefined)}>
                 <Badge variant="secondary" className="bg-slate-700/70 text-slate-100 hover:bg-slate-700/70">
                   Played {match.playedAt}
                 </Badge>
@@ -537,7 +556,7 @@ const MatchCard = memo(function MatchCard({
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className={cn(compactCards ? "pt-0" : undefined)}>
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-slate-300 text-sm font-medium">Performance Timeline</div>
@@ -578,6 +597,7 @@ export default function Component() {
   const pathname = usePathname();
   const [matchesData, setMatchesData] = useState<MatchSummary[]>([]);
   const [savedLookups, setSavedLookups] = useState<SavedLookup[]>([]);
+  const [historyPreferences, setHistoryPreferences] = useState<HistoryPreferences>(DEFAULT_HISTORY_PREFERENCES);
   const [impactCounts, setImpactCounts] = useState<ImpactCounts>({
     impactWins: 0,
     impactLosses: 0,
@@ -619,7 +639,28 @@ export default function Component() {
 
   useEffect(() => {
     setSavedLookups(loadSavedLookups());
+    setHistoryPreferences(loadHistoryPreferences());
   }, []);
+
+  useEffect(() => {
+    saveHistoryPreferences(historyPreferences);
+  }, [historyPreferences]);
+
+  const filteredMatches = useMemo(
+    () => filterAndSortMatches(matchesData, historyPreferences),
+    [historyPreferences, matchesData]
+  );
+
+  const activeHistoryFilterCount = useMemo(
+    () => countActiveHistoryFilters(historyPreferences),
+    [historyPreferences]
+  );
+
+  const championFilterOptions = useMemo(() => {
+    return Array.from(new Set(matchesData.map((match) => match.champion).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [matchesData]);
 
   const syncImpactStats = useCallback(async (puuid: string, matches: MatchSummary[]) => {
     try {
@@ -909,6 +950,20 @@ export default function Component() {
   const handleSavedLookupClick = async (lookup: SavedLookup) => {
     await runSearch(lookup.gameName, lookup.tagLine, { syncUrl: true });
   };
+
+  const updateHistoryPreferences = useCallback(
+    (updates: Partial<HistoryPreferences>) => {
+      setHistoryPreferences((current) => ({
+        ...current,
+        ...updates,
+      }));
+    },
+    []
+  );
+
+  const handleResetHistoryPreferences = useCallback(() => {
+    setHistoryPreferences(resetHistoryPreferences());
+  }, []);
 
   const handleLoadMore = async () => {
     if (!currentPuuid || loadingMore || !allDbMatchesLoaded) return;
@@ -1232,6 +1287,143 @@ export default function Component() {
           </Card>
         )}
 
+        {hasSearched && (
+          <Card className="bg-slate-800/50 border-slate-600/50">
+            <CardHeader>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <CardTitle className="text-white">History filters & display</CardTitle>
+                  <CardDescription className="text-slate-300">
+                    Filter the matches currently loaded on this device and keep these preferences across refreshes.
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary" className="bg-slate-700/70 text-slate-100 hover:bg-slate-700/70">
+                    Showing {filteredMatches.length} of {matchesData.length} loaded matches
+                  </Badge>
+                  {activeHistoryFilterCount > 0 && (
+                    <Badge variant="outline" className="border-sky-400/40 text-sky-100">
+                      {activeHistoryFilterCount} active filter{activeHistoryFilterCount === 1 ? "" : "s"}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid gap-4 lg:grid-cols-3">
+                <div className="space-y-2">
+                  <Label className="text-white">Result</Label>
+                  <Select
+                    value={historyPreferences.result}
+                    onValueChange={(value) =>
+                      updateHistoryPreferences({
+                        result: value as HistoryPreferences["result"],
+                      })
+                    }
+                  >
+                    <SelectTrigger className="border-slate-600 bg-slate-900/60 text-slate-100">
+                      <SelectValue placeholder="All results" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All results</SelectItem>
+                      <SelectItem value="Victory">Victories</SelectItem>
+                      <SelectItem value="Defeat">Defeats</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-white">Impact category</Label>
+                  <Select
+                    value={historyPreferences.impactCategory}
+                    onValueChange={(value) =>
+                      updateHistoryPreferences({
+                        impactCategory: value as HistoryPreferences["impactCategory"],
+                      })
+                    }
+                  >
+                    <SelectTrigger className="border-slate-600 bg-slate-900/60 text-slate-100">
+                      <SelectValue placeholder="All categories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All categories</SelectItem>
+                      <SelectItem value="impactWins">Impact wins</SelectItem>
+                      <SelectItem value="impactLosses">Impact losses</SelectItem>
+                      <SelectItem value="guaranteedWins">Guaranteed wins</SelectItem>
+                      <SelectItem value="guaranteedLosses">Guaranteed losses</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-white">Champion</Label>
+                  <Select
+                    value={historyPreferences.champion || "__all__"}
+                    onValueChange={(value) =>
+                      updateHistoryPreferences({
+                        champion: value === "__all__" ? "" : value,
+                      })
+                    }
+                  >
+                    <SelectTrigger className="border-slate-600 bg-slate-900/60 text-slate-100">
+                      <SelectValue placeholder="All champions" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All champions</SelectItem>
+                      {championFilterOptions.map((champion) => (
+                        <SelectItem key={champion} value={champion}>
+                          {champion}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-end">
+                <div className="space-y-2">
+                  <Label className="text-white">Sort order</Label>
+                  <Select
+                    value={historyPreferences.sort}
+                    onValueChange={(value) =>
+                      updateHistoryPreferences({
+                        sort: value as HistoryPreferences["sort"],
+                      })
+                    }
+                  >
+                    <SelectTrigger className="border-slate-600 bg-slate-900/60 text-slate-100">
+                      <SelectValue placeholder="Newest first" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="newest">Loaded order</SelectItem>
+                      <SelectItem value="highestImpact">Highest impact first</SelectItem>
+                      <SelectItem value="oldest">Oldest loaded first</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-900/50 px-4 py-3">
+                  <div>
+                    <div className="text-sm font-medium text-white">Compact cards</div>
+                    <div className="text-xs text-slate-400">Persisted per device.</div>
+                  </div>
+                  <Switch
+                    checked={historyPreferences.compactCards}
+                    onCheckedChange={(checked) =>
+                      updateHistoryPreferences({ compactCards: checked })
+                    }
+                    aria-label="Toggle compact cards"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleResetHistoryPreferences}
+                  className="border-slate-600 bg-slate-900/60 text-slate-100 hover:bg-slate-700 hover:text-white"
+                >
+                  Reset saved filters
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Error Display */}
         {error && (
           <Alert className="bg-red-900/50 border-red-600">
@@ -1264,14 +1456,26 @@ export default function Component() {
           <div className="flex flex-col md:flex-row gap-6">
             {/* Match cards */}
             <div className="md:w-3/5 space-y-6">
-              {matchesData.map((match) => (
+              {filteredMatches.map((match) => (
                 <MatchCard
                   key={match.id}
                   match={match}
                   currentPuuid={currentPuuid}
+                  compactCards={historyPreferences.compactCards}
                   fixtureDetailsByMatchId={isValidationFixtureActive ? VALIDATION_FIXTURE_DETAILS : undefined}
                 />
               ))}
+
+              {filteredMatches.length === 0 && (
+                <Card className="bg-slate-800/50 border-slate-600/50">
+                  <CardContent className="p-8 text-center">
+                    <div className="text-slate-200 text-lg">No loaded matches match these filters</div>
+                    <div className="mt-2 text-sm text-slate-400">
+                      Adjust your result, impact category, or champion filters, or reset saved filters to return to the full loaded history.
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
               
               {/* Infinite scroll sentinel for DB matches */}
               {hasMoreDbMatches && !allDbMatchesLoaded && (
