@@ -1,22 +1,21 @@
 {
   "featureId": "history-filters-preferences-and-reset",
-  "reviewedAt": "2026-03-30T07:53:15Z",
-  "commitId": "573ba22d4f4b1aecb17213aa5d166c04f6217372",
+  "reviewedAt": "2026-03-30T08:05:00Z",
+  "commitId": "98d4587d931e107d5fb9a8be2de400d5cc53484d",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
-  "status": "fail",
+  "status": "pass",
   "codeReview": {
-    "summary": "The feature adds persisted result/impact/champion filters, compact-card display state, and reset wiring with focused helper tests, but it does not fully satisfy the documented route-precedence behavior for VAL-CROSS-002 because saved-lookups are not reapplied from storage after the initial mount.",
-    "issues": [
-      {
-        "file": "components/dashboard/lol-stats-dashboard.tsx",
-        "line": 662,
-        "severity": "blocking",
-        "description": "Saved lookups are loaded from localStorage only once on mount via setSavedLookups(loadSavedLookups()), so after a user loads a deep-linked player route and later triggers a saved-lookup selection, a refresh leaves the recent-account list stale in memory. Because the route auto-load effect (lines 1070-1090) no longer has access to the updated saved lookup that should coexist with persisted preferences, the implementation cannot fully prove the contract requirement that deep links continue to coexist with persisted recent-account entries after subsequent saved-lookup selection, filter changes, and refresh."
-      }
-    ]
+    "summary": "The fix addresses the prior blocking gap by keeping saved Riot ID lookups synchronized with localStorage after successful lookup mutations, so the dashboard's recent-account state rehydrates correctly after deep-link selection, saved-lookup reselection, filter changes, and refresh while preserving the existing route-precedence and history-preference behavior.",
+    "issues": []
   },
-  "sharedStateObservations": [],
-  "addressesFailureFrom": null,
-  "summary": "Reviewed the feature handoff, transcript skeleton, commit 573ba22, and the touched dashboard/history-preferences files. The filter and reset behavior is implemented with adequate helper coverage, but I found a blocking gap against VAL-CROSS-002: the dashboard does not rehydrate updated saved-lookups after post-mount saved-lookup selections, so the claimed coexistence of deep links with persisted recent-account entries after saved-lookup selection and refresh is not fully satisfied."
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The web-feature-worker skill still tells workers to write failing tests first when possible, but the original history-filters worker handoff/tests show the feature landed with new helper coverage added after implementation rather than as an initial failing test. The skill could be clearer that persisted-state fixes may instead rely on targeted post-implementation regression tests when touching the monolithic dashboard flow.",
+      "evidence": "Original feature diff 573ba22 adds lib/history-preferences.test.ts alongside the new helper/UI code, and the fix handoff for worker session \u001b99e4e5c-902a-4f57-95dd-c7065e8cf38d explicitly suggests clarifying storage-backed persisted-state guidance in .factory/skills/web-feature-worker/SKILL.md."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/history-ux/scrutiny/reviews/history-filters-preferences-and-reset.json",
+  "summary": "Reviewed the prior failed review, both the original feature commit (573ba22) and the fix commit (98d4587), the fix handoff, transcript skeleton, and shared-state docs. The new saved-lookup subscription closes the original VAL-CROSS-002 gap by rehydrating recent Riot IDs from storage after successful lookup mutations, and I found no remaining blocking issues in the scoped filter/preferences/reset behavior."
 }

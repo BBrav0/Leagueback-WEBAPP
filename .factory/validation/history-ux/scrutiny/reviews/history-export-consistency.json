@@ -1,21 +1,21 @@
 {
   "featureId": "history-export-consistency",
-  "reviewedAt": "2026-03-30T07:53:08Z",
+  "reviewedAt": "2026-03-30T08:03:52Z",
   "commitId": "d9c543500d2cdb2e6abd9559f27ac8a71523385c",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
   "status": "pass",
   "codeReview": {
-    "summary": "Reviewed the feature handoff, transcript skeleton, and commit d9c5435. The dashboard now labels export scope as filtered loaded matches, disables export when no filtered rows remain, deduplicates mixed stored/API history before rendering and export, and adds focused helper tests covering row mapping, CSV escaping, filename generation, and duplicate suppression. I did not find any blocking or non-blocking implementation defects against VAL-HISTORY-004 or VAL-CROSS-003.",
+    "summary": "The feature meets the loaded-history export contract: export scope is explicitly tied to filtered loaded matches, the button disables in zero-result states, and both stored-history paging and appended older-history loads are deduplicated before filtering/export so mixed loading does not duplicate rows. The helper and tests cover row mapping, CSV escaping, deterministic filenames, and first-seen-order deduplication.",
     "issues": []
   },
   "sharedStateObservations": [
     {
-      "area": "skills",
-      "observation": "The web-feature-worker skill should document a Windows-safe port-3005 cleanup fallback that avoids PowerShell $-variable interpolation, because the worker followed mission guidance but still hit an exec-wrapper quoting failure when trying to stop the dev server.",
-      "evidence": "Transcript skeleton for workerSessionId 9eef7b32-716c-41e6-8111-9dc4f49a39bc shows the manifest-style stop command failing with 5 was unexpected at this time. after a prior PowerShell-based cleanup attempt, and the handoff.skillFeedback suggests documenting a safer fallback."
+      "area": "knowledge",
+      "observation": "The worker discovered an exec-wrapper-specific failure mode for the documented Windows stop helper because PowerShell dollar-sign variables were mangled, but the shared state still documents only the primary stop command. A wrapper-safe fallback cleanup command should be documented for future workers using this host.",
+      "evidence": "history-export-consistency handoff skillFeedback and discoveredIssues mention the documented Windows cleanup command failing through the exec wrapper; AGENTS.md only gives prose guidance about a netstat/taskkill fallback and services.yaml still exposes a wrapper-sensitive stop command."
     }
   ],
   "addressesFailureFrom": null,
-  "summary": "Pass. The history export implementation satisfies the documented filtered loaded-history scope, keeps export disabled for zero-result states, and preserves consistent filtering/export behavior after mixed stored-history and older-history loads without duplicate or dropped rows."
+  "summary": "Reviewed the feature handoff, transcript skeleton, commit diff, and shared-state docs. The implementation satisfies the milestone contract and I found no feature-specific code issues."
 }
