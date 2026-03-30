@@ -25,6 +25,8 @@ export interface PlayerMatchRow {
   chart_data: Array<{ minute: number; yourImpact: number; teamImpact: number }>;
   game_creation: number;
   game_duration: number;
+  role: string | null;
+  damage_to_champions: number | null;
 }
 
 export interface PlayerSyncMetadataRow {
@@ -55,6 +57,8 @@ function rowToMatchSummary(row: PlayerMatchRow): MatchSummary {
   const metadata = buildMatchMetadata({
     gameCreation: row.game_creation,
     gameDuration: row.game_duration,
+    teamPosition: row.role ?? undefined,
+    totalDamageDealtToChampions: row.damage_to_champions ?? undefined,
     impactCategory: row.impact_category,
   });
 

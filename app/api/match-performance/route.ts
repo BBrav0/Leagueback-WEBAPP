@@ -91,6 +91,8 @@ export async function GET(request: NextRequest) {
       chart_data: matchSummary.data,
       game_creation: matchDetails.info.gameCreation ?? 0,
       game_duration: matchDetails.info.gameDuration,
+      role: matchSummary.role,
+      damage_to_champions: matchSummary.damageToChampions,
     };
 
     const persistError = await upsertPlayerMatch(row);

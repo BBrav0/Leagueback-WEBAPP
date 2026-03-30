@@ -142,6 +142,8 @@ export async function POST(request: NextRequest) {
           chart_data: summary.data,
           game_creation: matchDetails.info.gameCreation ?? 0,
           game_duration: matchDetails.info.gameDuration,
+          role: summary.role,
+          damage_to_champions: summary.damageToChampions,
         });
       } catch (err) {
         console.error("Backfill row reconstruction failed:", err);
