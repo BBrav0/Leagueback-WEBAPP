@@ -1,7 +1,7 @@
 {
   "milestone": "web-polish",
-  "round": 1,
-  "status": "pass",
+  "round": 2,
+  "status": "fail",
   "validatorsRun": {
     "test": {
       "passed": true,
@@ -21,22 +21,33 @@
   },
   "reviewsSummary": {
     "total": 2,
-    "passed": 1,
-    "failed": 1,
+    "passed": 0,
+    "failed": 2,
     "failedFeatures": [
-      "web-copy-and-empty-state-polish"
+      "web-copy-and-empty-state-polish",
+      "web-polish-copy-truthfulness-fix"
     ]
   },
   "blockingIssues": [
     {
       "featureId": "web-copy-and-empty-state-polish",
       "severity": "blocking",
-      "description": "Older-history errors can still surface raw Error.message text instead of the polished Leagueback fallback wording, so the copy pass did not guarantee truthful user-facing fallback language on that path."
+      "description": "The older-history load-more catch path still renders raw Error.message text, so users can still see backend or generic failure copy instead of the required explicit Leagueback wording."
     },
     {
       "featureId": "web-copy-and-empty-state-polish",
       "severity": "blocking",
-      "description": "The details panel still showed implementation-facing cache source labels such as 'Cached match data' and 'Legacy cached match data', which left product UI copy inconsistent with the web-polish scope."
+      "description": "The match-details header still exposes implementation-facing cache/source labels such as 'Cached match data' and 'Legacy cached match data' instead of intentional product-facing wording."
+    },
+    {
+      "featureId": "web-polish-copy-truthfulness-fix",
+      "severity": "blocking",
+      "description": "The fix commit only changed the non-Error fallback branch for older-history loading, so raw Error.message text can still surface to users on that path."
+    },
+    {
+      "featureId": "web-polish-copy-truthfulness-fix",
+      "severity": "blocking",
+      "description": "The fix commit still leaves implementation-facing cache/source labels visible in the details header, so the prior scrutiny finding remains unresolved."
     }
   ],
   "appliedUpdates": [],
@@ -49,5 +60,5 @@
     }
   ],
   "rejectedObservations": [],
-  "previousRound": null
+  "previousRound": ".factory/validation/web-polish/scrutiny/synthesis.json"
 }
