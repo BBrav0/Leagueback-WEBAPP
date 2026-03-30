@@ -1,0 +1,101 @@
+{
+  "groupId": "web-polish-main",
+  "surface": "web",
+  "assertionsTested": ["VAL-POLISH-001", "VAL-POLISH-002"],
+  "testedAt": "2026-03-30T00:00:00Z",
+  "isolation": {
+    "appUrl": "http://127.0.0.1:3005",
+    "missionDir": "C:\\Users\\bendc\\.factory\\missions\\7b970ada-3b1a-476d-827a-4cd2a618e64e",
+    "port": 3005,
+    "fallbackPath": "approved tests plus dev-server/browser evidence"
+  },
+  "toolsUsed": ["Read", "Grep", "agent-browser", "pnpm test"],
+  "results": [
+    {
+      "id": "VAL-POLISH-001",
+      "title": "Shared and dashboard copy stays web-only and truthful",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Review primary dashboard copy in source and live home route",
+          "expected": "Shared layout and home dashboard use web-only truthful wording without desktop/native references",
+          "observed": "Home route shows 'Leagueback web match history' and 'review ranked history, match details, and impact trends in your browser' with no desktop/native wording in dashboard copy."
+        },
+        {
+          "action": "Open /player/Validation Fixture#LOCAL and inspect loaded player dashboard",
+          "expected": "Player dashboard and controls remain web-only/truthful",
+          "observed": "Loaded player route kept web-only wording across filters, export control, match cards, and details affordances."
+        },
+        {
+          "action": "Open nested match details surface",
+          "expected": "Nested dashboard surfaces avoid excluded product-direction wording",
+          "observed": "Match details copy used truthful in-scope labels like 'Full match details loaded from deterministic validation fixture data' and did not reference desktop/native experiences."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "web-polish/web-polish-main/VAL-POLISH-001-home-dashboard.png",
+          "web-polish/web-polish-main/VAL-POLISH-001-player-dashboard.png",
+          "web-polish/web-polish-main/VAL-POLISH-001-nested-dashboard-surfaces.png"
+        ],
+        "grepCheck": "Repo grep over app/components/lib found no user-facing desktop/Electron/native placeholder drift in the dashboard surfaces under test; only internal mobile/sidebar comments in shadcn UI code.",
+        "consoleErrors": "No browser page errors were reported; console showed only dev-mode info logs and Recharts width/height warnings on the loaded player dashboard.",
+        "network": "agent-browser did not capture app requests in this session; validation relied on live rendered UI plus source grep under the approved fallback path."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-POLISH-002",
+      "title": "Loading, empty, error, and unavailable states use explicit fallback language",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect dashboard state copy in source for loading, empty, filtered-zero, and unavailable details states",
+          "expected": "States use explicit fallback language instead of generic placeholders",
+          "observed": "Source includes explicit messages such as 'Loading player history…', 'Leagueback is loading the account and first match results for this Riot ID.', 'No loaded match history is available yet', 'No loaded matches match these filters', and 'Match details unavailable'."
+        },
+        {
+          "action": "Load the validation fixture player dashboard and open match details",
+          "expected": "Live UI shows truthful unavailable/fallback copy on nested surfaces",
+          "observed": "Loaded dashboard showed explicit rank fallback text and details surfaces with truthful labels; fixture-backed details used explicit loaded-state wording."
+        },
+        {
+          "action": "Verify supporting automated coverage for fallback-state behavior",
+          "expected": "Relevant tests confirm explicit fallback handling",
+          "observed": "pnpm test passed, including validation-fixture, match-details, history-preferences, history-export, and saved-lookups coverage for truthful fallback labels and zero-state/persistence behavior."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "web-polish/web-polish-main/VAL-POLISH-001-player-dashboard.png",
+          "web-polish/web-polish-main/VAL-POLISH-001-nested-dashboard-surfaces.png"
+        ],
+        "consoleErrors": "No browser page errors were reported; console showed only dev-mode info logs and Recharts width/height warnings.",
+        "terminalOutput": "pnpm test -> 10 test files passed / 55 tests passed, including explicit fallback-state coverage in lib/match-details.test.ts and lib/validation-fixture.test.ts.",
+        "representativeFallbacks": [
+          "Rank unavailable for this validation fixture match.",
+          "No loaded match history is available yet",
+          "Change the current result, impact category, or champion filters, or reset saved filters to show the full loaded history again.",
+          "Full match details are unavailable because cached raw match data has not been saved for this match yet."
+        ]
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Mission-approved browser fallback was still needed for part of the evidence because agent-browser network capture did not record app requests in this session.",
+      "resolved": true,
+      "resolution": "Used live UI screenshots plus source/test evidence allowed by the temporary Windows fallback guidance.",
+      "affectedAssertions": ["VAL-POLISH-001", "VAL-POLISH-002"]
+    },
+    {
+      "description": "Player dashboard emitted Recharts width/height warnings in dev console during validation.",
+      "resolved": true,
+      "resolution": "Recorded as non-blocking console noise because the assertions focused on copy/fallback truthfulness and no page error occurred.",
+      "affectedAssertions": ["VAL-POLISH-001", "VAL-POLISH-002"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 2 assertions on the shared local app at port 3005. VAL-POLISH-001 passed and VAL-POLISH-002 passed using live UI screenshots plus approved fallback source/test evidence."
+}
