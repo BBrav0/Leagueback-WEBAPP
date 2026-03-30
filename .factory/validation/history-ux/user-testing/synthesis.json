@@ -1,23 +1,19 @@
 {
   "milestone": "history-ux",
-  "round": 3,
-  "status": "fail",
+  "round": 4,
+  "status": "pass",
   "assertionsSummary": {
     "total": 2,
-    "passed": 1,
+    "passed": 2,
     "failed": 0,
-    "blocked": 1
+    "blocked": 0
   },
   "passedAssertions": [
-    "VAL-CROSS-002"
+    "VAL-CROSS-002",
+    "VAL-CROSS-003"
   ],
   "failedAssertions": [],
-  "blockedAssertions": [
-    {
-      "id": "VAL-CROSS-003",
-      "blockedBy": "The current local runtime never exposed the required older-history append-ready UI or Load More Matches control after stored-history exhaustion, so the real mixed stored-plus-appended validation flow could not be executed end to end on this host."
-    }
-  ],
+  "blockedAssertions": [],
   "appliedUpdates": [],
   "previousRound": ".factory/validation/history-ux/user-testing/synthesis.json"
 }

@@ -1,0 +1,95 @@
+{
+  "groupId": "history-ux-rerun-round4",
+  "testedAt": "2026-03-30T09:12:09.077499+00:00",
+  "isolation": {
+    "appUrl": "http://127.0.0.1:3005",
+    "missionDir": "C:\\Users\\bendc\\.factory\\missions\\7b970ada-3b1a-476d-827a-4cd2a618e64e",
+    "fixtureIdentity": "Validation Fixture#LOCAL"
+  },
+  "toolsUsed": [
+    "agent-browser"
+  ],
+  "assertionResults": [
+    {
+      "id": "VAL-CROSS-002",
+      "title": "Deep links coexist with persisted recent/history preferences",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Open http://127.0.0.1:3005/player/Validation%20Fixture#LOCAL",
+          "expected": "Explicit deep link loads Validation Fixture while preserving persisted saved lookup and default history preferences",
+          "observed": "Route loaded /player/Validation%20Fixture#LOCAL with 2 stored matches, Load More Matches visible, localStorage preserved saved lookup and history preferences"
+        },
+        {
+          "action": "Inspect persisted browser state after route load",
+          "expected": "Explicit route wins over persisted state and saved lookup/history preferences remain available",
+          "observed": "localStorage contained leagueback_saved_lookups for Validation Fixture#LOCAL and leagueback_history_preferences with default filters; page stayed on Validation Fixture route"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "history-ux/history-ux-rerun-round4/VAL-CROSS-002-direct-route-loaded.png"
+        ],
+        "consoleErrors": "none; browser warnings only from Recharts width/height calculation during chart render",
+        "network": "App served successfully on http://127.0.0.1:3005; route rendered current repo state with older-history controls visible",
+        "localStorage": "leagueback_saved_lookups=[{\"gameName\":\"Validation Fixture\",\"tagLine\":\"LOCAL\"}], leagueback_history_preferences={\"result\":\"all\",\"impactCategory\":\"all\",\"champion\":\"\",\"sort\":\"newest\",\"compactCards\":false}"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-003",
+      "title": "Filtering and export stay consistent after mixed history loading",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Open deep-linked player route and exhaust stored history until older-history path is available",
+          "expected": "Append-ready state and Load More Matches control surface after stored history",
+          "observed": "Initial page showed 'append ready' copy and a visible Load More Matches button with 2 of 2 loaded matches"
+        },
+        {
+          "action": "Click Load More Matches",
+          "expected": "Older-history matches append without duplicates and counts update truthfully",
+          "observed": "Dashboard settled at 4 of 4 loaded matches with four match cards visible (Ahri, Leona, Sejuani, Thresh) and Load More Matches control disappeared"
+        },
+        {
+          "action": "Apply Result filter = Victories after mixed load",
+          "expected": "Filtered list/counts/export scope reflect combined loaded set only",
+          "observed": "UI updated to 2 of 4 loaded matches, 1 active filter, and Export scope: 2 filtered loaded matches showing Ahri and Sejuani only"
+        },
+        {
+          "action": "Add Impact category = Guaranteed losses to force zero-result state",
+          "expected": "Zero-result copy, counts, and export availability remain truthful",
+          "observed": "UI updated to 0 of 4 loaded matches, Export scope: 0 filtered loaded matches, and showed explicit empty-state copy 'No loaded matches match these filters'"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "history-ux/history-ux-rerun-round4/VAL-CROSS-003-after-extra-history-load-settled.png",
+          "history-ux/history-ux-rerun-round4/VAL-CROSS-003-filtered-after-load.png",
+          "history-ux/history-ux-rerun-round4/VAL-CROSS-003-filtered-zero-results.png"
+        ],
+        "consoleErrors": "none; browser warnings only from Recharts width/height calculation during chart render",
+        "network": "Load More Matches triggered older-history append in the live UI; no duplicate cards observed after mixed load",
+        "artifacts": [
+          "history-ux/history-ux-rerun-round4/VAL-CROSS-003-body-after-load.txt",
+          "history-ux/history-ux-rerun-round4/VAL-CROSS-003-filtered-after-load.txt",
+          "history-ux/history-ux-rerun-round4/VAL-CROSS-003-filtered-zero-results.txt"
+        ]
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "agent-browser text export includes Next.js dev payload and injected chart CSS after visible page text, so visible assertions were confirmed primarily from screenshots plus the leading text sections of exported body captures.",
+      "resolved": true,
+      "resolution": "Used annotated screenshots and inspected the top portion of saved body-text artifacts for counts and copy.",
+      "affectedAssertions": [
+        "VAL-CROSS-002",
+        "VAL-CROSS-003"
+      ]
+    }
+  ],
+  "blockers": [],
+  "summary": "Validated 2 assertions on the live app at port 3005. VAL-CROSS-002 passed with deep-link route precedence plus preserved saved lookup/history preferences. VAL-CROSS-003 passed after mixed stored+appended history loading, with truthful filtered counts/export scope and a correct zero-result state."
+}
