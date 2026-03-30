@@ -1,0 +1,21 @@
+{
+  "featureId": "history-export-consistency",
+  "reviewedAt": "2026-03-30T07:53:08Z",
+  "commitId": "d9c543500d2cdb2e6abd9559f27ac8a71523385c",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the feature handoff, transcript skeleton, and commit d9c5435. The dashboard now labels export scope as filtered loaded matches, disables export when no filtered rows remain, deduplicates mixed stored/API history before rendering and export, and adds focused helper tests covering row mapping, CSV escaping, filename generation, and duplicate suppression. I did not find any blocking or non-blocking implementation defects against VAL-HISTORY-004 or VAL-CROSS-003.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The web-feature-worker skill should document a Windows-safe port-3005 cleanup fallback that avoids PowerShell $-variable interpolation, because the worker followed mission guidance but still hit an exec-wrapper quoting failure when trying to stop the dev server.",
+      "evidence": "Transcript skeleton for workerSessionId 9eef7b32-716c-41e6-8111-9dc4f49a39bc shows the manifest-style stop command failing with 5 was unexpected at this time. after a prior PowerShell-based cleanup attempt, and the handoff.skillFeedback suggests documenting a safer fallback."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The history export implementation satisfies the documented filtered loaded-history scope, keeps export disabled for zero-result states, and preserves consistent filtering/export behavior after mixed stored-history and older-history loads without duplicate or dropped rows."
+}

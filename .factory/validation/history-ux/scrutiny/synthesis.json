@@ -1,0 +1,48 @@
+{
+  "milestone": "history-ux",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "pnpm test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "pnpm run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "pnpm run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 1,
+    "failed": 1,
+    "failedFeatures": [
+      "history-filters-preferences-and-reset"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "history-filters-preferences-and-reset",
+      "severity": "blocking",
+      "description": "Saved lookups are loaded from localStorage only once on mount, so after a deep-linked player route later triggers a saved-lookup selection, a refresh can leave recent-account state stale and fails the VAL-CROSS-002 requirement that deep links coexist with persisted recent-account entries after saved-lookup selection, filter changes, and refresh."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Document a Windows-safe fallback for stopping the local dev server in web-feature-worker, avoiding PowerShell variable interpolation/quoting patterns that fail under the exec wrapper.",
+      "evidence": "The history-export-consistency review observed the worker hitting a cleanup failure (`5 was unexpected at this time.`) while trying to stop the dev server with the manifest-style command on Windows.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}
