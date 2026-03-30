@@ -105,6 +105,41 @@ export interface MatchSummary {
   teamImpact: number;
 }
 
+export interface MatchDetailsTeamSummary {
+  teamId: number;
+  result: "Victory" | "Defeat" | "Unknown";
+  resultLabel: string;
+}
+
+export interface MatchDetailsParticipantSummary {
+  participantId: number;
+  puuid: string;
+  summonerName: string;
+  championName: string;
+  teamId: number;
+  role: string | null;
+  roleLabel: string;
+  kills: number | null;
+  deaths: number | null;
+  assists: number | null;
+  kdaLabel: string;
+  visionScore: number | null;
+  visionScoreLabel: string;
+  damageToChampions: number | null;
+  damageToChampionsLabel: string;
+  isCurrentPlayer: boolean;
+  isMissingCoreData: boolean;
+}
+
+export interface MatchDetailsData {
+  matchId: string;
+  status: "ready" | "unavailable";
+  statusLabel: string;
+  source: "match_cache" | "legacy_cache" | "none";
+  teams: MatchDetailsTeamSummary[];
+  participants: MatchDetailsParticipantSummary[];
+}
+
 export interface PerformanceAnalysisResult {
   success: boolean;
   matchSummary?: MatchSummary;

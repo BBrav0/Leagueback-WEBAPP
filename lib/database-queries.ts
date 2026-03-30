@@ -1,6 +1,13 @@
 import { getSupabaseServer } from "./supabase-server";
-import type { MatchDto, MatchTimelineDto, ImpactCategory, MatchSummary } from "./types";
+import type {
+  ImpactCategory,
+  MatchDetailsData,
+  MatchDto,
+  MatchSummary,
+  MatchTimelineDto,
+} from "./types";
 import { buildMatchMetadata } from "./match-reconstruction";
+import { buildMatchDetailsData, buildUnavailableMatchDetailsData } from "./match-details";
 
 export interface PlayerMatchRow {
   match_id: string;
@@ -183,6 +190,26 @@ export async function getMatchCacheEntry(matchId: string): Promise<{
     matchData: (data?.match_data as MatchDto | undefined) ?? null,
     timelineData: (data?.timeline_data as MatchTimelineDto | undefined) ?? null,
   };
+}
+
+export async function getMatchDetailsData(
+  matchId: string,
+  currentPuuid: string
+): Promise<MatchDetailsData> {
+  const cacheEntry = await getMatchCacheEntry(matchId);
+
+  if (cacheEntry.matchData) {
+    return buildMatchDetailsData(matchId, currentPuuid, cacheEntry.matchData, "match_cache");
+  }
+
+  const detailsMap = await getStoredMatchDetails([matchId]);
+  const legacyMatchDetails = detailsMap.get(matchId) ?? null;
+
+  if (legacyMatchDetails) {
+    return buildMatchDetailsData(matchId, currentPuuid, legacyMatchDetails, "legacy_cache");
+  }
+
+  return buildUnavailableMatchDetailsData(matchId);
 }
 
 // ---------------------------------------------------------------------------
