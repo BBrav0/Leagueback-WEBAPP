@@ -5,7 +5,7 @@ export interface SavedLookup {
   tagLine: string;
 }
 
-const STORAGE_KEY = "leagueback_saved_lookups";
+export const SAVED_LOOKUPS_STORAGE_KEY = "leagueback_saved_lookups";
 const MAX_SAVED_LOOKUPS = 5;
 
 function canUseStorage(): boolean {
@@ -60,7 +60,7 @@ export function loadSavedLookups(): SavedLookup[] {
     return [];
   }
 
-  return parseStoredLookups(window.localStorage.getItem(STORAGE_KEY));
+  return parseStoredLookups(window.localStorage.getItem(SAVED_LOOKUPS_STORAGE_KEY));
 }
 
 export function saveSuccessfulLookup(lookup: SavedLookup): SavedLookup[] {
@@ -74,6 +74,26 @@ export function saveSuccessfulLookup(lookup: SavedLookup): SavedLookup[] {
     ...loadSavedLookups().filter((entry) => !sameLookup(entry, normalized)),
   ].slice(0, MAX_SAVED_LOOKUPS);
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextLookups));
+  window.localStorage.setItem(SAVED_LOOKUPS_STORAGE_KEY, JSON.stringify(nextLookups));
   return nextLookups;
+}
+
+export function subscribeToSavedLookups(
+  onChange: (lookups: SavedLookup[]) => void
+): () => void {
+  if (typeof window === "undefined") {
+    onChange([]);
+    return () => undefined;
+  }
+
+  const sync = () => {
+    onChange(loadSavedLookups());
+  };
+
+  sync();
+  window.addEventListener("storage", sync);
+
+  return () => {
+    window.removeEventListener("storage", sync);
+  };
 }

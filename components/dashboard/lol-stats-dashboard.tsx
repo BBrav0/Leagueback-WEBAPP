@@ -23,7 +23,7 @@ import {
   type ImpactCategory,
   type ImpactCounts,
 } from "@/lib/impact-stats"
-import { loadSavedLookups, saveSuccessfulLookup, type SavedLookup } from "@/lib/saved-lookups"
+import { saveSuccessfulLookup, subscribeToSavedLookups, type SavedLookup } from "@/lib/saved-lookups"
 import {
   countActiveHistoryFilters,
   DEFAULT_HISTORY_PREFERENCES,
@@ -659,8 +659,11 @@ export default function Component() {
   }, [matchesData]);
 
   useEffect(() => {
-    setSavedLookups(loadSavedLookups());
     setHistoryPreferences(loadHistoryPreferences());
+  }, []);
+
+  useEffect(() => {
+    return subscribeToSavedLookups(setSavedLookups);
   }, []);
 
   useEffect(() => {

@@ -2,7 +2,12 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { loadSavedLookups, saveSuccessfulLookup } from "./saved-lookups";
+import {
+  loadSavedLookups,
+  saveSuccessfulLookup,
+  SAVED_LOOKUPS_STORAGE_KEY,
+  subscribeToSavedLookups,
+} from "./saved-lookups";
 
 describe("saved-lookups", () => {
   beforeEach(() => {
@@ -61,5 +66,31 @@ describe("saved-lookups", () => {
       { gameName: "C", tagLine: "NA1" },
       { gameName: "B", tagLine: "NA1" },
     ]);
+  });
+
+  it("rehydrates subscribers after storage changes", () => {
+    const seen: Array<Array<{ gameName: string; tagLine: string }>> = [];
+    const unsubscribe = subscribeToSavedLookups((lookups) => {
+      seen.push(lookups);
+    });
+
+    window.localStorage.setItem(
+      SAVED_LOOKUPS_STORAGE_KEY,
+      JSON.stringify([{ gameName: "Deep Link", tagLine: "NA1" }])
+    );
+    window.dispatchEvent(
+      new StorageEvent("storage", {
+        key: SAVED_LOOKUPS_STORAGE_KEY,
+        newValue: window.localStorage.getItem(SAVED_LOOKUPS_STORAGE_KEY),
+        storageArea: window.localStorage,
+      })
+    );
+
+    expect(seen).toEqual([
+      [],
+      [{ gameName: "Deep Link", tagLine: "NA1" }],
+    ]);
+
+    unsubscribe();
   });
 });
