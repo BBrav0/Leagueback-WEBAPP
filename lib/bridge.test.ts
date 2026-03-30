@@ -122,6 +122,8 @@ describe("BackendBridge", () => {
       skippedAlreadyFresh: false,
       skippedNoHistory: false,
       failedAnalyzeAttempts: 0,
+      refreshedStaleCount: 0,
+      failedStaleRefreshAttempts: 0,
     });
   });
 
@@ -130,6 +132,13 @@ describe("BackendBridge", () => {
     vi.spyOn(BackendBridge, "fetchExistingMatchIdsForPlayer").mockResolvedValue(
       new Set(["same"])
     );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ staleMatchIds: [] }),
+      })
+    );
     const analyze = vi.spyOn(BackendBridge, "analyzeMatchPerformance");
 
     const r = await BackendBridge.syncNewHeadMatchesFromRiot("p1", 4);
@@ -137,6 +146,8 @@ describe("BackendBridge", () => {
     expect(r.skippedAlreadyFresh).toBe(true);
     expect(r.analyzedCount).toBe(0);
     expect(r.failedAnalyzeAttempts).toBe(0);
+    expect(r.refreshedStaleCount).toBe(0);
+    expect(r.failedStaleRefreshAttempts).toBe(0);
     expect(analyze).not.toHaveBeenCalled();
   });
 
@@ -162,6 +173,8 @@ describe("BackendBridge", () => {
       skippedAlreadyFresh: false,
       skippedNoHistory: false,
       failedAnalyzeAttempts: 0,
+      refreshedStaleCount: 0,
+      failedStaleRefreshAttempts: 0,
     });
     expect(analyze).toHaveBeenCalledTimes(1);
     expect(analyze).toHaveBeenCalledWith("missing-recent", "p1");
@@ -187,8 +200,46 @@ describe("BackendBridge", () => {
     expect(r.analyzedCount).toBe(2);
     expect(r.failedAnalyzeAttempts).toBe(0);
     expect(r.skippedAlreadyFresh).toBe(false);
+    expect(r.refreshedStaleCount).toBe(0);
+    expect(r.failedStaleRefreshAttempts).toBe(0);
     expect(analyze).toHaveBeenCalledTimes(2);
     expect(analyze).toHaveBeenCalledWith("new1", "p1");
     expect(analyze).toHaveBeenCalledWith("new2", "p1");
+  });
+
+  it("syncNewHeadMatchesFromRiot refreshes stale recent rows when the Riot window is otherwise fully stored", async () => {
+    vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue(["head", "stale-recent"]);
+    vi.spyOn(BackendBridge, "fetchExistingMatchIdsForPlayer").mockResolvedValue(
+      new Set(["head", "stale-recent"])
+    );
+    const staleLookup = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ staleMatchIds: ["stale-recent"] }),
+      } as Response);
+    const analyze = vi
+      .spyOn(BackendBridge, "analyzeMatchPerformance")
+      .mockResolvedValue({ success: true, matchSummary: sampleMatch });
+
+    const result = await BackendBridge.syncNewHeadMatchesFromRiot("p1", 12, {
+      recentWindowSize: 2,
+      analyzeDelayMs: 0,
+    });
+
+    expect(result).toEqual({
+      analyzedCount: 0,
+      skippedAlreadyFresh: false,
+      skippedNoHistory: false,
+      failedAnalyzeAttempts: 0,
+      refreshedStaleCount: 1,
+      failedStaleRefreshAttempts: 0,
+    });
+    expect(staleLookup).toHaveBeenCalledWith(
+      "http://127.0.0.1/api/player-matches/stale-ids",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(analyze).toHaveBeenCalledTimes(1);
+    expect(analyze).toHaveBeenCalledWith("stale-recent", "p1");
   });
 });

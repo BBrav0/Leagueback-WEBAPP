@@ -153,6 +153,8 @@ export interface PerformanceAnalysisResult {
   playerMatchesPersistError?: string;
   /** Present when match_cache upsert failed. */
   matchCachePersistError?: string;
+  /** Present when sync metadata persistence failed. */
+  syncMetadataPersistError?: string;
 }
 
 export type ImpactCategory =

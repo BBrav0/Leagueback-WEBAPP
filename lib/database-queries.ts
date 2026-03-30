@@ -27,6 +27,23 @@ export interface PlayerMatchRow {
   game_duration: number;
 }
 
+export interface PlayerSyncMetadataRow {
+  puuid: string;
+  latest_riot_match_id?: string | null;
+  latest_riot_match_created_at?: number | null;
+  latest_db_match_id?: string | null;
+  latest_db_match_created_at?: number | null;
+  recent_match_window?: number;
+  reconciled_through_match_created_at?: number | null;
+  last_riot_sync_at?: string | null;
+  last_full_refresh_at?: string | null;
+  last_stale_derived_refresh_at?: string | null;
+  last_known_account_game_name?: string | null;
+  last_known_account_tag_line?: string | null;
+  derivation_version?: string | null;
+  notes?: Record<string, unknown>;
+}
+
 function rowToMatchSummary(row: PlayerMatchRow): MatchSummary {
   const metadata = buildMatchMetadata({
     gameCreation: row.game_creation,
@@ -110,6 +127,38 @@ export async function upsertPlayerMatchBatch(
     console.error("player_matches batch upsert failed:", error);
     return error.message;
   }
+  return null;
+}
+
+export async function getPlayerSyncMetadata(
+  puuid: string
+): Promise<PlayerSyncMetadataRow | null> {
+  const { data, error } = await getSupabaseServer()
+    .from("player_sync_metadata")
+    .select("*")
+    .eq("puuid", puuid)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching player sync metadata:", error);
+    return null;
+  }
+
+  return (data as PlayerSyncMetadataRow | null) ?? null;
+}
+
+export async function upsertPlayerSyncMetadata(
+  row: PlayerSyncMetadataRow
+): Promise<string | null> {
+  const { error } = await getSupabaseServer()
+    .from("player_sync_metadata")
+    .upsert(row, { onConflict: "puuid" });
+
+  if (error) {
+    console.error("player_sync_metadata upsert failed:", error);
+    return error.message;
+  }
+
   return null;
 }
 
