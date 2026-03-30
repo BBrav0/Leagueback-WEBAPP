@@ -142,12 +142,23 @@ export default {
       );
     }
 
-    // Route: GET /api/rank/{summonerId}
+    // Route: GET /api/rank/{summonerIdOrPuuid}
     const rankMatch = path.match(/^\/api\/rank\/([^/]+)$/);
     if (rankMatch) {
-      const summonerId = safeDecode(rankMatch[1]);
+      const identifier = safeDecode(rankMatch[1]);
+      const bySummonerResponse = await proxyToRiot(
+        `/lol/league/v4/entries/by-summoner/${encodeURIComponent(identifier)}`,
+        env.RIOT_API_KEY,
+        rateLimitHeaders,
+        PLATFORM_REGION_BASE_URL
+      );
+
+      if (bySummonerResponse.status !== 403) {
+        return bySummonerResponse;
+      }
+
       return proxyToRiot(
-        `/lol/league/v4/entries/by-summoner/${encodeURIComponent(summonerId)}`,
+        `/lol/league-exp/v4/entries/by-puuid/${encodeURIComponent(identifier)}`,
         env.RIOT_API_KEY,
         rateLimitHeaders,
         PLATFORM_REGION_BASE_URL

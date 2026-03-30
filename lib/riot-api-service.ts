@@ -24,15 +24,60 @@ async function getCachedSummonerIdByPuuid(
 
 async function cacheSummonerIdForPuuid(
   puuid: string,
-  summonerId: string
+  summonerId: string,
+  fallbackAccount?: Pick<AccountDto, "gameName" | "tagLine">
 ): Promise<void> {
+  const existingAccount = fallbackAccount
+    ? null
+    : await getSupabaseServer()
+        .from("accounts")
+        .select("game_name, tag_line")
+        .eq("puuid", puuid)
+        .maybeSingle();
+
+  const gameName =
+    fallbackAccount?.gameName ?? existingAccount?.data?.game_name ?? null;
+  const tagLine =
+    fallbackAccount?.tagLine ?? existingAccount?.data?.tag_line ?? null;
+
   const { error } = await getSupabaseServer()
     .from("accounts")
-    .upsert({ puuid, summoner_id: summonerId }, { onConflict: "puuid" });
+    .upsert(
+      { puuid, game_name: gameName, tag_line: tagLine, summoner_id: summonerId },
+      { onConflict: "puuid" }
+    );
 
   if (error) {
     console.error("accounts summoner_id cache upsert failed:", error.message);
   }
+}
+
+async function getCachedSummonerIdFromMatchParticipants(
+  puuid: string
+): Promise<string | undefined> {
+  const { data, error } = await getSupabaseServer()
+    .from("match_cache")
+    .select("match_data")
+    .filter("match_data->info->participants", "cs", `[{"puuid":"${puuid}"}]`)
+    .limit(5);
+
+  if (error) {
+    console.error("match_cache summonerId lookup failed:", error.message);
+    return undefined;
+  }
+
+  for (const row of data ?? []) {
+    const participants = (row.match_data as MatchDto | undefined)?.info?.participants;
+    const participant = participants?.find((entry) => entry.puuid === puuid);
+    const summonerId = participant?.summonerId?.trim();
+
+    if (summonerId) {
+      await cacheSummonerIdForPuuid(puuid, summonerId);
+      return summonerId;
+    }
+  }
+
+  return undefined;
 }
 
 export async function getAccountByRiotId(
@@ -53,6 +98,7 @@ export async function getAccountByRiotId(
       gameName: cached.game_name,
       tagLine: cached.tag_line,
       summonerId: cached.summoner_id ?? undefined,
+      riotId: `${cached.game_name}#${cached.tag_line}`,
     };
   }
 
@@ -90,9 +136,13 @@ export async function getAccountByRiotId(
   }
 
   const account: AccountDto = await res.json();
+  account.riotId = `${account.gameName}#${account.tagLine}`;
 
   if (!account.summonerId) {
     account.summonerId = await getSummonerIdByPuuid(account.puuid);
+    if (account.summonerId) {
+      await cacheSummonerIdForPuuid(account.puuid, account.summonerId, account);
+    }
   }
 
   // Cache in Supabase — must await on Vercel serverless
@@ -125,7 +175,14 @@ export async function getSummonerIdByPuuid(
 
   if (!res.ok) {
     if (res.status === 404) {
-      return undefined;
+      return getCachedSummonerIdFromMatchParticipants(puuid);
+    }
+
+    if (res.status === 403) {
+      const fallbackSummonerId = await getCachedSummonerIdFromMatchParticipants(puuid);
+      if (fallbackSummonerId) {
+        return fallbackSummonerId;
+      }
     }
 
     throw new Error(`Failed to get summoner data. Status: ${res.status}`);
@@ -135,8 +192,10 @@ export async function getSummonerIdByPuuid(
   const summonerId = data.id?.trim();
   if (summonerId) {
     await cacheSummonerIdForPuuid(puuid, summonerId);
+    return summonerId;
   }
-  return summonerId || undefined;
+
+  return getCachedSummonerIdFromMatchParticipants(puuid);
 }
 
 export async function getMatchHistory(
@@ -258,7 +317,7 @@ export async function getCurrentRankEntries(
   );
 
   if (!res.ok) {
-    if (res.status === 404) {
+    if (res.status === 404 || res.status === 403) {
       return [];
     }
 

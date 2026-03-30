@@ -5,6 +5,7 @@ export interface AccountDto {
   gameName: string;
   tagLine: string;
   summonerId?: string;
+  riotId?: string;
 }
 
 // Alias used by bridge.ts / frontend
@@ -23,6 +24,8 @@ export interface MatchInfo {
 
 export interface Participant {
   summonerName: string;
+  summonerId?: string;
+  riotIdGameName?: string;
   championName: string;
   visionScore: number;
   kills: number;
