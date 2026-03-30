@@ -7,6 +7,7 @@ import {
   countActiveHistoryFilters,
   DEFAULT_HISTORY_PREFERENCES,
   filterAndSortMatches,
+  hasStoredHistoryPreferences,
   loadHistoryPreferences,
   resetHistoryPreferences,
   saveHistoryPreferences,
@@ -102,6 +103,8 @@ describe("history-preferences", () => {
   });
 
   it("persists sanitized history preferences and can reset them", () => {
+    expect(hasStoredHistoryPreferences()).toBe(false);
+
     const saved = saveHistoryPreferences({
       result: "Victory",
       impactCategory: "impactWins",
@@ -110,6 +113,7 @@ describe("history-preferences", () => {
       compactCards: true,
     });
 
+    expect(hasStoredHistoryPreferences()).toBe(true);
     expect(saved).toEqual({
       result: "Victory",
       impactCategory: "impactWins",
@@ -119,6 +123,7 @@ describe("history-preferences", () => {
     });
     expect(loadHistoryPreferences()).toEqual(saved);
     expect(resetHistoryPreferences()).toEqual(DEFAULT_HISTORY_PREFERENCES);
+    expect(hasStoredHistoryPreferences()).toBe(false);
     expect(loadHistoryPreferences()).toEqual(DEFAULT_HISTORY_PREFERENCES);
   });
 
@@ -155,5 +160,32 @@ describe("history-preferences", () => {
         champion: "Jinx",
       })
     ).toBe(2);
+  });
+
+  it("keeps preseeded revisit preferences intact when the routed player loads", () => {
+    localStorage.setItem(
+      "leagueback_history_preferences",
+      JSON.stringify({
+        result: "Victory",
+        impactCategory: "impactWins",
+        champion: "Ahri",
+        sort: "highestImpact",
+        compactCards: true,
+      })
+    );
+
+    const hydrated = loadHistoryPreferences();
+
+    expect(hydrated).toEqual({
+      result: "Victory",
+      impactCategory: "impactWins",
+      champion: "Ahri",
+      sort: "highestImpact",
+      compactCards: true,
+    });
+
+    saveHistoryPreferences(hydrated);
+
+    expect(loadHistoryPreferences()).toEqual(hydrated);
   });
 });

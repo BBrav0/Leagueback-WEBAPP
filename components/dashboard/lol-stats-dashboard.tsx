@@ -28,6 +28,7 @@ import {
   countActiveHistoryFilters,
   DEFAULT_HISTORY_PREFERENCES,
   filterAndSortMatches,
+  hasStoredHistoryPreferences,
   loadHistoryPreferences,
   resetHistoryPreferences,
   saveHistoryPreferences,
@@ -648,6 +649,7 @@ export default function Component() {
   const [loadingDbMatches, setLoadingDbMatches] = useState(false);
   const [fetchingMatchesFromApi, setFetchingMatchesFromApi] = useState(false);
   const [isValidationFixtureActive, setIsValidationFixtureActive] = useState(false);
+  const didHydrateHistoryPreferencesRef = useRef(false);
   const scrollSentinelRef = useRef<HTMLDivElement>(null);
   const autoSearchKeyRef = useRef<string | null>(null);
   const matchesDataRef = useRef<MatchSummary[]>([]);
@@ -660,6 +662,7 @@ export default function Component() {
 
   useEffect(() => {
     setHistoryPreferences(loadHistoryPreferences());
+    didHydrateHistoryPreferencesRef.current = true;
   }, []);
 
   useEffect(() => {
@@ -667,6 +670,10 @@ export default function Component() {
   }, []);
 
   useEffect(() => {
+    if (!didHydrateHistoryPreferencesRef.current && !hasStoredHistoryPreferences()) {
+      return;
+    }
+
     saveHistoryPreferences(historyPreferences);
   }, [historyPreferences]);
 

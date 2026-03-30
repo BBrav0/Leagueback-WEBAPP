@@ -93,4 +93,25 @@ describe("saved-lookups", () => {
 
     unsubscribe();
   });
+
+  it("preserves preseeded saved lookups when a deep-linked lookup succeeds", () => {
+    localStorage.setItem(
+      SAVED_LOOKUPS_STORAGE_KEY,
+      JSON.stringify([
+        { gameName: "Saved Person", tagLine: "NA1" },
+        { gameName: "Existing Fixture", tagLine: "LOCAL" },
+      ])
+    );
+
+    const saved = saveSuccessfulLookup({
+      gameName: "Validation Fixture",
+      tagLine: "LOCAL",
+    });
+
+    expect(saved).toEqual([
+      { gameName: "Validation Fixture", tagLine: "LOCAL" },
+      { gameName: "Saved Person", tagLine: "NA1" },
+      { gameName: "Existing Fixture", tagLine: "LOCAL" },
+    ]);
+  });
 });

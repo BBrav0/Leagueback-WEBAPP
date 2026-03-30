@@ -82,6 +82,14 @@ export function loadHistoryPreferences(): HistoryPreferences {
   }
 }
 
+export function hasStoredHistoryPreferences(): boolean {
+  if (!canUseStorage()) {
+    return false;
+  }
+
+  return window.localStorage.getItem(HISTORY_PREFERENCES_STORAGE_KEY) !== null;
+}
+
 export function saveHistoryPreferences(
   preferences: Partial<HistoryPreferences>
 ): HistoryPreferences {
