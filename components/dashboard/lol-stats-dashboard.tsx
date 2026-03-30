@@ -647,6 +647,7 @@ export default function Component() {
   const [loadingDbMatches, setLoadingDbMatches] = useState(false);
   const [fetchingMatchesFromApi, setFetchingMatchesFromApi] = useState(false);
   const [isValidationFixtureActive, setIsValidationFixtureActive] = useState(false);
+  const [recentSyncWindowSize, setRecentSyncWindowSize] = useState(25);
   const didHydrateHistoryPreferencesRef = useRef(false);
   const scrollSentinelRef = useRef<HTMLDivElement>(null);
   const autoSearchKeyRef = useRef<string | null>(null);
@@ -824,6 +825,7 @@ export default function Component() {
     setLoadedDbMatches(0);
     setHasMoreDbMatches(false);
     setAllDbMatchesLoaded(false);
+    setRecentSyncWindowSize(25);
 
     let loadingDismissedEarly = false;
     try {
@@ -883,8 +885,16 @@ export default function Component() {
             const syncResult = await BackendBridge.syncNewHeadMatchesFromRiot(
               account.puuid,
               storedResult.totalCount,
-              { windowSize: 25, analyzeDelayMs: 1500, maxSyncRounds: 12 }
+              {
+                recentWindowSize: recentSyncWindowSize,
+                windowSize: recentSyncWindowSize,
+                analyzeDelayMs: 1500,
+                maxSyncRounds: 12,
+              }
             );
+            if (syncResult.syncMetadata?.recentMatchWindow) {
+              setRecentSyncWindowSize(syncResult.syncMetadata.recentMatchWindow);
+            }
             if (
               !syncResult.skippedAlreadyFresh &&
               !syncResult.skippedNoHistory &&
@@ -900,7 +910,7 @@ export default function Component() {
                 );
               }
             }
-            if (syncResult.analyzedCount > 0) {
+            if (syncResult.analyzedCount > 0 || syncResult.refreshedStaleCount > 0) {
               const refreshed = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
               setMatchesData(refreshed.matches);
               setTotalDbMatches(refreshed.totalCount);

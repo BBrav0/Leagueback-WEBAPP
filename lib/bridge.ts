@@ -240,22 +240,25 @@ export class BackendBridge {
     storedTotalCount: number,
     options: {
       windowSize?: number;
-      recentWindowSize?: number;
+      recentWindowSize: number;
       /** Delay between each match-performance call (rate limiting). */
       analyzeDelayMs?: number;
       maxSyncRounds?: number;
-    } = {}
+    }
   ): Promise<{
     analyzedCount: number;
     skippedAlreadyFresh: boolean;
     skippedNoHistory: boolean;
+    syncMetadata?: {
+      recentMatchWindow: number;
+    };
     /** Matches we attempted to analyze but did not persist successfully */
     failedAnalyzeAttempts: number;
     refreshedStaleCount: number;
     failedStaleRefreshAttempts: number;
   }> {
-    const windowSize = options.windowSize ?? 25;
-    const recentWindowSize = Math.max(options.recentWindowSize ?? windowSize, 1);
+    const recentWindowSize = Math.max(options.recentWindowSize, 1);
+    const windowSize = Math.max(options.windowSize ?? recentWindowSize, recentWindowSize);
     const analyzeDelayMs = options.analyzeDelayMs ?? 1500;
     const maxSyncRounds = options.maxSyncRounds ?? 12;
 
@@ -264,6 +267,7 @@ export class BackendBridge {
         analyzedCount: 0,
         skippedAlreadyFresh: false,
         skippedNoHistory: false,
+        syncMetadata: undefined,
         failedAnalyzeAttempts: 0,
         refreshedStaleCount: 0,
         failedStaleRefreshAttempts: 0,
@@ -276,6 +280,7 @@ export class BackendBridge {
         analyzedCount: 0,
         skippedAlreadyFresh: false,
         skippedNoHistory: true,
+        syncMetadata: undefined,
         failedAnalyzeAttempts: 0,
         refreshedStaleCount: 0,
         failedStaleRefreshAttempts: 0,
@@ -297,6 +302,7 @@ export class BackendBridge {
         analyzedCount: 0,
         skippedAlreadyFresh: true,
         skippedNoHistory: false,
+        syncMetadata: undefined,
         failedAnalyzeAttempts: 0,
         refreshedStaleCount: 0,
         failedStaleRefreshAttempts: 0,
@@ -306,11 +312,13 @@ export class BackendBridge {
     let analyzedCount = 0;
     let failedAnalyzeAttempts = 0;
     let listOffset = recentRiotMatchIds.length;
+    let syncMetadata: { recentMatchWindow: number } | undefined;
 
     for (let i = 0; i < missingRecentMatchIds.length; i++) {
       const matchId = missingRecentMatchIds[i];
       const analysis = await this.analyzeMatchPerformance(matchId, puuid);
       if (analysis?.success && analysis.matchSummary) {
+        syncMetadata = analysis.syncMetadata ?? syncMetadata;
         analyzedCount++;
       } else {
         failedAnalyzeAttempts++;
@@ -324,6 +332,7 @@ export class BackendBridge {
       const matchId = staleRecentMatchIds[i];
       const analysis = await this.analyzeMatchPerformance(matchId, puuid);
       if (analysis?.success && analysis.matchSummary) {
+        syncMetadata = analysis.syncMetadata ?? syncMetadata;
         refreshedStaleCount++;
       } else {
         failedStaleRefreshAttempts++;
@@ -348,6 +357,7 @@ export class BackendBridge {
         const matchId = toAnalyze[i];
         const analysis = await this.analyzeMatchPerformance(matchId, puuid);
         if (analysis?.success && analysis.matchSummary) {
+          syncMetadata = analysis.syncMetadata ?? syncMetadata;
           analyzedCount++;
         } else {
           failedAnalyzeAttempts++;
@@ -370,6 +380,7 @@ export class BackendBridge {
       analyzedCount,
       skippedAlreadyFresh: false,
       skippedNoHistory: false,
+      syncMetadata,
       failedAnalyzeAttempts,
       refreshedStaleCount,
       failedStaleRefreshAttempts,

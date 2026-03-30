@@ -165,6 +165,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       matchSummary,
+      syncMetadata: {
+        recentMatchWindow: existingSyncMetadata?.recent_match_window ?? 25,
+      },
       ...(persistError ? { playerMatchesPersistError: persistError } : {}),
       ...(cacheErrorMessage ? { matchCachePersistError: cacheErrorMessage } : {}),
       ...(syncMetadataPersistError ? { syncMetadataPersistError } : {}),

@@ -149,6 +149,9 @@ export interface PerformanceAnalysisResult {
   success: boolean;
   matchSummary?: MatchSummary;
   error?: string;
+  syncMetadata?: {
+    recentMatchWindow: number;
+  };
   /** Present when player_matches upsert failed. */
   playerMatchesPersistError?: string;
   /** Present when match_cache upsert failed. */
