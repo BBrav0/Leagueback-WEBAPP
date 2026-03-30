@@ -1,6 +1,6 @@
 {
   "milestone": "history-ux",
-  "round": 2,
+  "round": 3,
   "status": "pass",
   "validatorsRun": {
     "test": {
@@ -27,25 +27,7 @@
   },
   "blockingIssues": [],
   "appliedUpdates": [],
-  "suggestedGuidanceUpdates": [
-    {
-      "target": "skills",
-      "suggestion": "Document a Windows-safe fallback for stopping the local dev server in web-feature-worker, avoiding PowerShell variable interpolation/quoting patterns that fail under the exec wrapper.",
-      "evidence": "The history-export-consistency review observed the worker hitting a cleanup failure (`5 was unexpected at this time.`) while trying to stop the dev server with the manifest-style command on Windows.",
-      "isSystemic": false
-    },
-    {
-      "target": "skills",
-      "suggestion": "Clarify in `web-feature-worker` that persisted local-state fixes in the monolithic dashboard may be adequately validated with targeted post-implementation regression tests, and that storage-backed persistence fixes can use deterministic storage-event/helper coverage plus dev-server evidence when browser automation is unavailable.",
-      "evidence": "Both `history-filters-preferences-and-reset` and `history-saved-lookups-rehydration-fix` reviews noted the current skill guidance is slightly too rigid around failing-tests-first/browser fallback framing for persisted-state changes on this Windows host.",
-      "isSystemic": true
-    }
-  ],
-  "rejectedObservations": [
-    {
-      "observation": "Document a wrapper-safe Windows stop fallback in shared state knowledge.",
-      "reason": "recommendation overlaps with the retained skills guidance update and does not require an additive factual services/library change in this pass."
-    }
-  ],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [],
   "previousRound": ".factory/validation/history-ux/scrutiny/synthesis.json"
 }

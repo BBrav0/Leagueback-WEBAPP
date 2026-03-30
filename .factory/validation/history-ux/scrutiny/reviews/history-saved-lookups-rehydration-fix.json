@@ -1,21 +1,15 @@
 {
   "featureId": "history-saved-lookups-rehydration-fix",
-  "reviewedAt": "2026-03-30T08:05:00Z",
+  "reviewedAt": "2026-03-30T08:31:29Z",
   "commitId": "98d4587d931e107d5fb9a8be2de400d5cc53484d",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
   "status": "pass",
   "codeReview": {
-    "summary": "The fix directly addresses the prior VAL-CROSS-002 failure by replacing one-time saved-lookup hydration with a storage-synchronized subscription, wiring the dashboard to that subscription, and adding deterministic coverage for post-mutation rehydration. The original history filters/preferences behavior remains intact, and the recent-account list can now stay truthful across deep-link loads, saved-lookup reselection, filter changes, and refresh.",
+    "summary": "The fix closes the saved-lookups rehydration gap by moving the dashboard from one-time mount hydration to a storage-backed subscription while still updating state immediately on successful lookups. This keeps recent Riot IDs truthful after deep-link loads, saved-lookup reselection, filter changes, and refresh without regressing dedupe/order behavior.",
     "issues": []
   },
-  "sharedStateObservations": [
-    {
-      "area": "skills",
-      "observation": "The `web-feature-worker` skill still frames the browser-fallback path generically. This fix feature used a persisted-state regression that was adequately proven with helper-level storage-event coverage plus dev-server readiness evidence, so the skill could explicitly mention that storage-backed local-state fixes may rely on deterministic persistence tests when browser automation is unavailable.",
-      "evidence": "`.factory/skills/web-feature-worker/SKILL.md` step 6 says to use `agent-browser` when available and otherwise capture fallback evidence; the fix handoff's `skillFeedback.suggestedChanges` asks to note that storage-backed persisted-state fixes can be proven with deterministic helper tests plus dev-server evidence when browser automation is unavailable."
-    }
-  ],
+  "sharedStateObservations": [],
   "addressesFailureFrom": ".factory/validation/history-ux/scrutiny/reviews/history-filters-preferences-and-reset.json",
-  "summary": "Reviewed the prior failed review, both feature handoffs, the transcript skeleton for worker session `e99e4e5c-902a-4f57-95dd-c7065e8cf38d`, commit diffs for `573ba22` and `98d4587`, the current saved-lookup/dashboard code, and relevant shared-state docs. The original blocking issue was real in `history-filters-preferences-and-reset`, and commit `98d4587` adequately fixes it by synchronizing saved lookups from localStorage after successful lookup mutations and covering the rehydration path with deterministic tests, so this fix review passes."
+  "summary": "Reviewed the prior scrutiny finding, feature transcript skeleton, handoff evidence, commit 98d4587, and the touched dashboard/saved-lookups code. The new subscribeToSavedLookups flow and regression coverage truthfully address the persisted-state issue behind VAL-CROSS-002, and I found no blocking or non-blocking defects in scope."
 }
