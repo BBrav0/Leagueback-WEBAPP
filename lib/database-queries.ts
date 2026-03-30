@@ -25,6 +25,8 @@ export interface PlayerMatchRow {
   chart_data: Array<{ minute: number; yourImpact: number; teamImpact: number }>;
   game_creation: number;
   game_duration: number;
+  rank: string | null;
+  rank_queue: "RANKED_SOLO_5x5" | "RANKED_FLEX_SR" | null;
   role: string | null;
   damage_to_champions: number | null;
 }
@@ -60,6 +62,11 @@ function rowToMatchSummary(row: PlayerMatchRow): MatchSummary {
     teamPosition: row.role ?? undefined,
     totalDamageDealtToChampions: row.damage_to_champions ?? undefined,
     impactCategory: row.impact_category,
+    rank: row.rank,
+    rankLabel: row.rank
+      ? `Current rank snapshot (${row.rank_queue === "RANKED_SOLO_5x5" ? "Solo/Duo" : row.rank_queue === "RANKED_FLEX_SR" ? "Flex" : "current queue"})`
+      : "Current rank snapshot unavailable",
+    rankQueue: row.rank_queue,
   });
 
   return {

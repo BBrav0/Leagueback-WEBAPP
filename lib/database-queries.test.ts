@@ -34,6 +34,8 @@ describe("getPlayerMatchesPaginated", () => {
           chart_data: [{ minute: 5, yourImpact: 1.5, teamImpact: 1.2 }],
           game_creation: 1711785600000,
           game_duration: 1902,
+          rank: "PLATINUM II • 55 LP",
+          rank_queue: "RANKED_SOLO_5x5",
           role: "MIDDLE",
           damage_to_champions: 24876,
         } satisfies PlayerMatchRow,
@@ -54,6 +56,8 @@ describe("getPlayerMatchesPaginated", () => {
     expect(result.matches[0]?.roleLabel).toBe("Mid");
     expect(result.matches[0]?.damageToChampions).toBe(24876);
     expect(result.matches[0]?.damageToChampionsLabel).toBe("24,876 damage to champions");
+    expect(result.matches[0]?.rank).toBe("PLATINUM II • 55 LP");
+    expect(result.matches[0]?.rankLabel).toBe("Current rank snapshot (Solo/Duo)");
   });
 
   it("keeps unavailable labels when stored metadata is genuinely missing", async () => {
@@ -75,6 +79,8 @@ describe("getPlayerMatchesPaginated", () => {
           chart_data: [{ minute: 5, yourImpact: 0.7, teamImpact: 1.1 }],
           game_creation: 1711699200000,
           game_duration: 1685,
+          rank: null,
+          rank_queue: null,
           role: null,
           damage_to_champions: null,
         } satisfies PlayerMatchRow,
@@ -95,5 +101,7 @@ describe("getPlayerMatchesPaginated", () => {
     expect(result.matches[0]?.roleLabel).toBe("Role unavailable");
     expect(result.matches[0]?.damageToChampions).toBeNull();
     expect(result.matches[0]?.damageToChampionsLabel).toBe("Damage unavailable");
+    expect(result.matches[0]?.rank).toBeNull();
+    expect(result.matches[0]?.rankLabel).toBe("Current rank snapshot unavailable");
   });
 });

@@ -106,7 +106,8 @@ describe("reconstructMatchSummary", () => {
     expect(summary.summonerName).toBe("PlayerOne");
     expect(summary.champion).toBe("Ahri");
     expect(summary.rank).toBeNull();
-    expect(summary.rankLabel).toBe("Rank unavailable for this match");
+    expect(summary.rankLabel).toBe("Current rank snapshot unavailable");
+    expect(summary.rankQueue).toBeNull();
     expect(summary.kda).toBe("10/2/7");
     expect(summary.gameResult).toBe("Victory");
     expect(summary.gameTime).toBe("02:05");
@@ -136,7 +137,8 @@ describe("reconstructMatchSummary", () => {
       })
     ).toEqual({
       rank: null,
-      rankLabel: "Rank unavailable for this match",
+      rankLabel: "Current rank snapshot unavailable",
+      rankQueue: null,
       playedAt: "Played time unavailable",
       durationSeconds: 600,
       role: null,

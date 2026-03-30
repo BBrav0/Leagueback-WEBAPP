@@ -25,6 +25,9 @@ export async function GET(request: NextRequest) {
     }
 
     const account = await getAccountByRiotId(gameName, tagLine);
+    if (!account.summonerId) {
+      account.summonerId = account.puuid;
+    }
     return NextResponse.json(account);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

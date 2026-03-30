@@ -140,6 +140,17 @@ export default {
       );
     }
 
+    // Route: GET /api/rank/{summonerId}
+    const rankMatch = path.match(/^\/api\/rank\/([^/]+)$/);
+    if (rankMatch) {
+      const summonerId = safeDecode(rankMatch[1]);
+      return proxyToRiot(
+        `/lol/league/v4/entries/by-summoner/${encodeURIComponent(summonerId)}`,
+        env.RIOT_API_KEY,
+        rateLimitHeaders
+      );
+    }
+
     // Route: GET /api/match/{matchId}/timeline
     const timelineMatch = path.match(/^\/api\/match\/([^/]+)\/timeline$/);
     if (timelineMatch) {

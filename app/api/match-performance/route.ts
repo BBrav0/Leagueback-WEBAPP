@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getMatchDetails,
   getMatchTimeline,
+  getCurrentRankEntries,
 } from "@/lib/riot-api-service";
 import {
   reconstructMatchSummary,
@@ -16,6 +17,7 @@ import {
 } from "@/lib/database-queries";
 import { getSupabaseServer } from "@/lib/supabase-server";
 import type { PlayerMatchRow } from "@/lib/database-queries";
+import { selectCurrentRankSnapshot } from "@/lib/rank-snapshot";
 
 const CURRENT_DERIVATION_VERSION = "match-summary-v2";
 
@@ -69,6 +71,16 @@ export async function GET(request: NextRequest) {
       matchTimeline
     );
 
+    const rankSnapshot = selectCurrentRankSnapshot(
+      await getCurrentRankEntries(userParticipant.puuid)
+    );
+
+    if (rankSnapshot) {
+      matchSummary.rank = rankSnapshot.rank;
+      matchSummary.rankLabel = rankSnapshot.rankLabel;
+      matchSummary.rankQueue = rankSnapshot.rankQueue;
+    }
+
     const category = determineImpactCategory(
       matchSummary.gameResult,
       matchSummary.yourImpact,
@@ -91,6 +103,8 @@ export async function GET(request: NextRequest) {
       chart_data: matchSummary.data,
       game_creation: matchDetails.info.gameCreation ?? 0,
       game_duration: matchDetails.info.gameDuration,
+      rank: matchSummary.rank,
+      rank_queue: matchSummary.rankQueue,
       role: matchSummary.role,
       damage_to_champions: matchSummary.damageToChampions,
     };

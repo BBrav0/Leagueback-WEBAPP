@@ -4,6 +4,7 @@ export interface AccountDto {
   puuid: string;
   gameName: string;
   tagLine: string;
+  summonerId?: string;
 }
 
 // Alias used by bridge.ts / frontend
@@ -87,6 +88,7 @@ export interface MatchSummary {
   champion: string;
   rank: string | null;
   rankLabel: string;
+  rankQueue: "RANKED_SOLO_5x5" | "RANKED_FLEX_SR" | null;
   kda: string;
   cs: number;
   visionScore: number;

@@ -1,5 +1,6 @@
 import { getSupabaseServer } from "./supabase-server";
 import type { AccountDto, MatchDto, MatchTimelineDto } from "./types";
+import type { LeagueEntryDto } from "./rank-snapshot";
 
 const WORKER_URL =
   process.env.RIOT_PROXY_URL ?? "https://riot-proxy.riot-proxy.workers.dev";
@@ -11,7 +12,7 @@ export async function getAccountByRiotId(
   // Check Supabase cache (case-insensitive — Riot names are case-insensitive)
   const { data: cached } = await getSupabaseServer()
     .from("accounts")
-    .select("puuid, game_name, tag_line")
+    .select("puuid, game_name, tag_line, summoner_id")
     .ilike("game_name", gameName)
     .ilike("tag_line", tagLine)
     .single();
@@ -21,6 +22,7 @@ export async function getAccountByRiotId(
       puuid: cached.puuid,
       gameName: cached.game_name,
       tagLine: cached.tag_line,
+      summonerId: cached.summoner_id ?? undefined,
     };
   }
 
@@ -66,6 +68,7 @@ export async function getAccountByRiotId(
       puuid: account.puuid,
       game_name: account.gameName,
       tag_line: account.tagLine,
+      summoner_id: account.summonerId ?? null,
     });
   if (accountCacheError) {
     console.error("accounts cache upsert failed:", accountCacheError.message);
@@ -183,5 +186,24 @@ export async function getMatchTimeline(
   }
 
   return timelineDto;
+}
+
+export async function getCurrentRankEntries(
+  summonerId: string
+): Promise<LeagueEntryDto[]> {
+  const res = await fetch(
+    `${WORKER_URL}/api/rank/${encodeURIComponent(summonerId)}`
+  );
+
+  if (!res.ok) {
+    if (res.status === 404) {
+      return [];
+    }
+
+    throw new Error(`Failed to get current rank data. Status: ${res.status}`);
+  }
+
+  const data = (await res.json()) as LeagueEntryDto[];
+  return Array.isArray(data) ? data : [];
 }
 

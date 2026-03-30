@@ -163,10 +163,14 @@ export function buildMatchMetadata(options: {
   teamPosition?: string;
   totalDamageDealtToChampions?: number;
   impactCategory: ImpactCategory;
+  rank?: string | null;
+  rankLabel?: string;
+  rankQueue?: "RANKED_SOLO_5x5" | "RANKED_FLEX_SR" | null;
 }): Pick<
   MatchSummary,
   | "rank"
   | "rankLabel"
+  | "rankQueue"
   | "playedAt"
   | "durationSeconds"
   | "role"
@@ -188,8 +192,9 @@ export function buildMatchMetadata(options: {
       : null;
 
   return {
-    rank: null,
-    rankLabel: "Rank unavailable for this match",
+    rank: options.rank ?? null,
+    rankLabel: options.rankLabel ?? "Current rank snapshot unavailable",
+    rankQueue: options.rankQueue ?? null,
     playedAt: formatPlayedAt(options.gameCreation),
     durationSeconds: options.gameDuration,
     role,
