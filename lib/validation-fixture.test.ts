@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   VALIDATION_FIXTURE_APPENDED_MATCHES,
   isValidationFixtureIdentity,
+  isValidationFixturePuuid,
   VALIDATION_FIXTURE_DETAILS,
   VALIDATION_FIXTURE_MATCHES,
   getValidationFixtureMatchHistory,
@@ -15,6 +16,10 @@ describe("validation fixture path", () => {
     expect(isValidationFixtureIdentity("Validation Fixture", "LOCAL")).toBe(true);
     expect(isValidationFixtureIdentity(" validation fixture ", " local ")).toBe(true);
     expect(isValidationFixtureIdentity("Someone Else", "LOCAL")).toBe(false);
+    expect(isValidationFixtureIdentity("Validation Fixture", "")).toBe(false);
+    expect(isValidationFixturePuuid("validation-fixture-puuid")).toBe(true);
+    expect(isValidationFixturePuuid(" validation-fixture-puuid ")).toBe(true);
+    expect(isValidationFixturePuuid("someone-real-looking-puuid")).toBe(false);
   });
 
   it("provides enriched match cards plus one ready and one fallback details case", () => {

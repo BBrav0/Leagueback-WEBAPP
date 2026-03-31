@@ -5,6 +5,15 @@ import {
   VALIDATION_FIXTURE_ACCOUNT,
 } from "@/lib/validation-fixture";
 
+function canServeValidationFixture(request: NextRequest): boolean {
+  if (process.env.NODE_ENV !== "development" && process.env.NODE_ENV !== "test") {
+    return false;
+  }
+
+  const host = request.nextUrl.hostname.toLowerCase();
+  return host === "localhost" || host === "127.0.0.1";
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const rawGameName = searchParams.get("gameName");
@@ -20,7 +29,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    if (isValidationFixtureIdentity(gameName, tagLine)) {
+    if (canServeValidationFixture(request) && isValidationFixtureIdentity(gameName, tagLine)) {
       return NextResponse.json(VALIDATION_FIXTURE_ACCOUNT);
     }
 

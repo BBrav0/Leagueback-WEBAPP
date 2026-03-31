@@ -40,6 +40,10 @@ import {
   serializeHistoryExportRowsToCsv,
 } from "@/lib/history-export"
 import {
+  formatMatchDurationLabel,
+  mergeMatchesInLoadedOrder,
+} from "@/lib/match-summary-utils"
+import {
   isValidationFixtureIdentity,
   VALIDATION_FIXTURE_ACCOUNT,
   VALIDATION_FIXTURE_DETAILS,
@@ -97,29 +101,6 @@ const impactBadgeStyles: Record<ImpactCategory, string> = {
   guaranteedWins: "bg-sky-500/15 text-sky-200 border-sky-400/40",
   guaranteedLosses: "bg-amber-500/15 text-amber-100 border-amber-400/40",
 };
-
-function formatDurationLabel(durationSeconds: number): string {
-  const safeDuration = Math.max(durationSeconds, 0);
-  const minutes = Math.floor(safeDuration / 60);
-  const seconds = safeDuration % 60;
-  return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
-}
-
-function mergeMatchesInLoadedOrder(existing: MatchSummary[], incoming: MatchSummary[]): MatchSummary[] {
-  const merged = [...existing];
-  const seen = new Set(existing.map((match) => match.id));
-
-  for (const match of incoming) {
-    if (seen.has(match.id)) {
-      continue;
-    }
-
-    seen.add(match.id);
-    merged.push(match);
-  }
-
-  return merged;
-}
 
 function safeDecodeURIComponent(value: string): string {
   try {
@@ -555,7 +536,7 @@ const MatchCard = memo(function MatchCard({
                   Played {match.playedAt}
                 </Badge>
                 <Badge variant="secondary" className="bg-slate-700/70 text-slate-100 hover:bg-slate-700/70">
-                  Duration {formatDurationLabel(match.durationSeconds)}
+                  Duration {formatMatchDurationLabel(match.durationSeconds)}
                 </Badge>
                 <Badge variant="secondary" className="bg-slate-700/70 text-slate-100 hover:bg-slate-700/70">
                   {match.roleLabel}
@@ -680,6 +661,10 @@ export default function Component() {
     () => filterAndSortMatches(matchesData, historyPreferences),
     [historyPreferences, matchesData]
   );
+  const mergedLoadedMatches = useMemo(
+    () => mergeMatchesInLoadedOrder([], matchesData),
+    [matchesData]
+  );
 
   const activeHistoryFilterCount = useMemo(
     () => countActiveHistoryFilters(historyPreferences),
@@ -694,10 +679,10 @@ export default function Component() {
   const canExportLoadedHistory = exportRows.length > 0;
 
   const championFilterOptions = useMemo(() => {
-    return Array.from(new Set(matchesData.map((match) => match.champion).filter(Boolean))).sort((a, b) =>
+    return Array.from(new Set(mergedLoadedMatches.map((match) => match.champion).filter(Boolean))).sort((a, b) =>
       a.localeCompare(b)
     );
-  }, [matchesData]);
+  }, [mergedLoadedMatches]);
 
   const syncImpactStats = useCallback(async (puuid: string, matches: MatchSummary[]) => {
     try {

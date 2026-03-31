@@ -1,6 +1,7 @@
 "use client";
 
 import type { MatchSummary } from "./bridge";
+import { formatMatchDurationLabel, mergeMatchesInLoadedOrder } from "./match-summary-utils";
 
 export interface ExportableHistoryRow {
   matchId: string;
@@ -21,23 +22,10 @@ export interface ExportableHistoryRow {
   teamImpact: number;
 }
 
-function uniqueMatchesInLoadedOrder(matches: MatchSummary[]): MatchSummary[] {
-  const seen = new Set<string>();
-
-  return matches.filter((match) => {
-    if (seen.has(match.id)) {
-      return false;
-    }
-
-    seen.add(match.id);
-    return true;
-  });
-}
-
 export function createLoadedHistoryExportRows(
   matches: MatchSummary[],
 ): ExportableHistoryRow[] {
-  return uniqueMatchesInLoadedOrder(matches).map((match) => ({
+  return mergeMatchesInLoadedOrder([], matches).map((match) => ({
     matchId: match.id,
     summonerName: match.summonerName,
     champion: match.champion,
@@ -49,19 +37,12 @@ export function createLoadedHistoryExportRows(
     visionScore: match.visionScore,
     playedAt: match.playedAt,
     gameTime: match.gameTime,
-    duration: formatDurationLabel(match.durationSeconds),
+    duration: formatMatchDurationLabel(match.durationSeconds),
     role: match.roleLabel,
     damageToChampions: match.damageToChampionsLabel,
     yourImpact: Number(match.yourImpact.toFixed(1)),
     teamImpact: Number(match.teamImpact.toFixed(1)),
   }));
-}
-
-function formatDurationLabel(durationSeconds: number): string {
-  const safeDuration = Math.max(durationSeconds, 0);
-  const minutes = Math.floor(safeDuration / 60);
-  const seconds = safeDuration % 60;
-  return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
 }
 
 function escapeCsvValue(value: string | number): string {

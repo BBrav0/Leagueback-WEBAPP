@@ -1,15 +1,36 @@
 import type { AccountData, MatchDetailsData, MatchSummary } from "./types";
 import { deriveImpactCountsFromMatches } from "./impact-stats";
 
+const VALIDATION_FIXTURE_GAME_NAME = "Validation Fixture";
+const VALIDATION_FIXTURE_TAG_LINE = "LOCAL";
+const VALIDATION_FIXTURE_IDENTITY = `${VALIDATION_FIXTURE_GAME_NAME}#${VALIDATION_FIXTURE_TAG_LINE}`;
+const VALIDATION_FIXTURE_PUUID = "validation-fixture-puuid";
+const VALIDATION_FIXTURE_SUMMONER_ID = "validation-fixture-summoner-id";
+
 export function isValidationFixtureIdentity(gameName: string, tagLine: string): boolean {
-  return gameName.trim().toLowerCase() === "validation fixture" && tagLine.trim().toLowerCase() === "local";
+  const normalizedGameName = gameName.trim();
+  const normalizedTagLine = tagLine.trim();
+
+  if (!normalizedGameName || !normalizedTagLine) {
+    return false;
+  }
+
+  return `${normalizedGameName}#${normalizedTagLine}`.localeCompare(
+    VALIDATION_FIXTURE_IDENTITY,
+    undefined,
+    { sensitivity: "accent" }
+  ) === 0;
+}
+
+export function isValidationFixturePuuid(puuid: string): boolean {
+  return puuid.trim() === VALIDATION_FIXTURE_PUUID;
 }
 
 export const VALIDATION_FIXTURE_ACCOUNT: AccountData = {
-  puuid: "validation-fixture-puuid",
-  gameName: "Validation Fixture",
-  tagLine: "LOCAL",
-  summonerId: "validation-fixture-summoner-id",
+  puuid: VALIDATION_FIXTURE_PUUID,
+  gameName: VALIDATION_FIXTURE_GAME_NAME,
+  tagLine: VALIDATION_FIXTURE_TAG_LINE,
+  summonerId: VALIDATION_FIXTURE_SUMMONER_ID,
 };
 
 export const VALIDATION_FIXTURE_MATCHES: MatchSummary[] = [
