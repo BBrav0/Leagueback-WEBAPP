@@ -55,11 +55,37 @@ async function cacheSummonerIdForPuuid(
 async function getCachedSummonerIdFromMatchParticipants(
   puuid: string
 ): Promise<string | undefined> {
+  const { data: playerMatches, error: playerMatchesError } = await getSupabaseServer()
+    .from("player_matches")
+    .select("match_id")
+    .eq("puuid", puuid)
+    .order("created_at", { ascending: false })
+    .limit(25);
+
+  if (playerMatchesError) {
+    console.error(
+      "player_matches summonerId candidate lookup failed:",
+      playerMatchesError.message
+    );
+    return undefined;
+  }
+
+  const matchIds = Array.from(
+    new Set(
+      (playerMatches ?? [])
+        .map((row) => row.match_id?.trim())
+        .filter((matchId): matchId is string => Boolean(matchId))
+    )
+  );
+
+  if (matchIds.length === 0) {
+    return undefined;
+  }
+
   const { data, error } = await getSupabaseServer()
     .from("match_cache")
     .select("match_id, match_data")
-    .order("match_id", { ascending: false })
-    .limit(25);
+    .in("match_id", matchIds);
 
   if (error) {
     console.error("match_cache summonerId lookup failed:", error.message);
