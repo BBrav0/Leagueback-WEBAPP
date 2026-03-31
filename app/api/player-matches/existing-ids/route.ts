@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase-server";
 
 const MAX_IDS = 100;
+const MATCH_ID_PATTERN = /^[A-Z0-9_]+$/i;
+
+function isValidMatchId(matchId: string): boolean {
+  return MATCH_ID_PATTERN.test(matchId);
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,7 +22,9 @@ export async function POST(request: NextRequest) {
     }
 
     const matchIds = matchIdsRaw
-      .filter((id): id is string => typeof id === "string" && id.length > 0)
+      .filter((id): id is string => typeof id === "string")
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0 && isValidMatchId(id))
       .slice(0, MAX_IDS);
 
     if (matchIds.length === 0) {

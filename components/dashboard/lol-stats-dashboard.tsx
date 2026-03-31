@@ -633,12 +633,17 @@ export default function Component() {
   const scrollSentinelRef = useRef<HTMLDivElement>(null);
   const autoSearchKeyRef = useRef<string | null>(null);
   const matchesDataRef = useRef<MatchSummary[]>([]);
+  const loadedDbMatchesRef = useRef(0);
   const pageScrollLockYRef = useRef<number | null>(null);
   const loadingPlaceholderCount = loadingDbMatches ? 3 : loadingMore ? 2 : 0;
 
   useEffect(() => {
     matchesDataRef.current = matchesData;
   }, [matchesData]);
+
+  useEffect(() => {
+    loadedDbMatchesRef.current = loadedDbMatches;
+  }, [loadedDbMatches]);
 
   useEffect(() => {
     setHistoryPreferences(loadHistoryPreferences());
@@ -1122,16 +1127,18 @@ export default function Component() {
   const loadMoreDbMatches = useCallback(async () => {
     if (!currentPuuid || loadingDbMatches || !hasMoreDbMatches || allDbMatchesLoaded) return;
 
+    const nextOffset = loadedDbMatchesRef.current;
     setLoadingDbMatches(true);
     try {
-      const result = await BackendBridge.getStoredMatches(currentPuuid, 20, loadedDbMatches);
+      const result = await BackendBridge.getStoredMatches(currentPuuid, 20, nextOffset);
 
       setMatchesData(prev => mergeMatchesInLoadedOrder(prev, result.matches));
       const uniqueIncomingCount = result.matches.filter((match) =>
         !matchesDataRef.current.some((existing) => existing.id === match.id)
       ).length;
-      const newLoaded = loadedDbMatches + uniqueIncomingCount;
+      const newLoaded = nextOffset + uniqueIncomingCount;
       setLoadedDbMatches(newLoaded);
+      loadedDbMatchesRef.current = newLoaded;
       setHasMoreDbMatches(result.hasMore);
 
       if (!result.hasMore) {
@@ -1145,7 +1152,7 @@ export default function Component() {
     } finally {
       setLoadingDbMatches(false);
     }
-  }, [currentPuuid, loadingDbMatches, hasMoreDbMatches, allDbMatchesLoaded, loadedDbMatches]);
+  }, [currentPuuid, loadingDbMatches, hasMoreDbMatches, allDbMatchesLoaded]);
 
   useEffect(() => {
     if (!hasSearched || allDbMatchesLoaded || !hasMoreDbMatches) return;

@@ -35,12 +35,34 @@ export async function GET(request: NextRequest) {
 
   try {
     const cacheEntry = await getMatchCacheEntry(matchId);
-    const [matchDetails, matchTimeline] =
-      cacheEntry.matchData && cacheEntry.timelineData
-        ? [cacheEntry.matchData, cacheEntry.timelineData]
-        : await Promise.all([getMatchDetails(matchId), getMatchTimeline(matchId)]);
+    let matchDetails = cacheEntry.matchData;
+    let matchTimeline = cacheEntry.timelineData;
+    let matchDetailsError: unknown;
+    let matchTimelineError: unknown;
+
+    if (!matchDetails || !matchTimeline) {
+      const [matchDetailsResult, matchTimelineResult] = await Promise.allSettled([
+        getMatchDetails(matchId),
+        getMatchTimeline(matchId),
+      ]);
+
+      if (matchDetailsResult.status === "fulfilled") {
+        matchDetails = matchDetailsResult.value;
+      } else {
+        matchDetailsError = matchDetailsResult.reason;
+      }
+
+      if (matchTimelineResult.status === "fulfilled") {
+        matchTimeline = matchTimelineResult.value;
+      } else {
+        matchTimelineError = matchTimelineResult.reason;
+      }
+    }
 
     if (!matchDetails) {
+      if (matchDetailsError) {
+        console.error("match-details fetch failed:", matchId, matchDetailsError);
+      }
       return NextResponse.json({
         success: false,
         error: "Could not retrieve match details.",
@@ -58,6 +80,9 @@ export async function GET(request: NextRequest) {
     }
 
     if (!matchTimeline) {
+      if (matchTimelineError) {
+        console.error("match-timeline fetch failed:", matchId, matchTimelineError);
+      }
       return NextResponse.json({
         success: false,
         error: "Could not retrieve match timeline data.",
