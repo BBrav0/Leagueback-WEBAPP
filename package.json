@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "static-check": "pnpm run lint && pnpm run typecheck",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "backfill:player-match-role-damage": "tsx scripts/backfill-player-match-role-damage.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -78,6 +79,7 @@
     "supabase": "^2.26.9",
     "tailwindcss": "^3.4.17",
     "typescript": "^5",
+    "tsx": "^4.20.6",
     "vitest": "^3.0.5"
   }
 }
