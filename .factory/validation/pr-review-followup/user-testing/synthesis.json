@@ -1,0 +1,20 @@
+{
+  "milestone": "pr-review-followup",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 0,
+    "deferred": 0
+  },
+  "passedAssertions": [],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null,
+  "notes": [
+    "No completed non-validator feature in pr-review-followup fulfills any validation-contract assertion. The only globally pending related assertion, VAL-FOLLOWUP-002, is explicitly deferred to milestone match-card-rank-validation-followup and is out of scope for this run."
+  ]
+}

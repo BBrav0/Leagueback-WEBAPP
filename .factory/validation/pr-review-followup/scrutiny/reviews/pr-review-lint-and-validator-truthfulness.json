@@ -1,21 +1,21 @@
 {
   "featureId": "pr-review-lint-and-validator-truthfulness",
-  "reviewedAt": "2026-03-31T00:00:00Z",
-  "commitId": "14e021b",
+  "reviewedAt": "2026-03-30T23:59:59Z",
+  "commitId": "14e021bf9ae9fda012d7ddd51906b97f792327cc",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
   "status": "pass",
   "codeReview": {
-    "summary": "The feature restores a truthful ESLint-based lint contract, keeps TypeScript checking as a distinct gate, aligns CI/package truth sources, and includes the requested .env.example trailing-newline hygiene fix. The implementation intentionally leaves newly surfaced pre-existing lint findings for the follow-up lint-fix feature rather than masking them, which matches the feature scope.",
+    "summary": "Commit 14e021b restores a truthful ESLint-backed `lint` script, keeps `typecheck` as a dedicated TypeScript gate, intentionally differentiates `static-check` as a composite lint+typecheck contract, and aligns the committed flat ESLint config, CI workflow, and env-template hygiene with that contract. The follow-up feature `pr-review-eslint-followup-fixes` is correctly separated to resolve the newly surfaced repo lint violations, so this workflow-truthfulness feature itself fully addresses the PR-review issue without overreaching.",
     "issues": []
   },
   "sharedStateObservations": [
     {
       "area": "skills",
-      "observation": "The completed feature uses the web-feature-worker skill even though the work is purely workflow/config truthfulness; the transcript/handoff still handled the task correctly, but the feature metadata is inconsistent with the dedicated platform-docs-worker skill for package/CI/lint-config updates.",
-      "evidence": "features.json:1377-1379 assigns skillName web-feature-worker to this workflow feature, while .factory/skills/platform-docs-worker/SKILL.md says it should be used for package.json scripts, CI workflow truthfulness, and committed lint config."
+      "observation": "This backend/workflow remediation feature was assigned `web-feature-worker`, but the work only touched package scripts, ESLint config, lockfile, and env-template hygiene; no browser/user-flow verification was relevant. The current skill guidance is a poor fit for repo-workflow-only PR-review fixes.",
+      "evidence": "Mission features.json lists `pr-review-lint-and-validator-truthfulness` with `skillName` `web-feature-worker`, while commit 14e021b only edits `.env.example`, `eslint.config.mjs`, `package.json`, and `pnpm-lock.yaml`; the handoff verification likewise covers `pnpm test`, `pnpm run typecheck`, and `pnpm run lint` rather than browser checks."
     }
   ],
   "addressesFailureFrom": null,
-  "summary": "Pass. Commit 14e021b truthfully restores ESLint coverage for pnpm run lint, keeps \typecheck separate, differentiates static-check, aligns CI/package truth sources, and applies the .env.example newline fix without introducing regressions in the scoped workflow contract."
+  "summary": "Reviewed the feature handoff/transcript skeleton, mission feature contract, skill file, shared-state docs, and commit 14e021b. The change truthfully restores ESLint coverage as `lint`, differentiates `static-check` from `typecheck`, keeps CI/package/config truth sources aligned, and scopes the remaining repo lint findings to the dedicated follow-up fix feature, so this review passes."
 }
