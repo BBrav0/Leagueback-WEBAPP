@@ -6,9 +6,9 @@
     "dev": "next dev -p 3005",
     "build": "next build",
     "start": "next start",
-    "lint": "pnpm exec tsc --noEmit",
+    "lint": "pnpm exec eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
-    "static-check": "tsc --noEmit",
+    "static-check": "pnpm run lint && pnpm run typecheck",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -67,9 +67,12 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.5",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "eslint": "^9.38.0",
+    "eslint-config-next": "^16.2.1",
     "jsdom": "^29.0.1",
     "postcss": "^8.5",
     "supabase": "^2.26.9",
