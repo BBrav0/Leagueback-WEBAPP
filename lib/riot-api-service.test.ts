@@ -7,7 +7,8 @@ const mockedIlikeName = vi.fn();
 const mockedSelect = vi.fn();
 const mockedUpsert = vi.fn();
 const mockedFrom = vi.fn();
-const mockedMatchCacheFilter = vi.fn();
+const mockedMatchCacheOrder = vi.fn();
+const mockedMatchCacheLimit = vi.fn();
 
 vi.mock("./supabase-server", () => ({
   getSupabaseServer: () => ({
@@ -62,7 +63,13 @@ describe("riot-api-service account summonerId wiring", () => {
 
       if (columns === "match_data") {
         return {
-          filter: mockedMatchCacheFilter,
+          order: mockedMatchCacheOrder,
+        };
+      }
+
+      if (columns === "match_id, match_data") {
+        return {
+          order: mockedMatchCacheOrder,
         };
       }
 
@@ -70,9 +77,10 @@ describe("riot-api-service account summonerId wiring", () => {
     });
     mockedUpsert.mockResolvedValue({ error: null });
     mockedMaybeSingle.mockResolvedValue({ data: null, error: null });
-    mockedMatchCacheFilter.mockReturnValue({
-      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    mockedMatchCacheOrder.mockReturnValue({
+      limit: mockedMatchCacheLimit,
     });
+    mockedMatchCacheLimit.mockResolvedValue({ data: [], error: null });
   });
 
   it("hydrates a missing summonerId from the worker by puuid before caching", async () => {
@@ -183,24 +191,23 @@ describe("riot-api-service account summonerId wiring", () => {
 
   it("falls back to match_cache participant summonerId when the worker lookup is forbidden", async () => {
     mockedSingle.mockResolvedValueOnce({ data: null });
-    mockedMatchCacheFilter.mockReturnValueOnce({
-      limit: vi.fn().mockResolvedValue({
-        data: [
-          {
-            match_data: {
-              info: {
-                participants: [
-                  {
-                    puuid: "puuid-1",
-                    summonerId: "match-cache-summoner-id",
-                  },
-                ],
-              },
+    mockedMatchCacheLimit.mockResolvedValueOnce({
+      data: [
+        {
+          match_id: "NA1_1",
+          match_data: {
+            info: {
+              participants: [
+                {
+                  puuid: "puuid-1",
+                  summonerId: "match-cache-summoner-id",
+                },
+              ],
             },
           },
-        ],
-        error: null,
-      }),
+        },
+      ],
+      error: null,
     });
 
     const fetchMock = vi.fn()
@@ -262,5 +269,42 @@ describe("riot-api-service account summonerId wiring", () => {
     expect(account.summonerId).toBeUndefined();
     expect(account.rankLookupId).toBe("puuid-1");
     expect(account.riotId).toBe("Bumsdito#3005");
+  });
+
+  it("does not interpolate hostile puuids into a PostgREST JSON filter", async () => {
+    const hostilePuuid = 'puuid-1"}],"oops":"x';
+    mockedMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
+    mockedMatchCacheLimit.mockResolvedValueOnce({
+      data: [
+        {
+          match_id: "NA1_2",
+          match_data: {
+            info: {
+              participants: [
+                {
+                  puuid: hostilePuuid,
+                  summonerId: "safe-summoner-id",
+                },
+              ],
+            },
+          },
+        },
+      ],
+      error: null,
+    });
+
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getSummonerIdByPuuid } = await import("./riot-api-service");
+    const summonerId = await getSummonerIdByPuuid(hostilePuuid);
+
+    expect(summonerId).toBe("safe-summoner-id");
+    expect(mockedMatchCacheOrder).toHaveBeenCalledWith("match_id", { ascending: false });
+    expect(mockedMatchCacheLimit).toHaveBeenCalledWith(25);
   });
 });

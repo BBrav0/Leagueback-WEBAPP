@@ -65,6 +65,25 @@ export async function POST(request: NextRequest) {
     const perMatchDerivationVersions = readPerMatchRecord(syncMetadata?.notes, "perMatchDerivationVersions");
     const perMatchUpdatedAt = readPerMatchRecord(syncMetadata?.notes, "perMatchUpdatedAt");
 
+    const { data: cacheRows, error: cacheRowsError } = await supabase
+      .from("match_cache")
+      .select("match_id, match_data")
+      .in("match_id", matchIds);
+
+    if (cacheRowsError) {
+      console.error("Error fetching match cache rows for stale detection:", cacheRowsError);
+    }
+
+    const cacheInfoByMatchId = new Map(
+      ((cacheRows as Array<{
+        match_id: string;
+        match_data?: { info?: { gameCreation?: number; gameDuration?: number } } | null;
+      }> | null) ?? []).map((row) => [
+        row.match_id,
+        row.match_data?.info ?? null,
+      ])
+    );
+
     const staleMatchIds: string[] = [];
 
     for (const matchId of matchIds) {
@@ -73,18 +92,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const { data: cacheRow, error: cacheError } = await supabase
-        .from("match_cache")
-        .select("match_data")
-        .eq("match_id", matchId)
-        .maybeSingle();
-
-      if (cacheError) {
-        console.error("Error fetching match cache for stale detection:", cacheError);
-        continue;
-      }
-
-      const cacheInfo = (cacheRow?.match_data as { info?: { gameCreation?: number; gameDuration?: number } } | null)?.info;
+      const cacheInfo = cacheInfoByMatchId.get(matchId) ?? null;
       const cacheGameCreation = cacheInfo?.gameCreation ?? null;
       const cacheGameDuration = cacheInfo?.gameDuration ?? null;
 

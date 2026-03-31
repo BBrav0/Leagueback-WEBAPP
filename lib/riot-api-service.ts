@@ -57,9 +57,9 @@ async function getCachedSummonerIdFromMatchParticipants(
 ): Promise<string | undefined> {
   const { data, error } = await getSupabaseServer()
     .from("match_cache")
-    .select("match_data")
-    .filter("match_data->info->participants", "cs", `[{"puuid":"${puuid}"}]`)
-    .limit(5);
+    .select("match_id, match_data")
+    .order("match_id", { ascending: false })
+    .limit(25);
 
   if (error) {
     console.error("match_cache summonerId lookup failed:", error.message);
