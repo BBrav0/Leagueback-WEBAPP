@@ -987,7 +987,7 @@ export default function Component() {
         setLoading(false);
       }
     }
-  }, [router, syncImpactStats]);
+  }, [recentSyncWindowSize, router, syncImpactStats]);
 
   const handleSearch = async () => {
     await runSearch(gameName, tagLine, { syncUrl: true });

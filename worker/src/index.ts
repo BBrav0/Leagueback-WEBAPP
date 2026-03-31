@@ -72,7 +72,7 @@ function safeDecode(segment: string): string {
   }
 }
 
-export default {
+const worker = {
   async fetch(request: Request, env: Env): Promise<Response> {
     // CORS preflight
     if (request.method === "OPTIONS") {
@@ -202,3 +202,5 @@ export default {
     return jsonError("Not found", 404);
   },
 };
+
+export default worker;
