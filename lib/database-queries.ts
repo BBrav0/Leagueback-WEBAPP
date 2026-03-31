@@ -1,5 +1,13 @@
 import { getSupabaseServer } from "./supabase-server";
-import type { MatchDto, MatchTimelineDto, ImpactCategory, MatchSummary } from "./types";
+import type {
+  ImpactCategory,
+  MatchDetailsData,
+  MatchDto,
+  MatchSummary,
+  MatchTimelineDto,
+} from "./types";
+import { buildMatchMetadata } from "./match-reconstruction";
+import { buildMatchDetailsData, buildUnavailableMatchDetailsData } from "./match-details";
 
 export interface PlayerMatchRow {
   match_id: string;
@@ -17,14 +25,55 @@ export interface PlayerMatchRow {
   chart_data: Array<{ minute: number; yourImpact: number; teamImpact: number }>;
   game_creation: number;
   game_duration: number;
+  rank: string | null;
+  rank_queue: "RANKED_SOLO_5x5" | "RANKED_FLEX_SR" | null;
+  role: string | null;
+  damage_to_champions: number | null;
+}
+
+export interface PlayerSyncMetadataRow {
+  puuid: string;
+  latest_riot_match_id?: string | null;
+  latest_riot_match_created_at?: number | null;
+  latest_db_match_id?: string | null;
+  latest_db_match_created_at?: number | null;
+  recent_match_window?: number;
+  reconciled_through_match_created_at?: number | null;
+  last_riot_sync_at?: string | null;
+  last_full_refresh_at?: string | null;
+  last_stale_derived_refresh_at?: string | null;
+  last_known_account_game_name?: string | null;
+  last_known_account_tag_line?: string | null;
+  derivation_version?: string | null;
+  notes?: Record<string, unknown>;
+}
+
+export interface PlayerMatchStaleCheckRow {
+  match_id: string;
+  game_creation: number;
+  game_duration: number;
+  created_at?: string | null;
 }
 
 function rowToMatchSummary(row: PlayerMatchRow): MatchSummary {
+  const metadata = buildMatchMetadata({
+    gameCreation: row.game_creation,
+    gameDuration: row.game_duration,
+    teamPosition: row.role ?? undefined,
+    totalDamageDealtToChampions: row.damage_to_champions ?? undefined,
+    impactCategory: row.impact_category,
+    rank: row.rank,
+    rankLabel: row.rank
+      ? `Current rank snapshot (${row.rank_queue === "RANKED_SOLO_5x5" ? "Solo/Duo" : row.rank_queue === "RANKED_FLEX_SR" ? "Flex" : "current queue"})`
+      : "Current rank snapshot unavailable",
+    rankQueue: row.rank_queue,
+  });
+
   return {
     id: row.match_id,
     summonerName: row.summoner_name,
     champion: row.champion,
-    rank: "Feature coming soon \u{1F440}",
+    ...metadata,
     kda: row.kda,
     cs: row.cs,
     visionScore: row.vision_score,
@@ -97,6 +146,60 @@ export async function upsertPlayerMatchBatch(
     return error.message;
   }
   return null;
+}
+
+export async function getPlayerSyncMetadata(
+  puuid: string
+): Promise<PlayerSyncMetadataRow | null> {
+  const { data, error } = await getSupabaseServer()
+    .from("player_sync_metadata")
+    .select("*")
+    .eq("puuid", puuid)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching player sync metadata:", error);
+    return null;
+  }
+
+  return (data as PlayerSyncMetadataRow | null) ?? null;
+}
+
+export async function upsertPlayerSyncMetadata(
+  row: PlayerSyncMetadataRow
+): Promise<string | null> {
+  const { error } = await getSupabaseServer()
+    .from("player_sync_metadata")
+    .upsert(row, { onConflict: "puuid" });
+
+  if (error) {
+    console.error("player_sync_metadata upsert failed:", error);
+    return error.message;
+  }
+
+  return null;
+}
+
+export async function getPlayerMatchRowsForStaleCheck(
+  puuid: string,
+  matchIds: string[]
+): Promise<PlayerMatchStaleCheckRow[]> {
+  if (matchIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await getSupabaseServer()
+    .from("player_matches")
+    .select("match_id, game_creation, game_duration, created_at")
+    .eq("puuid", puuid)
+    .in("match_id", matchIds);
+
+  if (error) {
+    console.error("Error fetching player matches for stale check:", error);
+    return [];
+  }
+
+  return (data as PlayerMatchStaleCheckRow[] | null) ?? [];
 }
 
 /**
@@ -176,6 +279,26 @@ export async function getMatchCacheEntry(matchId: string): Promise<{
     matchData: (data?.match_data as MatchDto | undefined) ?? null,
     timelineData: (data?.timeline_data as MatchTimelineDto | undefined) ?? null,
   };
+}
+
+export async function getMatchDetailsData(
+  matchId: string,
+  currentPuuid: string
+): Promise<MatchDetailsData> {
+  const cacheEntry = await getMatchCacheEntry(matchId);
+
+  if (cacheEntry.matchData) {
+    return buildMatchDetailsData(matchId, currentPuuid, cacheEntry.matchData, "match_cache");
+  }
+
+  const detailsMap = await getStoredMatchDetails([matchId]);
+  const legacyMatchDetails = detailsMap.get(matchId) ?? null;
+
+  if (legacyMatchDetails) {
+    return buildMatchDetailsData(matchId, currentPuuid, legacyMatchDetails, "legacy_cache");
+  }
+
+  return buildUnavailableMatchDetailsData(matchId);
 }
 
 // ---------------------------------------------------------------------------

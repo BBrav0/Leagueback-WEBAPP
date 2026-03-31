@@ -1,0 +1,27 @@
+{
+  "milestone": "docs-platform",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 4,
+    "passed": 4,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-PLATFORM-001",
+    "VAL-PLATFORM-002",
+    "VAL-PLATFORM-003",
+    "VAL-PLATFORM-004"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [
+    {
+      "target": "user-testing.md",
+      "description": "Added Flow Validator Guidance sections for browser and terminal surfaces and documented docs-platform isolation constraints.",
+      "source": "setup"
+    }
+  ],
+  "previousRound": null
+}

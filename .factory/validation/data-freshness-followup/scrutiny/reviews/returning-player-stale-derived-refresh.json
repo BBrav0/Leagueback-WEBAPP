@@ -1,0 +1,21 @@
+{
+  "featureId": "returning-player-stale-derived-refresh",
+  "reviewedAt": "2026-03-30T19:03:01Z",
+  "commitId": "9c2d0f1",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature commit fixes the earlier player-wide derivation-version flaw by making stale detection match-specific via per-match metadata, and it correctly extends the returning-player sync path to reanalyze stale recent rows even when the recent Riot window is already stored. I did not find a remaining feature-specific correctness issue in this commit beyond the separate dashboard surfacing/monotonic-metadata problems already attributed to other freshness features.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker feedback shows a recurring startup pitfall on Windows: worker-base still lets sessions attempt .factory/init.sh in ways that are not appropriate for this host, even though mission guidance says to treat it as optional/no-op without a POSIX shell.",
+      "evidence": "Transcript skeleton for worker session 9a2caa52-cea5-4c64-beac-541a7ca62514 includes python3 C:\\Users\\bendc\\Documents\\GitHub\\Leagueback-WEBAPP\\.factory\\init.sh, and handoff.skillFeedback explicitly asks for clearer worker-base guidance for Windows."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the feature metadata, handoff, transcript skeleton, skill instructions, and commit 9c2d0f1. The implementation now detects stale rows on a per-match basis and reprocesses stale recent stored matches through the returning-player reconciliation path, so this feature passes review; the remaining freshness blockers live in adjacent dashboard/metadata behavior outside this commit."
+}

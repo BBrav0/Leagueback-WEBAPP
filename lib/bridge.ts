@@ -1,10 +1,23 @@
 import type {
   AccountData,
+  MatchDetailsResponse,
   MatchSummary,
   PerformanceAnalysisResult,
 } from "./types";
+import { getValidationFixtureMatchSummary, VALIDATION_FIXTURE_ACCOUNT } from "./validation-fixture";
 
-export type { AccountData, ChartDataPoint, MatchSummary, PerformanceAnalysisResult } from "./types";
+const CURRENT_DERIVATION_VERSION = "match-summary-v2";
+
+export type {
+  AccountData,
+  ChartDataPoint,
+  MatchDetailsData,
+  MatchDetailsParticipantSummary,
+  MatchDetailsResponse,
+  MatchDetailsTeamSummary,
+  MatchSummary,
+  PerformanceAnalysisResult,
+} from "./types";
 
 export class BackendBridge {
   static async getAccount(
@@ -59,6 +72,21 @@ export class BackendBridge {
     matchId: string,
     userPuuid: string
   ): Promise<PerformanceAnalysisResult | null> {
+    if (userPuuid === VALIDATION_FIXTURE_ACCOUNT.puuid) {
+      const matchSummary = getValidationFixtureMatchSummary(matchId);
+      if (!matchSummary) {
+        return {
+          success: false,
+          error: `Fixture match ${matchId} is unavailable.`,
+        };
+      }
+
+      return {
+        success: true,
+        matchSummary,
+      };
+    }
+
     try {
       const res = await fetch(
         `/api/match-performance?matchId=${encodeURIComponent(matchId)}&userPuuid=${encodeURIComponent(userPuuid)}`
@@ -145,6 +173,33 @@ export class BackendBridge {
     }
   }
 
+  static async getMatchDetails(
+    matchId: string,
+    userPuuid: string
+  ): Promise<MatchDetailsResponse | null> {
+    try {
+      const res = await fetch(
+        `/api/match-details?matchId=${encodeURIComponent(matchId)}&userPuuid=${encodeURIComponent(userPuuid)}`
+      );
+
+      if (!res.ok) {
+        console.error("Failed to get match details", res.status);
+        return null;
+      }
+
+      const data = (await res.json()) as MatchDetailsResponse & { error?: string };
+      if (data.error) {
+        console.error("Backend error:", data.error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error("Error calling getMatchDetails:", error);
+      return null;
+    }
+  }
+
   /**
    * Return which of the given match IDs already exist in player_matches for this puuid.
    */
@@ -185,18 +240,25 @@ export class BackendBridge {
     storedTotalCount: number,
     options: {
       windowSize?: number;
+      recentWindowSize: number;
       /** Delay between each match-performance call (rate limiting). */
       analyzeDelayMs?: number;
       maxSyncRounds?: number;
-    } = {}
+    }
   ): Promise<{
     analyzedCount: number;
     skippedAlreadyFresh: boolean;
     skippedNoHistory: boolean;
+    syncMetadata?: {
+      recentMatchWindow: number;
+    };
     /** Matches we attempted to analyze but did not persist successfully */
     failedAnalyzeAttempts: number;
+    refreshedStaleCount: number;
+    failedStaleRefreshAttempts: number;
   }> {
-    const windowSize = options.windowSize ?? 25;
+    const recentWindowSize = Math.max(options.recentWindowSize, 1);
+    const windowSize = Math.max(options.windowSize ?? recentWindowSize, recentWindowSize);
     const analyzeDelayMs = options.analyzeDelayMs ?? 1500;
     const maxSyncRounds = options.maxSyncRounds ?? 12;
 
@@ -205,46 +267,84 @@ export class BackendBridge {
         analyzedCount: 0,
         skippedAlreadyFresh: false,
         skippedNoHistory: false,
+        syncMetadata: undefined,
         failedAnalyzeAttempts: 0,
+        refreshedStaleCount: 0,
+        failedStaleRefreshAttempts: 0,
       };
     }
 
-    const newestOnly = await this.getMatchHistory(puuid, 1, 0);
-    if (!newestOnly || newestOnly.length === 0) {
+    const recentRiotMatchIds = await this.getMatchHistory(puuid, recentWindowSize, 0);
+    if (!recentRiotMatchIds || recentRiotMatchIds.length === 0) {
       return {
         analyzedCount: 0,
         skippedAlreadyFresh: false,
         skippedNoHistory: true,
+        syncMetadata: undefined,
         failedAnalyzeAttempts: 0,
+        refreshedStaleCount: 0,
+        failedStaleRefreshAttempts: 0,
       };
     }
 
-    const riotHeadId = newestOnly[0];
-    const headExisting = await this.fetchExistingMatchIdsForPlayer(puuid, [riotHeadId]);
-    if (headExisting.has(riotHeadId)) {
+    const recentExisting = await this.fetchExistingMatchIdsForPlayer(puuid, recentRiotMatchIds);
+    const missingRecentMatchIds = recentRiotMatchIds.filter((matchId) => !recentExisting.has(matchId));
+    const staleRecentMatchIds =
+      missingRecentMatchIds.length === 0
+        ? await this.findStaleRecentMatchIds(puuid, recentRiotMatchIds)
+        : [];
+
+    let refreshedStaleCount = 0;
+    let failedStaleRefreshAttempts = 0;
+
+    if (missingRecentMatchIds.length === 0 && staleRecentMatchIds.length === 0) {
       return {
         analyzedCount: 0,
         skippedAlreadyFresh: true,
         skippedNoHistory: false,
+        syncMetadata: undefined,
         failedAnalyzeAttempts: 0,
+        refreshedStaleCount: 0,
+        failedStaleRefreshAttempts: 0,
       };
     }
 
     let analyzedCount = 0;
     let failedAnalyzeAttempts = 0;
-    let listOffset = 0;
+    let listOffset = recentRiotMatchIds.length;
+    let syncMetadata: { recentMatchWindow: number } | undefined;
+
+    for (let i = 0; i < missingRecentMatchIds.length; i++) {
+      const matchId = missingRecentMatchIds[i];
+      const analysis = await this.analyzeMatchPerformance(matchId, puuid);
+      if (analysis?.success && analysis.matchSummary) {
+        syncMetadata = analysis.syncMetadata ?? syncMetadata;
+        analyzedCount++;
+      } else {
+        failedAnalyzeAttempts++;
+      }
+      if (i < missingRecentMatchIds.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, analyzeDelayMs));
+      }
+    }
+
+    for (let i = 0; i < staleRecentMatchIds.length; i++) {
+      const matchId = staleRecentMatchIds[i];
+      const analysis = await this.analyzeMatchPerformance(matchId, puuid);
+      if (analysis?.success && analysis.matchSummary) {
+        syncMetadata = analysis.syncMetadata ?? syncMetadata;
+        refreshedStaleCount++;
+      } else {
+        failedStaleRefreshAttempts++;
+      }
+      if (i < staleRecentMatchIds.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, analyzeDelayMs));
+      }
+    }
 
     for (let round = 0; round < maxSyncRounds; round++) {
       const windowIds = await this.getMatchHistory(puuid, windowSize, listOffset);
       if (!windowIds || windowIds.length === 0) {
-        if (round === 0) {
-          return {
-            analyzedCount: 0,
-            skippedAlreadyFresh: false,
-            skippedNoHistory: true,
-            failedAnalyzeAttempts,
-          };
-        }
         break;
       }
 
@@ -257,6 +357,7 @@ export class BackendBridge {
         const matchId = toAnalyze[i];
         const analysis = await this.analyzeMatchPerformance(matchId, puuid);
         if (analysis?.success && analysis.matchSummary) {
+          syncMetadata = analysis.syncMetadata ?? syncMetadata;
           analyzedCount++;
         } else {
           failedAnalyzeAttempts++;
@@ -279,8 +380,48 @@ export class BackendBridge {
       analyzedCount,
       skippedAlreadyFresh: false,
       skippedNoHistory: false,
+      syncMetadata,
       failedAnalyzeAttempts,
+      refreshedStaleCount,
+      failedStaleRefreshAttempts,
     };
+  }
+
+  private static async findStaleRecentMatchIds(
+    puuid: string,
+    recentRiotMatchIds: string[]
+  ): Promise<string[]> {
+    try {
+      const staleEndpoint =
+        typeof window === "undefined"
+          ? "http://127.0.0.1/api/player-matches/stale-ids"
+          : "/api/player-matches/stale-ids";
+      const actualRes = await fetch(staleEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          puuid,
+          matchIds: recentRiotMatchIds,
+          derivationVersion: CURRENT_DERIVATION_VERSION,
+        }),
+      });
+
+      if (!actualRes.ok) {
+        console.error("findStaleRecentMatchIds HTTP", actualRes.status);
+        return [];
+      }
+
+      const data = (await actualRes.json()) as { staleMatchIds?: string[]; error?: string };
+      if (data.error) {
+        console.error("findStaleRecentMatchIds:", data.error);
+        return [];
+      }
+
+      return data.staleMatchIds ?? [];
+    } catch (error) {
+      console.error("findStaleRecentMatchIds:", error);
+      return [];
+    }
   }
 
   /**

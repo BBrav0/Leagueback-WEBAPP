@@ -1,0 +1,35 @@
+{
+  "milestone": "pr-review-followup",
+  "assertionsTested": [],
+  "passedAssertions": [],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "deferredAssertions": [
+    {
+      "id": "VAL-FOLLOWUP-002",
+      "deferredToMilestone": "match-card-rank-validation-followup",
+      "deferredToFeature": "live-rank-validation-after-rate-limit",
+      "reason": "This assertion is explicitly deferred by feature mapping and is not part of pr-review-followup."
+    }
+  ],
+  "toolsUsed": [
+    "Read",
+    "Execute"
+  ],
+  "frictions": [
+    {
+      "description": "No user-facing assertions are mapped to completed pr-review-followup implementation features, so no browser flow execution was required.",
+      "resolved": true,
+      "resolution": "Confirmed against validation-state.json and prior follow-up synthesis that only VAL-FOLLOWUP-002 remains pending and is deferred to a later milestone.",
+      "affectedAssertions": []
+    }
+  ],
+  "blockers": [
+    {
+      "description": "None for this milestone's scope; there were no testable user-facing assertions to execute.",
+      "affectedAssertions": [],
+      "quickFixAttempted": "Verified local app availability with GET / returning HTTP 200."
+    }
+  ],
+  "summary": "Validated milestone scope only: pr-review-followup has no completed non-validator features that fulfill user-testing assertions, no pending assertions to mark pass/fail, local app is up (GET / -> 200), and control returns to the orchestrator with no testable assertions for this milestone."
+}

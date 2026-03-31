@@ -1,0 +1,21 @@
+{
+  "featureId": "pr-review-safe-match-cache-lookup-fix",
+  "reviewedAt": "2026-03-30T23:59:59Z",
+  "commitId": "c6074fabd0831ff298e71ba9b4d31b2ee0cfe7ae",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the original hardening feature together with the follow-up fix. The original stale-id bulk query and syncMetadataPersistError surfacing remain intact, and commit c6074fa replaces the regressed latest-25-global-row scan with a safe two-step lookup scoped through the target player's own recent player_matches rows before bulk-fetching match_cache candidates. The updated tests cover both hostile input safety and the older cached-match recovery case that previously failed review, so the blocking stale-coverage regression is resolved without reopening the original PR-review concerns.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker used the web-feature-worker skill for a backend-only PR-review remediation fix. The skill is written around user-facing/browser verification and does not document a lighter-weight backend review/remediation path, so it remains an awkward fit for features like safe cache lookup hardening that only touch API/helper code.",
+      "evidence": "Feature pr-review-safe-match-cache-lookup-fix lists skillName web-feature-worker in mission features.json, while commit c6074fa only edits lib/riot-api-service.ts and lib/riot-api-service.test.ts; the handoff's skillFeedback likewise suggests documenting an explicit no-browser path for backend-only PR review remediation features."
+    }
+  ],
+  "addressesFailureFrom": "pr-review-query-and-sync-hardening",
+  "summary": "Reviewed the prior failed scrutiny report, both feature handoffs/transcript skeletons, and commits 89b287c plus c6074fa. The fix now scopes cached summoner-id fallback candidates through player-specific player_matches rows, preserves the original query-hardening and sync-metadata improvements, and adds regression coverage for the older cached-match case that caused the earlier failure, so this follow-up passes review."
+}

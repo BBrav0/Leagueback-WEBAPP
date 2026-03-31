@@ -1,0 +1,15 @@
+{
+  "featureId": "web-polish-final-copy-path-fix",
+  "reviewedAt": "2026-03-30T16:58:06.075827+00:00",
+  "commitId": "4bc190244e218ba1b0f0d13fbb0964c3d627ccb4",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix commit fully addresses the prior copy-truthfulness failures: the older-history load-more catch path now logs raw errors only to diagnostics while always showing the intentional Leagueback fallback string, and the match-details header no longer renders cache/storage source badges. The scoped dashboard edit preserves the existing details status copy and does not introduce new user-facing wording regressions in the reviewed paths.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": ".factory/validation/web-polish/scrutiny/reviews/web-polish-copy-truthfulness-fix.json",
+  "summary": "Pass: the fix removes the implementation-facing match-details source badge and ensures the older-history failure path no longer exposes raw Error.message text to end users."
+}

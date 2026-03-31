@@ -1,0 +1,29 @@
+{
+  "milestone": "match-surface",
+  "round": 2,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 12,
+    "passed": 12,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-SEARCH-001",
+    "VAL-SEARCH-002",
+    "VAL-SEARCH-003",
+    "VAL-SEARCH-004",
+    "VAL-SEARCH-005",
+    "VAL-SEARCH-006",
+    "VAL-MATCH-001",
+    "VAL-MATCH-002",
+    "VAL-MATCH-003",
+    "VAL-MATCH-004",
+    "VAL-MATCH-005",
+    "VAL-CROSS-001"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": ".factory/validation/match-surface/user-testing/synthesis.json"
+}

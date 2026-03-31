@@ -1,0 +1,15 @@
+{
+  "featureId": "history-saved-lookups-rehydration-fix",
+  "reviewedAt": "2026-03-30T08:31:29Z",
+  "commitId": "98d4587d931e107d5fb9a8be2de400d5cc53484d",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix closes the saved-lookups rehydration gap by moving the dashboard from one-time mount hydration to a storage-backed subscription while still updating state immediately on successful lookups. This keeps recent Riot IDs truthful after deep-link loads, saved-lookup reselection, filter changes, and refresh without regressing dedupe/order behavior.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": ".factory/validation/history-ux/scrutiny/reviews/history-filters-preferences-and-reset.json",
+  "summary": "Reviewed the prior scrutiny finding, feature transcript skeleton, handoff evidence, commit 98d4587, and the touched dashboard/saved-lookups code. The new subscribeToSavedLookups flow and regression coverage truthfully address the persisted-state issue behind VAL-CROSS-002, and I found no blocking or non-blocking defects in scope."
+}

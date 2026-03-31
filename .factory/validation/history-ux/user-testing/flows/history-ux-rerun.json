@@ -1,0 +1,97 @@
+{
+  "groupId": "history-ux-rerun",
+  "testedAt": "2026-03-30T08:48:01.476223+00:00",
+  "isolation": {
+    "appUrl": "http://127.0.0.1:3005",
+    "missionDir": "C:\\Users\\bendc\\.factory\\missions\\7b970ada-3b1a-476d-827a-4cd2a618e64e",
+    "fixtureIdentity": "Validation Fixture#LOCAL",
+    "validationPath": "agent-browser local web validation with deterministic fixture and local API evidence"
+  },
+  "toolsUsed": [
+    "agent-browser",
+    "curl",
+    "repo Read/Grep"
+  ],
+  "assertionResults": [
+    {
+      "id": "VAL-CROSS-002",
+      "status": "pass",
+      "reason": "The deep-linked player route remained authoritative while preseeded recent-account and history-preference state coexisted across revisit, subsequent filter/display changes, and refresh. The route kept Validation Fixture#LOCAL loaded, seeded recent lookups remained in localStorage, and updated preferences persisted after interaction and reload.",
+      "evidence": {
+        "screenshots": [
+          "history-ux/history-ux-rerun/initial-direct-route.png",
+          "history-ux/history-ux-rerun/val-cross-002-preferences-applied.png",
+          "history-ux/history-ux-rerun/val-cross-002-post-interaction.png",
+          "history-ux/history-ux-rerun/val-cross-002-post-refresh.png"
+        ],
+        "consoleErrors": "No page errors. Console showed only expected dev/HMR analytics logs plus repeated chart-size warnings.",
+        "network": "Route stayed on /player/Validation%20Fixture#LOCAL throughout. agent-browser request capture was unavailable, so local API evidence from the live app was used separately where needed.",
+        "localState": {
+          "savedLookupsAfterRefresh": [
+            {
+              "gameName": "Saved Person",
+              "tagLine": "KEEP",
+              "puuid": "saved-puuid",
+              "lastAccessedAt": "2026-03-30T00:00:00.000Z"
+            },
+            {
+              "gameName": "Validation Fixture",
+              "tagLine": "LOCAL",
+              "puuid": "validation-fixture-puuid",
+              "lastAccessedAt": "2026-03-29T00:00:00.000Z"
+            }
+          ],
+          "historyPreferencesAfterRefresh": {
+            "result": "loss",
+            "impactCategory": "High Impact",
+            "champion": "Leona",
+            "role": "support",
+            "compactCards": true
+          },
+          "postInteractionUi": "After selecting the Result filter and toggling compact cards, the dashboard showed Showing 1 of 2 loaded matches, Export scope: 1 filtered loaded match, and still rendered Validation Fixture#LOCAL as the active route/player context."
+        }
+      }
+    },
+    {
+      "id": "VAL-CROSS-003",
+      "status": "blocked",
+      "reason": "The current local runtime did not expose the required mixed stored-plus-appended older-history path through the real user surface. Stored history paginated from page 1 to page 2, but once exhausted the UI showed no append-ready badge and no Load More Matches control, so the mandated append/filter/export flow could not be executed end to end.",
+      "evidence": {
+        "screenshots": [
+          "history-ux/history-ux-rerun/val-cross-003-initial.png"
+        ],
+        "consoleErrors": "No page errors during the exercised stored-history flow.",
+        "network": [
+          "GET /api/stored-matches?puuid=validation-fixture-puuid&limit=1&offset=0 -> 200 { totalCount: 2, hasMore: true, matches: [VALIDATION_READY_001] }",
+          "GET /api/stored-matches?puuid=validation-fixture-puuid&limit=1&offset=1 -> 200 { totalCount: 2, hasMore: false, matches: [VALIDATION_FALLBACK_002] }"
+        ],
+        "runtimeUiCheck": "DOM inspection after loading the route found no text for Validation fixture older-history append ready or Load More Matches.",
+        "repoEvidence": [
+          "lib/validation-fixture.test.ts documents deterministic appended fixture matches and older-history IDs for the append path.",
+          "components/dashboard/lol-stats-dashboard.tsx renders the append-ready badge and Load More Matches button only when allDbMatchesLoaded && hasMoreMatches."
+        ]
+      }
+    }
+  ],
+  "frictions": [
+    {
+      "description": "agent-browser network capture reported no tracked requests for this local Next.js session.",
+      "resolved": true,
+      "resolution": "Used curl against the local app API for request/response evidence and agent-browser DOM/storage inspection for UI evidence.",
+      "affectedAssertions": [
+        "VAL-CROSS-002",
+        "VAL-CROSS-003"
+      ]
+    }
+  ],
+  "blockers": [
+    {
+      "description": "Despite the deterministic fixture code exposing appended match IDs, the live local app session never surfaced the append-ready badge or Load More Matches button after exhausting stored pages, preventing real-surface execution of the mixed history append flow.",
+      "affectedAssertions": [
+        "VAL-CROSS-003"
+      ],
+      "quickFixAttempted": "Loaded the deep-linked fixture route, inspected the rendered DOM, and queried /api/stored-matches page offsets 0 and 1 to confirm stored pagination reached hasMore=false without exposing append controls."
+    }
+  ],
+  "summary": "Rerun covered 2 assertions: VAL-CROSS-002 passed on the real local surface with persisted recent/history state preserved alongside the explicit deep link; VAL-CROSS-003 remained blocked because the current runtime never exposed the required older-history append UI after stored-page exhaustion."
+}

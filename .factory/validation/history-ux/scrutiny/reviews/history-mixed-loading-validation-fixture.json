@@ -1,0 +1,15 @@
+{
+  "featureId": "history-mixed-loading-validation-fixture",
+  "reviewedAt": "2026-03-30T08:32:02.729993+00:00",
+  "commitId": "5c06c7f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix now truthfully exposes a deterministic mixed history path for Validation Fixture#LOCAL without changing non-fixture behavior. The commit adds appended fixture matches and routes them through the real /api/match-history + bridge loading flow, preserves the existing stored-matches fixture path, and updates dashboard lifetime/append indicators so the UI can exercise stored paging plus older-history appends end to end. I did not find blocking or non-blocking defects in the scoped implementation.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Pass: commit 5c06c7f resolves the prior VAL-CROSS-003 blocker by adding deterministic appended fixture history through the real runtime path while keeping production users on the normal Riot-backed flow."
+}

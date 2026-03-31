@@ -1,0 +1,21 @@
+{
+  "featureId": "player-sync-metadata-correctness-fix",
+  "reviewedAt": "2026-03-30T19:00:00Z",
+  "commitId": "cc31b0e26b179cb22717b19e65fbe5e23d1e8ef9",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix addresses both prior blockers. match-performance now preserves latest_riot_* and latest_db_* head markers monotonically when older stale rows are reprocessed, and stale detection now reads per-match freshness state from player_sync_metadata.notes plus row/cache comparisons so one refreshed row no longer hides other stale recent rows for the same player.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The web-feature-worker skill still frames browser verification as a normal required step even for server/data-freshness fixes like this one, so workers must record an avoidable deviation when the feature is primarily API/database logic.",
+      "evidence": "Feature player-sync-metadata-correctness-fix in mission \features.json uses web-feature-worker; the handoff's skillFeedback.followedProcedure is false solely because browser verification was skipped for this non-UI fix, and web-feature-worker/SKILL.md step 6 is written around UI verification."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/data-freshness-followup/scrutiny/reviews/leagueback-player-sync-metadata.json",
+  "summary": "Reviewed the prior fail report, fix handoff, transcript skeleton, skill file, and commit cc31b0e. The fix passes: latest Riot/DB head metadata now stays monotonic during stale-row reprocessing, and stale derived-row detection is match-specific rather than player-wide, so the prior blocking scrutiny findings for leagueback-player-sync-metadata are addressed."
+}

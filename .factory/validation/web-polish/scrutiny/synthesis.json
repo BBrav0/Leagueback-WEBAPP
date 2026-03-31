@@ -1,0 +1,43 @@
+{
+  "milestone": "web-polish",
+  "round": 3,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "pnpm test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "pnpm run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "pnpm run lint",
+      "exitCode": 0
+    },
+    "build": {
+      "passed": true,
+      "command": "pnpm run build",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 3,
+    "passed": 1,
+    "failed": 2,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [
+    {
+      "observation": "Clarify in the web-feature-worker skill whether copy-only UI polish work may rely on source review alone or must still capture browser/dev-server runtime evidence when agent-browser is unavailable.",
+      "reason": "rejected as non-systemic and already sufficiently covered by existing fallback guidance in AGENTS.md and the web-feature-worker skill"
+    }
+  ],
+  "previousRound": ".factory/validation/web-polish/scrutiny/synthesis.json"
+}

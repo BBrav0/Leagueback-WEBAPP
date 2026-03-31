@@ -1,0 +1,35 @@
+{
+  "milestone": "match-card-metadata-followup",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 2,
+    "passed": 1,
+    "failed": 0,
+    "blocked": 0,
+    "deferred": 1
+  },
+  "passedAssertions": [
+    "VAL-FOLLOWUP-001"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "deferredAssertions": [
+    {
+      "id": "VAL-FOLLOWUP-002",
+      "deferredToMilestone": "match-card-rank-validation-followup",
+      "deferredToFeature": "live-rank-validation-after-rate-limit",
+      "reason": "Truthful unavailable fallback was validated, but no live/runtime card instance in the approved fallback path exposed a non-null current-rank snapshot to prove rendered queue-preference behavior. Per orchestrator-approved feature mapping, this assertion is deferred to a later milestone and does not block the current milestone from passing."
+    }
+  ],
+  "appliedUpdates": [
+    {
+      "type": "status-reclassification",
+      "target": "VAL-FOLLOWUP-002",
+      "from": "blocked",
+      "to": "deferred",
+      "note": "Deferred assertions do not count as failures or blockers for the current milestone when explicitly mapped to a later milestone."
+    }
+  ],
+  "previousRound": null
+}

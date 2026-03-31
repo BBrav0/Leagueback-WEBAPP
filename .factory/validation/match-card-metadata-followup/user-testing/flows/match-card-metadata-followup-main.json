@@ -1,0 +1,106 @@
+{
+  "groupId": "match-card-metadata-followup-main",
+  "testedAt": "2026-03-31T00:05:17.249291+00:00",
+  "isolation": {
+    "appUrl": "http://127.0.0.1:3005",
+    "missionDir": "C:\\Users\\bendc\\.factory\\missions\\7b970ada-3b1a-476d-827a-4cd2a618e64e",
+    "milestone": "match-card-metadata-followup",
+    "fallback": "approved tests-plus-dev-server/API evidence fallback because agent-browser is unavailable on this host"
+  },
+  "toolsUsed": [
+    "Read",
+    "Execute"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-FOLLOWUP-001",
+      "title": "DB-backed stored cards preserve supported role/lane and damage metadata truthfully",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "GET /api/account for Validation Fixture#LOCAL",
+          "expected": "Fixture account resolves for the real stored-history route",
+          "observed": "200 response with puuid validation-fixture-puuid and summonerId validation-fixture-summoner-id"
+        },
+        {
+          "action": "GET /api/stored-matches?puuid=validation-fixture-puuid&limit=20&offset=0",
+          "expected": "DB-backed stored cards include persisted role/damage metadata when present",
+          "observed": "200 response returned VALIDATION_READY_001 with roleLabel Role: Middle and damageToChampionsLabel 24,876 damage to champions, plus VALIDATION_FALLBACK_002 with roleLabel Role: Support and damageToChampionsLabel 9,321 damage to champions"
+        },
+        {
+          "action": "Inspect rendered card surface implementation used by the dashboard",
+          "expected": "Rendered cards surface role/damage/rank labels from stored match payload",
+          "observed": "lol-stats-dashboard renders badges for match.roleLabel and match.damageToChampionsLabel and shows match.rankLabel in the card metadata area"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "Not available under the approved non-browser fallback; no runtime server errors surfaced in exercised API responses.",
+        "network": [
+          "evidence/match-card-metadata-followup/main/account-response.json",
+          "evidence/match-card-metadata-followup/main/stored-matches-response.json"
+        ],
+        "terminal": "pnpm test lib/database-queries.test.ts lib/rank-snapshot.test.ts lib/validation-fixture.test.ts -> 3 files passed, 11 tests passed",
+        "files": [
+          "evidence/match-card-metadata-followup/main/rendered-card-surface-evidence.json"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FOLLOWUP-002",
+      "title": "Match cards present current rank snapshots truthfully with queue preference",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "GET /api/stored-matches?puuid=validation-fixture-puuid&limit=20&offset=0",
+          "expected": "Cards show truthful current-rank snapshot when available, otherwise explicit unavailable fallback",
+          "observed": "200 response returned rank null and rankLabel Current rank snapshot unavailable for both fixture cards"
+        },
+        {
+          "action": "Run focused rank snapshot tests",
+          "expected": "Supported queue preference remains Solo/Duo first, then Flex, with unavailable fallback otherwise",
+          "observed": "rank-snapshot tests passed, proving selectCurrentRankSnapshot prefers Solo/Duo over Flex and falls back to explicit unavailable state when no supported entry exists"
+        },
+        {
+          "action": "Check available fallback proof path under mission exception",
+          "expected": "If live rank proof is unavailable due to external limitations, assertion should be blocked rather than failed while confirming truthful fallback copy",
+          "observed": "Current runtime proof only demonstrates truthful unavailable fallback; no live supported rank response was available in this fallback validation path to prove a non-null current snapshot on cards"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "Not available under the approved non-browser fallback; no runtime server errors surfaced in exercised API responses.",
+        "network": [
+          "evidence/match-card-metadata-followup/main/stored-matches-response.json"
+        ],
+        "terminal": "pnpm test lib/database-queries.test.ts lib/rank-snapshot.test.ts lib/validation-fixture.test.ts -> 3 files passed, 11 tests passed",
+        "files": [
+          "evidence/match-card-metadata-followup/main/rendered-card-surface-evidence.json"
+        ]
+      },
+      "issues": "Blocked per mission guidance: truthful unavailable fallback was validated, but live/current supported rank snapshot proof remains deferred because this host is using the approved non-browser fallback and the available runtime fixture data exposes only the unavailable state."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "agent-browser is unavailable on this Windows host, so UI screenshots/console capture could not be collected directly.",
+      "resolved": true,
+      "resolution": "Used the approved tests-plus-dev-server/API evidence fallback against http://127.0.0.1:3005 and saved local API payloads plus focused test output.",
+      "affectedAssertions": [
+        "VAL-FOLLOWUP-001",
+        "VAL-FOLLOWUP-002"
+      ]
+    }
+  ],
+  "blockers": [
+    {
+      "description": "No available live/runtime card instance in this isolation context exposed a supported non-null current-rank snapshot, so queue-preference behavior could only be proven by focused tests rather than by real rendered card evidence.",
+      "affectedAssertions": [
+        "VAL-FOLLOWUP-002"
+      ],
+      "quickFixAttempted": "Queried the fixture-backed /api/account and /api/stored-matches paths and reviewed focused rank snapshot/runtime tests; runtime still only exposed the explicit unavailable fallback state."
+    }
+  ],
+  "summary": "Tested 2 assertions through the approved fallback path: VAL-FOLLOWUP-001 passed with stored-match API plus rendered-surface evidence; VAL-FOLLOWUP-002 is blocked because truthful unavailable fallback was confirmed but live supported rank snapshot proof remains deferred."
+}

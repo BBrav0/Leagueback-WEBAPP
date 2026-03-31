@@ -1,0 +1,15 @@
+{
+  "featureId": "match-details-test-scope-fix",
+  "reviewedAt": "2026-03-30T06:49:30Z",
+  "commitId": "1c3fe98dc2539e0bfad76246b0c4c8bd696ee418",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix directly resolves the prior scrutiny failure by expanding Vitest's committed include scope to cover app API tests, which brings the previously dead `app/api/match-details/route.test.ts` file into `pnpm test` without regressing the existing lib test coverage.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "C:\\Users\\bendc\\Documents\\GitHub\\Leagueback-WEBAPP\\.factory\\validation\\match-surface\\scrutiny\\reviews\\match-details-ui-and-flow.json",
+  "summary": "Pass: the original blocking gap was that the details route test existed outside the committed Vitest include scope. Commit `1c3fe98` updates `vitest.config.ts` from `lib/**/*.test.ts` to `lib/**/*.test.ts` plus `app/api/**/*.test.ts`, and the fix handoff records a subsequent `pnpm test -- --reporter=verbose` run that explicitly executed `app/api/match-details/route.test.ts`. Reviewing both the original feature diff and the fix diff shows no remaining dead route test file outside the committed test command's scope."
+}

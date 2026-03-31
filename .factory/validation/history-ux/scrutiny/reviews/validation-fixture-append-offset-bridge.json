@@ -1,0 +1,21 @@
+{
+  "featureId": "validation-fixture-append-offset-bridge",
+  "reviewedAt": "2026-03-30T08:59:26Z",
+  "commitId": "aa431f944b739a4a167e50b26e5ce670423141fe",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix addresses the rerun blocker by translating fixture older-history requests from the dashboard global offset contract into appended-history-relative slicing. The updated tests cover the previously blocked starts at the stored-match total and the next offset, and I did not find blocking or non-blocking issues in the scoped implementation.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker transcript again shows a guaranteed failed attempt to execute .factory/init.sh on Windows before following the documented no-op fallback. The mission AGENTS guidance already says not to run the POSIX script directly on this host, but the worker-base startup procedure still appears to prompt the attempt.",
+      "evidence": "Transcript skeleton for fdab3f34-1277-4ab4-a2fb-d7d299eb75c5 includes an Execute call that tries to run C:\\Users\\bendc\\Documents\\GitHub\\Leagueback-WEBAPP\\.factory\\init.sh via Python; the handoff skillFeedback marks this as a deviation and suggests a Windows-safe skip. AGENTS.md Testing & Validation Guidance says not to attempt .factory/init.sh directly on this Windows host unless a compatible POSIX shell is available."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/history-ux/user-testing/flows/history-ux-rerun.json",
+  "summary": "Pass: commit aa431f944b739a4a167e50b26e5ce670423141fe fixes the fixture offset bridge so stored-history exhaustion now lines up with the append-history runtime contract that VAL-CROSS-003 needed."
+}

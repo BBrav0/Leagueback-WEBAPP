@@ -1,0 +1,15 @@
+{
+  "featureId": "pr-review-migration-backfill-safety",
+  "reviewedAt": "2026-03-31T00:30:00Z",
+  "commitId": "16cd308cb584d7764b20bec01c713eeb5c6b7fdf",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the handoff, transcript skeleton, and commit 16cd308cb584d7764b20bec01c713eeb5c6b7fdf. The feature fully addresses the PR-review concern by making the historical migration schema-only and moving the expensive role/damage repair into a bounded resumable script that bulk-loads candidate player_matches and the matching match_cache rows before upserting only the repaired fields. That keeps DDL safe for already-applied environments like LeagueBack while preserving a repo-tracked path to align existing data with the live app's role/damage persistence expectations.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The risky inline full-table JSON backfill was removed from the migration path and replaced with a resumable operational script, so the repo no longer relies on a long blocking match_cache rewrite during schema migration while still keeping an explicit repo-tracked remediation path for existing environments."
+}

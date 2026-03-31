@@ -1,0 +1,26 @@
+{
+  "featureId": "live-rank-summoner-id-wiring-fix",
+  "reviewedAt": "2026-03-30T23:50:59.589001+00:00",
+  "commitId": "8cfd3dd",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix correctly re-points live rank lookups to the authoritative match participant summoner identifier while preserving fallback identifier derivation in the account/cache flow. The reviewed diff, handoff evidence, deployed worker route, and updated tests align with the feature requirements, and I did not find blocking or non-blocking code defects in the implemented scope.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The mission shared state does not currently document that the deployed Riot proxy rank endpoint now attempts /lol/league/v4/entries/by-summoner/{identifier} first and falls back to /lol/league-exp/v4/entries/by-puuid/{identifier} on 403. That identifier/endpoint pairing was central to this fix and to the deferred live-rank validation feature.",
+      "evidence": "worker/src/index.ts:145-162 implements the by-summoner-first then by-puuid fallback behavior, but .factory/library/architecture.md only states that workers should switch to the correct current Riot endpoint/identifier pair when rank requests fail without recording the concrete runtime contract."
+    },
+    {
+      "area": "knowledge",
+      "observation": "The mission library does not capture that /api/account now exposes a derived rankLookupId in addition to summonerId, even though the feature handoff relies on that field as the documented account/cache fallback for current-rank work.",
+      "evidence": "lib/types.ts:4-9 adds rankLookupId, lib/riot-api-service.ts:95-103 and 139-149 populate it, and the handoff states the account/cache flow now exposes this derived identifier, but .factory/library/architecture.md and .factory/library/environment.md do not mention it."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the feature handoff, transcript skeleton, commit 8cfd3dd, affected source files, and shared-state docs. The implementation satisfies the stated rank-wiring fix requirements, preserves truthful fallback behavior under the approved external-rank limitation, and I found no code issues that should fail the feature review."
+}

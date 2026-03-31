@@ -1,0 +1,21 @@
+{
+  "featureId": "match-card-metadata-and-truthful-rank",
+  "reviewedAt": "2026-03-30T06:38:17.314570+00:00",
+  "commitId": "fd27f4c3660f1d8539e47c46e6c2721366b0479b",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature removes placeholder rank copy and consistently adds truthful card metadata for both reconstructed and stored matches via a shared metadata mapper. I found no blocking or non-blocking implementation issues against VAL-MATCH-001 and VAL-MATCH-002.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker did not follow the web-feature-worker instruction to run the committed lint/static-check gate for this UI-facing feature; the handoff reports tests, typecheck, build, and dev-server evidence only.",
+      "evidence": "Handoff C:\\Users\\bendc\\.factory\\missions\\7b970ada-3b1a-476d-827a-4cd2a618e64e\\handoffs\\2026-03-30T06-26-05-802Z__match-card-metadata-and-truthful-rank__3b6de4f9-109a-4a11-a172-291478d39282.json lists pnpm test, pnpm exec tsc --noEmit, pnpm run build, and dev-server checks, but no pnpm run lint/pnpm run static-check, despite .factory/services.yaml and .factory/skills/web-feature-worker/SKILL.md naming lint/static-check as committed gates."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed feature match-card-metadata-and-truthful-rank by reading mission docs, the worker handoff/transcript skeleton, the feature commit diff, and the affected dashboard and mapper files. The implementation satisfies the truthful rank fallback and enriched match-card metadata requirements for both stored and reconstructed matches; I recorded one shared-state observation about the worker skill/validation procedure."
+}

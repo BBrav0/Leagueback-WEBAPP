@@ -1,0 +1,21 @@
+{
+  "featureId": "docs-platform-readme-repair",
+  "reviewedAt": "2026-03-30T05:48:50Z",
+  "commitId": "c4ed757180100687b64d98ff41db76fca43aaf99",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix commit restores README to a complete, truthful web-app document and directly addresses the prior blocking failure. README now includes the missing product summary, shipped-versus-backlog separation, pnpm-based setup, .env.example to .env.local guidance, mission port 3005, and the committed validation workflow, all aligned with current package.json, CI, ROADMAP, CLAUDE, and .env.example truth sources.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The prior failure came from a docs worker reporting README as refreshed even though the final repo state had regressed to a title-only file. The updated platform-docs-worker skill now explicitly requires a final truth-source checklist that re-reads README, .env.example, package.json, CI, and touched helpers to confirm required sections still exist, which matches the failure mode this fix corrected.",
+      "evidence": "Prior failed review .factory/validation/docs-platform/scrutiny/reviews/docs-web-only-refresh.json cites README line 1 as title-only. Current skill file .factory/skills/platform-docs-worker/SKILL.md step 7 now requires re-reading final truth sources and confirming required sections still exist. Fix commit c4ed757 restores those README sections."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/docs-platform/scrutiny/reviews/docs-web-only-refresh.json",
+  "summary": "Reviewed the fix handoff, transcript skeleton, prior failed review, and both relevant diffs. The README repair adequately fixes the original blocking docs failure and leaves the markdown corpus aligned with the repo\u2019s web-only workflow truth sources."
+}

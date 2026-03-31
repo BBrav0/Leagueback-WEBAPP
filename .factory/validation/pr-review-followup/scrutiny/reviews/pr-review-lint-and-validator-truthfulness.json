@@ -1,0 +1,21 @@
+{
+  "featureId": "pr-review-lint-and-validator-truthfulness",
+  "reviewedAt": "2026-03-30T23:59:59Z",
+  "commitId": "14e021bf9ae9fda012d7ddd51906b97f792327cc",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Commit 14e021b restores a truthful ESLint-backed `lint` script, keeps `typecheck` as a dedicated TypeScript gate, intentionally differentiates `static-check` as a composite lint+typecheck contract, and aligns the committed flat ESLint config, CI workflow, and env-template hygiene with that contract. The follow-up feature `pr-review-eslint-followup-fixes` is correctly separated to resolve the newly surfaced repo lint violations, so this workflow-truthfulness feature itself fully addresses the PR-review issue without overreaching.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "This backend/workflow remediation feature was assigned `web-feature-worker`, but the work only touched package scripts, ESLint config, lockfile, and env-template hygiene; no browser/user-flow verification was relevant. The current skill guidance is a poor fit for repo-workflow-only PR-review fixes.",
+      "evidence": "Mission features.json lists `pr-review-lint-and-validator-truthfulness` with `skillName` `web-feature-worker`, while commit 14e021b only edits `.env.example`, `eslint.config.mjs`, `package.json`, and `pnpm-lock.yaml`; the handoff verification likewise covers `pnpm test`, `pnpm run typecheck`, and `pnpm run lint` rather than browser checks."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the feature handoff/transcript skeleton, mission feature contract, skill file, shared-state docs, and commit 14e021b. The change truthfully restores ESLint coverage as `lint`, differentiates `static-check` from `typecheck`, keeps CI/package/config truth sources aligned, and scopes the remaining repo lint findings to the dedicated follow-up fix feature, so this review passes."
+}

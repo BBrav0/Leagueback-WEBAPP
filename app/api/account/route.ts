@@ -1,5 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAccountByRiotId } from "@/lib/riot-api-service";
+import {
+  isValidationFixtureIdentity,
+  VALIDATION_FIXTURE_ACCOUNT,
+} from "@/lib/validation-fixture";
+
+function canServeValidationFixture(request: NextRequest): boolean {
+  if (process.env.NODE_ENV !== "development" && process.env.NODE_ENV !== "test") {
+    return false;
+  }
+
+  const host = request.nextUrl.hostname.toLowerCase();
+  return host === "localhost" || host === "127.0.0.1";
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -16,6 +29,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    if (canServeValidationFixture(request) && isValidationFixtureIdentity(gameName, tagLine)) {
+      return NextResponse.json(VALIDATION_FIXTURE_ACCOUNT);
+    }
+
     const account = await getAccountByRiotId(gameName, tagLine);
     return NextResponse.json(account);
   } catch (error) {

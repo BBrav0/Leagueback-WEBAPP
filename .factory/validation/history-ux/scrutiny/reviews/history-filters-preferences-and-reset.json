@@ -1,0 +1,21 @@
+{
+  "featureId": "history-filters-preferences-and-reset",
+  "reviewedAt": "2026-03-30T08:05:00Z",
+  "commitId": "98d4587d931e107d5fb9a8be2de400d5cc53484d",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix addresses the prior blocking gap by keeping saved Riot ID lookups synchronized with localStorage after successful lookup mutations, so the dashboard's recent-account state rehydrates correctly after deep-link selection, saved-lookup reselection, filter changes, and refresh while preserving the existing route-precedence and history-preference behavior.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The web-feature-worker skill still tells workers to write failing tests first when possible, but the original history-filters worker handoff/tests show the feature landed with new helper coverage added after implementation rather than as an initial failing test. The skill could be clearer that persisted-state fixes may instead rely on targeted post-implementation regression tests when touching the monolithic dashboard flow.",
+      "evidence": "Original feature diff 573ba22 adds lib/history-preferences.test.ts alongside the new helper/UI code, and the fix handoff for worker session \u001b99e4e5c-902a-4f57-95dd-c7065e8cf38d explicitly suggests clarifying storage-backed persisted-state guidance in .factory/skills/web-feature-worker/SKILL.md."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/history-ux/scrutiny/reviews/history-filters-preferences-and-reset.json",
+  "summary": "Reviewed the prior failed review, both the original feature commit (573ba22) and the fix commit (98d4587), the fix handoff, transcript skeleton, and shared-state docs. The new saved-lookup subscription closes the original VAL-CROSS-002 gap by rehydrating recent Riot IDs from storage after successful lookup mutations, and I found no remaining blocking issues in the scoped filter/preferences/reset behavior."
+}

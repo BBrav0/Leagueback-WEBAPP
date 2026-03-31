@@ -1,0 +1,15 @@
+{
+  "featureId": "pr-review-eslint-followup-fixes",
+  "reviewedAt": "2026-03-31T00:30:00Z",
+  "commitId": "c27cc7dc9489d19a33a3ad113bcac07a56e4a543",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature cleanly resolves the concrete ESLint findings introduced by the earlier lint-truthfulness restoration without expanding scope or weakening the validator contract. Commit c27cc7d removes the render-time Math.random() purity violation in SidebarMenuSkeleton, fixes the dashboard callback dependency list so the current recentSyncWindowSize is tracked truthfully, and replaces the anonymous Cloudflare worker default export with a named binding. The broader lint/static-check/typecheck truthfulness contract restored by commit 14e021b remains intact in package.json, CI, README, AGENTS, and services metadata, so `pnpm run lint`, `pnpm run static-check`, and `pnpm run typecheck` stay distinct and truthful after the follow-up fix.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed features.json, both relevant handoffs, the transcript skeleton, commit c27cc7d, and the current validator truth sources. The implementation is review-sized, resolves the reported ESLint findings, and preserves the distinct truthful lint/static-check/typecheck contract, so this feature passes review."
+}

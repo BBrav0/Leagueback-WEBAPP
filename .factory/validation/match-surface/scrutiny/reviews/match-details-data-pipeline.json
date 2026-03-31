@@ -1,0 +1,34 @@
+{
+  "featureId": "match-details-data-pipeline",
+  "reviewedAt": "2026-03-30T06:40:00Z",
+  "commitId": "2b17b9c",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature adds a dedicated details mapper and database accessor, but it does not fully satisfy the stated fallback requirements. The mapping layer correctly resolves cached and legacy raw match data into a UI-friendly structure and keeps the summary pipeline separate, yet it mislabels the data source in one fallback path and conflates empty participant payloads with a cache-miss state, which makes the UI report an inaccurate reason for the failure.",
+    "issues": [
+      {
+        "file": "lib/match-details.ts",
+        "line": 152,
+        "severity": "blocking",
+        "description": "When buildMatchDetailsData() receives a raw match payload object whose participant list is missing or empty, it spreads buildUnavailableMatchDetailsData() and then overwrites source with match_cache or legacy_cache. That returns a status label claiming cached raw data has not been saved yet even though a raw record was found but was incomplete. This violates the requirement to represent missing or partial raw detail data explicitly in the mapping layer and produces a misleading fallback reason for the UI."
+      },
+      {
+        "file": "lib/match-details.ts",
+        "line": 150,
+        "severity": "non_blocking",
+        "description": "The mapper treats any missing or empty participants array as the same unavailable payload used for a true cache miss, but it never preserves that the source data was partial. As a result, consumers cannot distinguish between 'no raw record exists' and 'raw record exists but participant/team data is incomplete,' which weakens the truthful fallback contract described for this feature."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The mission library notes that details UI should use a deliberate mapping layer rather than overloading the summary shape, but it does not record the concrete raw-detail source precedence that this feature established (match_cache first, then legacy match_details, otherwise explicit unavailable payload). Capturing that precedence in shared state would save later match-details workers from rediscovering it.",
+      "evidence": "lib/database-queries.ts:195-212 implements getMatchDetailsData() with match_cache -> match_details fallback; .factory/library/architecture.md only states that details should use a deliberate mapping layer."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail. I reviewed the feature metadata, worker handoff/transcript skeleton, commit 2b17b9c, and the affected match-details files. The new pipeline mostly matches scope, but the fallback mapper reports an incorrect reason when raw detail rows exist but are incomplete, so the feature does not fully meet the requirement for truthful missing or partial-data handling."
+}

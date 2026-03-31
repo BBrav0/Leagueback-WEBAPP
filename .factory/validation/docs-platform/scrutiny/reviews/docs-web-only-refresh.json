@@ -1,0 +1,15 @@
+{
+  "featureId": "docs-web-only-refresh",
+  "reviewedAt": "2026-03-30T05:48:46Z",
+  "commitId": "809176a02e6bc614a8dc50218bee8a1f963b37a2",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The original docs refresh failed because README was reduced to a title and disclaimer, but the follow-up fixes repaired that gap and the final repo state now satisfies the web-only docs refresh intent. README truthfully documents the current web app, setup flow, env guidance, port 3005 workflow, and shipped-vs-backlog separation; ROADMAP and CLAUDE remain aligned with that scope; and the cleanup commit removes the remaining duplicated env guidance and misleading helper-script behavior.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": ".factory/validation/docs-platform/scrutiny/reviews/docs-web-only-refresh.json",
+  "summary": "Pass. I reviewed the original failed docs refresh, the README repair commit, and the final workflow-truthfulness cleanup commit. The prior failure is adequately addressed: README is restored with truthful web-only product/setup content, the markdown corpus stays aligned with ROADMAP and CLAUDE, and the final truth sources/helpers now match the committed 3005 pnpm workflow."
+}

@@ -1,0 +1,51 @@
+{
+  "milestone": "history-ux",
+  "round": 5,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "pnpm test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "pnpm run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "pnpm run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Keep the web-feature-worker skill explicit that monolithic dashboard persisted-state regressions may be verified with targeted post-implementation regression tests when failing-test-first is impractical, rather than implying every such fix must start from a red test.",
+      "evidence": "Original feature diff 573ba22 adds lib/history-preferences.test.ts alongside the new helper/UI code, and the fix handoff for worker session \u001b99e4e5c-902a-4f57-95dd-c7065e8cf38d explicitly suggests clarifying storage-backed persisted-state guidance in .factory/skills/web-feature-worker/SKILL.md.",
+      "isSystemic": false
+    },
+    {
+      "target": "skills",
+      "suggestion": "Update startup guidance so Windows-host workers skip direct .factory/init.sh execution when no POSIX shell is available, instead of first attempting a doomed invocation.",
+      "evidence": "Transcript skeleton for fdab3f34-1277-4ab4-a2fb-d7d299eb75c5 includes an Execute call that tries to run C:\\Users\\bendc\\Documents\\GitHub\\Leagueback-WEBAPP\\.factory\\init.sh via Python; the handoff skillFeedback marks this as a deviation and suggests a Windows-safe skip. AGENTS.md Testing & Validation Guidance says not to attempt .factory/init.sh directly on this Windows host unless a compatible POSIX shell is available.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "The worker discovered an exec-wrapper-specific failure mode for the documented Windows stop helper because PowerShell dollar-sign variables were mangled, but the shared state still documents only the primary stop command. A wrapper-safe fallback cleanup command should be documented for future workers using this host.",
+      "reason": "already-documented"
+    }
+  ],
+  "previousRound": ".factory/validation/history-ux/scrutiny/synthesis.json"
+}

@@ -1,0 +1,28 @@
+{
+  "featureId": "web-polish-copy-truthfulness-fix",
+  "reviewedAt": "2026-03-30T16:58:38Z",
+  "commitId": "391ffd8af3f00936334179ca75c2bf7ca7d800d3",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The fix only partially addressed the prior scrutiny findings. It hard-coded better fallback text for the non-Error branch of older-history loading, but the actual user-facing path still allows raw Error.message text to surface, and the details header still exposes storage/cache implementation terminology instead of removing or truly productizing it.",
+    "issues": [
+      {
+        "file": "components/dashboard/lol-stats-dashboard.tsx",
+        "line": 1083,
+        "severity": "blocking",
+        "description": "The catch block still does \u001brr instanceof Error ? err.message : ..., so users can still see raw backend/generic error strings on the older-history load-more path. This directly misses the stated fix requirement to replace the generic older-history failure message with explicit user-facing Leagueback wording and matches the unresolved scrutiny synthesis finding."
+      },
+      {
+        "file": "components/dashboard/lol-stats-dashboard.tsx",
+        "line": 398,
+        "severity": "blocking",
+        "description": "The fix maps details.source to Cached match data / Legacy cached match data, but those labels still expose cache/storage implementation concepts in the user-facing details header. The feature required mapping raw source identifiers to intentional product-facing labels or removing them when they are only diagnostic; this badge remains implementation-facing and the latest scrutiny synthesis still flags it as unresolved."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": ".factory/validation/web-polish/scrutiny/reviews/web-copy-and-empty-state-polish.json",
+  "summary": "Fail: the fix improved wording in one fallback branch, but it did not close the original failure because raw Error.message text can still reach the older-history UI and the details header still shows cache/storage implementation labels."
+}

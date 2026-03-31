@@ -1,0 +1,34 @@
+{
+  "featureId": "web-copy-and-empty-state-polish",
+  "reviewedAt": "2026-03-30T10:05:00Z",
+  "commitId": "e7e1374968d1f1dea690e6a998b192ef2acc4872",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The original polish commit improved many dashboard strings, but the current repo state shows the feature still did not fully satisfy the requested final copy pass on its own. The follow-up scrutiny findings were valid: this feature left a generic older-history loading label in place and did not remove implementation-facing details-source/status wording from the match-details surface, so the polished web-only copy was incomplete.",
+    "issues": [
+      {
+        "file": "components/dashboard/lol-stats-dashboard.tsx",
+        "line": 1613,
+        "severity": "blocking",
+        "description": "The older-history control still uses the generic label `Load more matches from Riot`, with the loading state still showing `Loading more matches...`. The feature description required replacing ambiguous or placeholder loading/fallback copy with explicit truthful wording across nested dashboard surfaces, and scrutiny already proved this path needed a dedicated follow-up fix."
+      },
+      {
+        "file": "components/dashboard/lol-stats-dashboard.tsx",
+        "line": 408,
+        "severity": "blocking",
+        "description": "The match-details panel still renders `details.statusLabel`, which in the current repo state includes implementation-facing cached-raw-data wording such as `Full match details loaded from cached raw match data.` This feature was supposed to make details panels read consistently as part of the web product, but it left cache/storage terminology visible to end users."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `web-feature-worker` skill says to use browser verification for UI work when available and otherwise capture explicit dev-server evidence under the approved fallback, but the reviewed worker handoff for this copy-only feature reported only source review as its interactive check.",
+      "evidence": "`.factory/skills/web-feature-worker/SKILL.md` step 6 requires runtime verification or explicit dev-server-evidence fallback; the `ad87ca4c-d7e3-4aa2-9d0d-654317e63108` transcript/handoff only cites source review of updated dashboard copy."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/web-polish/scrutiny/reviews/web-copy-and-empty-state-polish.json",
+  "summary": "Fail: the original web-copy polish commit improved broad dashboard wording, but it did not finish the required copy/fallback polish for older-history and match-details surfaces, and the worker verification also relied on source review instead of the mission's runtime-evidence fallback."
+}

@@ -1,0 +1,28 @@
+{
+  "featureId": "pr-review-query-and-sync-hardening",
+  "reviewedAt": "2026-03-30T23:59:59Z",
+  "commitId": "89b287c",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The bulk stale-id query and explicit sync-metadata error surfacing are correct, but the new summoner-id fallback regresses lookup coverage by scanning only the 25 most recent match_cache rows globally instead of safely querying rows that actually contain the target PUUID.",
+    "issues": [
+      {
+        "file": "lib/riot-api-service.ts",
+        "line": 58,
+        "severity": "blocking",
+        "description": "getCachedSummonerIdFromMatchParticipants() now does an unfiltered match_cache scan ordered by match_id and capped at 25 rows, then searches participants in-process. This removes the unsafe interpolated filter, but it also changes behavior from finding any cached row containing this PUUID to finding this PUUID only if it appears in the latest 25 cached matches overall. For many real players, especially older or low-activity cached accounts whose matches are not among the newest 25 global rows, the fallback now returns undefined even when a valid cached summonerId exists, so the review remediation is incomplete and introduces a correctness regression on the fallback path."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker used the web-feature-worker skill for a backend-only PR-review remediation feature. The skill is written around user-facing/browser verification and does not document a lighter-weight backend review/remediation path, so it is an awkward fit for features like query hardening that only touch API/helper code.",
+      "evidence": "Feature pr-review-query-and-sync-hardening lists skillName web-feature-worker in mission features.json, while the change set only edits app/api route handlers, lib/riot-api-service.ts, and tests; the transcript and handoff contain no browser verification because none was relevant."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the handoff, transcript skeleton, skill guidance, and commit 89b287c. The stale-id bulk fetch and match-performance error surfacing look good, but the summoner-id fallback now only inspects the latest 25 global match_cache rows, which can miss valid cached participants and regress the original fallback behavior; therefore the feature fails review."
+}

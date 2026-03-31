@@ -1,0 +1,173 @@
+{
+  "testedAssertions": [
+    {
+      "id": "VAL-SEARCH-001",
+      "status": "pass",
+      "basis": [
+        "Code inspection of runSearch() shows trimmed Riot ID values are pushed to /player/{gameName}#{tagLine} and then loaded via BackendBridge.getAccount/getStoredMatches.",
+        "Prior review artifact .factory/validation/match-surface/scrutiny/reviews/search-saved-lookups-and-route-synchronization.json states home search was browser-verified to navigate to the player route and render the requested player dashboard.",
+        "Shared dev server responded 200 on / and /player/Faker#KR1 route checks."
+      ],
+      "evidence": {
+        "tests": [],
+        "devServer": [
+          "GET http://127.0.0.1:3005/ -> 200",
+          "GET http://127.0.0.1:3005/player/Faker#KR1 -> 200"
+        ],
+        "source": [
+          "components/dashboard/lol-stats-dashboard.tsx:658-731",
+          ".factory/validation/match-surface/scrutiny/reviews/search-saved-lookups-and-route-synchronization.json"
+        ]
+      }
+    },
+    {
+      "id": "VAL-SEARCH-002",
+      "status": "pass",
+      "basis": [
+        "parsePlayerFromUrl() plus the pathname/hash effect auto-populate gameName/tagLine and call runSearch(..., { syncUrl: false }) for valid deep links without manual resubmission.",
+        "Prior review artifact explicitly records direct player-route auto-load behavior as implemented and verified.",
+        "Shared dev server returned 200 for a player route probe."
+      ],
+      "evidence": {
+        "tests": [],
+        "devServer": [
+          "GET http://127.0.0.1:3005/player/Faker#KR1 -> 200"
+        ],
+        "source": [
+          "components/dashboard/lol-stats-dashboard.tsx:86-97",
+          "components/dashboard/lol-stats-dashboard.tsx:930-946",
+          ".factory/validation/match-surface/scrutiny/reviews/search-saved-lookups-and-route-synchronization.json"
+        ]
+      }
+    },
+    {
+      "id": "VAL-SEARCH-003",
+      "status": "pass",
+      "basis": [
+        "runSearch() rejects incomplete input with the explicit error 'Please enter both game name and tag line' before any lookup runs.",
+        "Saved lookup persistence only occurs after successful account resolution, so failed/incomplete identities are not stored.",
+        "saved-lookups unit coverage confirms incomplete lookups are not persisted."
+      ],
+      "evidence": {
+        "tests": [
+          "pnpm test lib/saved-lookups.test.ts -> 5 passed"
+        ],
+        "devServer": [],
+        "source": [
+          "components/dashboard/lol-stats-dashboard.tsx:658-666",
+          "components/dashboard/lol-stats-dashboard.tsx:717-728",
+          "lib/saved-lookups.test.ts"
+        ]
+      }
+    },
+    {
+      "id": "VAL-SEARCH-004",
+      "status": "pass",
+      "basis": [
+        "Successful lookups call saveSuccessfulLookup() after account resolution and render them under the 'Recent Riot IDs' UI.",
+        "saved-lookups unit tests verify trimming, deduplication, newest-first recency behavior, and failed/incomplete lookups not being persisted."
+      ],
+      "evidence": {
+        "tests": [
+          "pnpm test lib/saved-lookups.test.ts -> 5 passed"
+        ],
+        "devServer": [],
+        "source": [
+          "components/dashboard/lol-stats-dashboard.tsx:717-728",
+          "components/dashboard/lol-stats-dashboard.tsx:1163-1184",
+          "lib/saved-lookups.ts",
+          "lib/saved-lookups.test.ts"
+        ]
+      }
+    },
+    {
+      "id": "VAL-SEARCH-005",
+      "status": "pass",
+      "basis": [
+        "Recent Riot ID buttons call handleSavedLookupClick(), which reruns runSearch() with syncUrl enabled.",
+        "saveSuccessfulLookup() prepends the selected identity and removes duplicates, so re-selection updates recency.",
+        "Prior review artifact states recent-lookup re-selection and route-safe reload behavior were verified."
+      ],
+      "evidence": {
+        "tests": [
+          "pnpm test lib/saved-lookups.test.ts -> 5 passed"
+        ],
+        "devServer": [],
+        "source": [
+          "components/dashboard/lol-stats-dashboard.tsx:866-868",
+          "components/dashboard/lol-stats-dashboard.tsx:1174-1179",
+          "lib/saved-lookups.ts",
+          ".factory/validation/match-surface/scrutiny/reviews/search-saved-lookups-and-route-synchronization.json"
+        ]
+      }
+    },
+    {
+      "id": "VAL-SEARCH-006",
+      "status": "pass",
+      "basis": [
+        "runSearch() clears prior matches, puuid, impact counts, pagination state, and error state before loading a different player, preventing mixed player dashboards.",
+        "Prior review artifact explicitly concluded switching players replaces prior player-specific dashboard state cleanly instead of mixing identities."
+      ],
+      "evidence": {
+        "tests": [],
+        "devServer": [],
+        "source": [
+          "components/dashboard/lol-stats-dashboard.tsx:686-708",
+          ".factory/validation/match-surface/scrutiny/reviews/search-saved-lookups-and-route-synchronization.json"
+        ]
+      }
+    }
+  ],
+  "passedAssertions": [
+    "VAL-SEARCH-001",
+    "VAL-SEARCH-002",
+    "VAL-SEARCH-003",
+    "VAL-SEARCH-004",
+    "VAL-SEARCH-005",
+    "VAL-SEARCH-006"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "toolsUsed": [
+    "Read",
+    "Grep",
+    "Glob",
+    "Execute"
+  ],
+  "frictions": [
+    {
+      "description": "agent-browser is unavailable on this Windows host, so the required UI screenshot/console evidence could not be newly collected.",
+      "resolved": true,
+      "resolution": "Used the mission-approved fallback of repo test coverage, source inspection, prior scrutiny review evidence, and shared dev-server route checks.",
+      "affectedAssertions": [
+        "VAL-SEARCH-001",
+        "VAL-SEARCH-002",
+        "VAL-SEARCH-003",
+        "VAL-SEARCH-004",
+        "VAL-SEARCH-005",
+        "VAL-SEARCH-006"
+      ]
+    },
+    {
+      "description": "No deterministic browser-session storage dump or screenshot artifacts were available in the mission directory for this specific flow group.",
+      "resolved": true,
+      "resolution": "Relied on targeted saved-lookups unit tests plus dashboard source paths showing persistence and recency behavior.",
+      "affectedAssertions": [
+        "VAL-SEARCH-003",
+        "VAL-SEARCH-004",
+        "VAL-SEARCH-005"
+      ]
+    }
+  ],
+  "blockers": [],
+  "evidence": {
+    "summary": "Validated all six assigned search assertions via the approved fallback path: targeted saved-lookups unit tests passed, the shared dev server on port 3005 served home and player routes successfully, and the dashboard source plus prior match-surface scrutiny review provided deterministic evidence for route sync, deep-link auto-load, recent Riot ID persistence, re-selection recency, and stale-state reset behavior. No assertion remained blocked under the approved fallback.",
+    "artifacts": [
+      ".factory/validation/match-surface/scrutiny/reviews/search-saved-lookups-and-route-synchronization.json",
+      "lib/saved-lookups.test.ts",
+      "lib/saved-lookups.ts",
+      "components/dashboard/lol-stats-dashboard.tsx"
+    ]
+  },
+  "testedAt": "2026-03-30T06:58:45.7056068Z"
+}

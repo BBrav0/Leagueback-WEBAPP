@@ -4,6 +4,9 @@ export interface AccountDto {
   puuid: string;
   gameName: string;
   tagLine: string;
+  summonerId?: string;
+  riotId?: string;
+  rankLookupId?: string;
 }
 
 // Alias used by bridge.ts / frontend
@@ -22,6 +25,8 @@ export interface MatchInfo {
 
 export interface Participant {
   summonerName: string;
+  summonerId?: string;
+  riotIdGameName?: string;
   championName: string;
   visionScore: number;
   kills: number;
@@ -85,25 +90,80 @@ export interface MatchSummary {
   id: string;
   summonerName: string;
   champion: string;
-  rank: string;
+  rank: string | null;
+  rankLabel: string;
+  rankQueue: "RANKED_SOLO_5x5" | "RANKED_FLEX_SR" | null;
   kda: string;
   cs: number;
   visionScore: number;
   gameResult: "Victory" | "Defeat";
   gameTime: string;
+  playedAt: string;
+  durationSeconds: number;
+  role: string | null;
+  roleLabel: string;
+  damageToChampions: number | null;
+  damageToChampionsLabel: string;
+  impactCategory: ImpactCategory;
+  impactCategoryLabel: string;
   data: ChartDataPoint[];
   yourImpact: number;
   teamImpact: number;
+}
+
+export interface MatchDetailsTeamSummary {
+  teamId: number;
+  result: "Victory" | "Defeat" | "Unknown";
+  resultLabel: string;
+}
+
+export interface MatchDetailsParticipantSummary {
+  participantId: number;
+  puuid: string;
+  summonerName: string;
+  championName: string;
+  teamId: number;
+  role: string | null;
+  roleLabel: string;
+  kills: number | null;
+  deaths: number | null;
+  assists: number | null;
+  kdaLabel: string;
+  visionScore: number | null;
+  visionScoreLabel: string;
+  damageToChampions: number | null;
+  damageToChampionsLabel: string;
+  isCurrentPlayer: boolean;
+  isMissingCoreData: boolean;
+}
+
+export interface MatchDetailsData {
+  matchId: string;
+  status: "ready" | "partial" | "unavailable";
+  statusLabel: string;
+  fallbackReason: "none" | "partial_raw_data" | "missing_raw_data";
+  source: "match_cache" | "legacy_cache" | "none";
+  teams: MatchDetailsTeamSummary[];
+  participants: MatchDetailsParticipantSummary[];
+}
+
+export interface MatchDetailsResponse {
+  details: MatchDetailsData;
 }
 
 export interface PerformanceAnalysisResult {
   success: boolean;
   matchSummary?: MatchSummary;
   error?: string;
+  syncMetadata?: {
+    recentMatchWindow: number;
+  };
   /** Present when player_matches upsert failed. */
   playerMatchesPersistError?: string;
   /** Present when match_cache upsert failed. */
   matchCachePersistError?: string;
+  /** Present when sync metadata persistence failed. */
+  syncMetadataPersistError?: string;
 }
 
 export type ImpactCategory =

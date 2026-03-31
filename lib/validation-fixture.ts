@@ -1,0 +1,422 @@
+import type { AccountData, MatchDetailsData, MatchSummary } from "./types";
+import { deriveImpactCountsFromMatches } from "./impact-stats";
+
+const VALIDATION_FIXTURE_GAME_NAME = "Validation Fixture";
+const VALIDATION_FIXTURE_TAG_LINE = "LOCAL";
+const VALIDATION_FIXTURE_IDENTITY = `${VALIDATION_FIXTURE_GAME_NAME}#${VALIDATION_FIXTURE_TAG_LINE}`;
+const VALIDATION_FIXTURE_PUUID = "validation-fixture-puuid";
+const VALIDATION_FIXTURE_SUMMONER_ID = "validation-fixture-summoner-id";
+
+export function isValidationFixtureIdentity(gameName: string, tagLine: string): boolean {
+  const normalizedGameName = gameName.trim();
+  const normalizedTagLine = tagLine.trim();
+
+  if (!normalizedGameName || !normalizedTagLine) {
+    return false;
+  }
+
+  return `${normalizedGameName}#${normalizedTagLine}`.localeCompare(
+    VALIDATION_FIXTURE_IDENTITY,
+    undefined,
+    { sensitivity: "accent" }
+  ) === 0;
+}
+
+export function isValidationFixturePuuid(puuid: string): boolean {
+  return puuid.trim() === VALIDATION_FIXTURE_PUUID;
+}
+
+export const VALIDATION_FIXTURE_ACCOUNT: AccountData = {
+  puuid: VALIDATION_FIXTURE_PUUID,
+  gameName: VALIDATION_FIXTURE_GAME_NAME,
+  tagLine: VALIDATION_FIXTURE_TAG_LINE,
+  summonerId: VALIDATION_FIXTURE_SUMMONER_ID,
+};
+
+export const VALIDATION_FIXTURE_MATCHES: MatchSummary[] = [
+  {
+    id: "VALIDATION_READY_001",
+    summonerName: "Validation Fixture",
+    champion: "Ahri",
+    rank: null,
+    rankLabel: "Current rank snapshot unavailable",
+    rankQueue: null,
+    kda: "9/2/11",
+    cs: 212,
+    visionScore: 28,
+    gameResult: "Victory",
+    gameTime: "31:42",
+    playedAt: "Validation fixture • 2 hours ago",
+    durationSeconds: 1902,
+    role: "MIDDLE",
+    roleLabel: "Role: Middle",
+    damageToChampions: 24876,
+    damageToChampionsLabel: "24,876 damage to champions",
+    impactCategory: "impactWins",
+    impactCategoryLabel: "Impact Win",
+    data: [
+      { minute: 5, yourImpact: 51.2, teamImpact: 49.1 },
+      { minute: 10, yourImpact: 56.8, teamImpact: 50.3 },
+      { minute: 15, yourImpact: 61.4, teamImpact: 52.7 },
+      { minute: 20, yourImpact: 65.2, teamImpact: 54.5 },
+      { minute: 25, yourImpact: 68.7, teamImpact: 56.8 },
+      { minute: 30, yourImpact: 72.4, teamImpact: 58.1 },
+      { minute: 35, yourImpact: 74.1, teamImpact: 59.4 },
+    ],
+    yourImpact: 74.1,
+    teamImpact: 59.4,
+  },
+  {
+    id: "VALIDATION_FALLBACK_002",
+    summonerName: "Validation Fixture",
+    champion: "Leona",
+    rank: null,
+    rankLabel: "Current rank snapshot unavailable",
+    rankQueue: null,
+    kda: "2/4/18",
+    cs: 38,
+    visionScore: 64,
+    gameResult: "Defeat",
+    gameTime: "28:05",
+    playedAt: "Validation fixture • 1 day ago",
+    durationSeconds: 1685,
+    role: "UTILITY",
+    roleLabel: "Role: Support",
+    damageToChampions: 9321,
+    damageToChampionsLabel: "9,321 damage to champions",
+    impactCategory: "guaranteedLosses",
+    impactCategoryLabel: "Guaranteed Loss",
+    data: [
+      { minute: 5, yourImpact: 48.4, teamImpact: 50.6 },
+      { minute: 10, yourImpact: 47.9, teamImpact: 51.8 },
+      { minute: 15, yourImpact: 46.1, teamImpact: 52.9 },
+      { minute: 20, yourImpact: 44.8, teamImpact: 54.2 },
+      { minute: 25, yourImpact: 43.5, teamImpact: 55.3 },
+      { minute: 35, yourImpact: 42.7, teamImpact: 56.1 },
+    ],
+    yourImpact: 42.7,
+    teamImpact: 56.1,
+  },
+];
+
+export const VALIDATION_FIXTURE_APPENDED_MATCHES: MatchSummary[] = [
+  {
+    id: "VALIDATION_APPEND_003",
+    summonerName: "Validation Fixture",
+    champion: "Sejuani",
+    rank: null,
+    rankLabel: "Current rank snapshot unavailable",
+    rankQueue: null,
+    kda: "5/5/14",
+    cs: 156,
+    visionScore: 31,
+    gameResult: "Victory",
+    gameTime: "33:28",
+    playedAt: "Validation fixture • 3 days ago",
+    durationSeconds: 2008,
+    role: "JUNGLE",
+    roleLabel: "Role: Jungle",
+    damageToChampions: 18440,
+    damageToChampionsLabel: "18,440 damage to champions",
+    impactCategory: "guaranteedWins",
+    impactCategoryLabel: "Guaranteed Win",
+    data: [
+      { minute: 5, yourImpact: 49.5, teamImpact: 48.8 },
+      { minute: 10, yourImpact: 52.7, teamImpact: 50.1 },
+      { minute: 15, yourImpact: 54.8, teamImpact: 51.2 },
+      { minute: 20, yourImpact: 57.2, teamImpact: 52.6 },
+      { minute: 25, yourImpact: 59.1, teamImpact: 53.8 },
+      { minute: 30, yourImpact: 61.6, teamImpact: 55.1 },
+      { minute: 35, yourImpact: 63.2, teamImpact: 56.4 },
+    ],
+    yourImpact: 63.2,
+    teamImpact: 56.4,
+  },
+  {
+    id: "VALIDATION_APPEND_004",
+    summonerName: "Validation Fixture",
+    champion: "Thresh",
+    rank: null,
+    rankLabel: "Current rank snapshot unavailable",
+    rankQueue: null,
+    kda: "1/7/16",
+    cs: 42,
+    visionScore: 58,
+    gameResult: "Defeat",
+    gameTime: "29:54",
+    playedAt: "Validation fixture • 5 days ago",
+    durationSeconds: 1794,
+    role: "UTILITY",
+    roleLabel: "Role: Support",
+    damageToChampions: 7140,
+    damageToChampionsLabel: "7,140 damage to champions",
+    impactCategory: "impactLosses",
+    impactCategoryLabel: "Impact Loss",
+    data: [
+      { minute: 5, yourImpact: 46.2, teamImpact: 49.4 },
+      { minute: 10, yourImpact: 45.7, teamImpact: 50.6 },
+      { minute: 15, yourImpact: 44.3, teamImpact: 51.9 },
+      { minute: 20, yourImpact: 42.4, teamImpact: 53.2 },
+      { minute: 25, yourImpact: 40.8, teamImpact: 54.1 },
+      { minute: 35, yourImpact: 39.6, teamImpact: 55.4 },
+    ],
+    yourImpact: 39.6,
+    teamImpact: 55.4,
+  },
+];
+
+export const VALIDATION_FIXTURE_DETAILS: Record<string, MatchDetailsData> = {
+  VALIDATION_READY_001: {
+    matchId: "VALIDATION_READY_001",
+    status: "ready",
+    statusLabel: "Full match details loaded from deterministic validation fixture data.",
+    fallbackReason: "none",
+    source: "match_cache",
+    teams: [
+      { teamId: 100, result: "Victory", resultLabel: "Victory" },
+      { teamId: 200, result: "Defeat", resultLabel: "Defeat" },
+    ],
+    participants: [
+      {
+        participantId: 1,
+        puuid: "validation-fixture-puuid",
+        summonerName: "Validation Fixture",
+        championName: "Ahri",
+        teamId: 100,
+        role: "MIDDLE",
+        roleLabel: "Role: Middle",
+        kills: 9,
+        deaths: 2,
+        assists: 11,
+        kdaLabel: "9/2/11",
+        visionScore: 28,
+        visionScoreLabel: "28 vision",
+        damageToChampions: 24876,
+        damageToChampionsLabel: "24,876 damage to champions",
+        isCurrentPlayer: true,
+        isMissingCoreData: false,
+      },
+      {
+        participantId: 2,
+        puuid: "fixture-ally-top",
+        summonerName: "FixtureTop",
+        championName: "Gnar",
+        teamId: 100,
+        role: "TOP",
+        roleLabel: "Role: Top",
+        kills: 4,
+        deaths: 5,
+        assists: 7,
+        kdaLabel: "4/5/7",
+        visionScore: 19,
+        visionScoreLabel: "19 vision",
+        damageToChampions: 18342,
+        damageToChampionsLabel: "18,342 damage to champions",
+        isCurrentPlayer: false,
+        isMissingCoreData: false,
+      },
+      {
+        participantId: 3,
+        puuid: "fixture-ally-jungle",
+        summonerName: "FixtureJungle",
+        championName: "Viego",
+        teamId: 100,
+        role: "JUNGLE",
+        roleLabel: "Role: Jungle",
+        kills: 6,
+        deaths: 3,
+        assists: 9,
+        kdaLabel: "6/3/9",
+        visionScore: 23,
+        visionScoreLabel: "23 vision",
+        damageToChampions: 20114,
+        damageToChampionsLabel: "20,114 damage to champions",
+        isCurrentPlayer: false,
+        isMissingCoreData: false,
+      },
+      {
+        participantId: 4,
+        puuid: "fixture-ally-bottom",
+        summonerName: "FixtureADC",
+        championName: "Jinx",
+        teamId: 100,
+        role: "BOTTOM",
+        roleLabel: "Role: Bottom",
+        kills: 11,
+        deaths: 4,
+        assists: 6,
+        kdaLabel: "11/4/6",
+        visionScore: 15,
+        visionScoreLabel: "15 vision",
+        damageToChampions: 27110,
+        damageToChampionsLabel: "27,110 damage to champions",
+        isCurrentPlayer: false,
+        isMissingCoreData: false,
+      },
+      {
+        participantId: 5,
+        puuid: "fixture-ally-support",
+        summonerName: "FixtureSupport",
+        championName: "Nami",
+        teamId: 100,
+        role: "UTILITY",
+        roleLabel: "Role: Support",
+        kills: 1,
+        deaths: 4,
+        assists: 17,
+        kdaLabel: "1/4/17",
+        visionScore: 42,
+        visionScoreLabel: "42 vision",
+        damageToChampions: 7422,
+        damageToChampionsLabel: "7,422 damage to champions",
+        isCurrentPlayer: false,
+        isMissingCoreData: false,
+      },
+      {
+        participantId: 6,
+        puuid: "fixture-enemy-top",
+        summonerName: "EnemyTop",
+        championName: "Renekton",
+        teamId: 200,
+        role: "TOP",
+        roleLabel: "Role: Top",
+        kills: 3,
+        deaths: 7,
+        assists: 4,
+        kdaLabel: "3/7/4",
+        visionScore: 14,
+        visionScoreLabel: "14 vision",
+        damageToChampions: 15630,
+        damageToChampionsLabel: "15,630 damage to champions",
+        isCurrentPlayer: false,
+        isMissingCoreData: false,
+      },
+      {
+        participantId: 7,
+        puuid: "fixture-enemy-jungle",
+        summonerName: "EnemyJungle",
+        championName: "Jarvan IV",
+        teamId: 200,
+        role: "JUNGLE",
+        roleLabel: "Role: Jungle",
+        kills: 2,
+        deaths: 6,
+        assists: 8,
+        kdaLabel: "2/6/8",
+        visionScore: 20,
+        visionScoreLabel: "20 vision",
+        damageToChampions: 12114,
+        damageToChampionsLabel: "12,114 damage to champions",
+        isCurrentPlayer: false,
+        isMissingCoreData: false,
+      },
+      {
+        participantId: 8,
+        puuid: "fixture-enemy-mid",
+        summonerName: "EnemyMid",
+        championName: "Orianna",
+        teamId: 200,
+        role: "MIDDLE",
+        roleLabel: "Role: Middle",
+        kills: 5,
+        deaths: 5,
+        assists: 3,
+        kdaLabel: "5/5/3",
+        visionScore: 17,
+        visionScoreLabel: "17 vision",
+        damageToChampions: 18990,
+        damageToChampionsLabel: "18,990 damage to champions",
+        isCurrentPlayer: false,
+        isMissingCoreData: false,
+      },
+      {
+        participantId: 9,
+        puuid: "fixture-enemy-bottom",
+        summonerName: "EnemyADC",
+        championName: "Kai'Sa",
+        teamId: 200,
+        role: "BOTTOM",
+        roleLabel: "Role: Bottom",
+        kills: 6,
+        deaths: 4,
+        assists: 2,
+        kdaLabel: "6/4/2",
+        visionScore: 13,
+        visionScoreLabel: "13 vision",
+        damageToChampions: 22310,
+        damageToChampionsLabel: "22,310 damage to champions",
+        isCurrentPlayer: false,
+        isMissingCoreData: false,
+      },
+      {
+        participantId: 10,
+        puuid: "fixture-enemy-support",
+        summonerName: "EnemySupport",
+        championName: "Rell",
+        teamId: 200,
+        role: "UTILITY",
+        roleLabel: "Role: Support",
+        kills: 0,
+        deaths: 8,
+        assists: 9,
+        kdaLabel: "0/8/9",
+        visionScore: 31,
+        visionScoreLabel: "31 vision",
+        damageToChampions: 5533,
+        damageToChampionsLabel: "5,533 damage to champions",
+        isCurrentPlayer: false,
+        isMissingCoreData: false,
+      },
+    ],
+  },
+  VALIDATION_FALLBACK_002: {
+    matchId: "VALIDATION_FALLBACK_002",
+    status: "unavailable",
+    statusLabel:
+      "Full match details are unavailable for this deterministic validation fixture match, so the card shows the same truthful fallback state as a real cache miss.",
+    fallbackReason: "missing_raw_data",
+    source: "none",
+    teams: [
+      { teamId: 100, result: "Unknown", resultLabel: "Team result unavailable" },
+      { teamId: 200, result: "Unknown", resultLabel: "Team result unavailable" },
+    ],
+    participants: [],
+  },
+};
+
+export const VALIDATION_FIXTURE_IMPACT_COUNTS = deriveImpactCountsFromMatches(VALIDATION_FIXTURE_MATCHES);
+
+export const VALIDATION_FIXTURE_MIXED_IMPACT_COUNTS = deriveImpactCountsFromMatches([
+  ...VALIDATION_FIXTURE_MATCHES,
+  ...VALIDATION_FIXTURE_APPENDED_MATCHES,
+]);
+
+export function getValidationFixtureStoredMatches(
+  limit: number,
+  offset: number
+): { matches: MatchSummary[]; totalCount: number; hasMore: boolean } {
+  const totalCount = VALIDATION_FIXTURE_MATCHES.length;
+  const matches = VALIDATION_FIXTURE_MATCHES.slice(offset, offset + limit);
+  const hasMore = offset + matches.length < totalCount;
+
+  return { matches, totalCount, hasMore };
+}
+
+export function getValidationFixtureMatchHistory(
+  count: number,
+  start: number
+): string[] {
+  const appendedStart = Math.max(start - VALIDATION_FIXTURE_MATCHES.length, 0);
+
+  return VALIDATION_FIXTURE_APPENDED_MATCHES.slice(appendedStart, appendedStart + count).map(
+    (match) => match.id
+  );
+}
+
+export function getValidationFixtureMatchSummary(matchId: string): MatchSummary | null {
+  return (
+    [...VALIDATION_FIXTURE_MATCHES, ...VALIDATION_FIXTURE_APPENDED_MATCHES].find(
+      (match) => match.id === matchId
+    ) ?? null
+  );
+}

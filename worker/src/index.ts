@@ -2,7 +2,8 @@ interface Env {
   RIOT_API_KEY: string;
 }
 
-const RIOT_BASE_URL = "https://americas.api.riotgames.com";
+const ACCOUNT_REGION_BASE_URL = "https://americas.api.riotgames.com";
+const PLATFORM_REGION_BASE_URL = "https://na1.api.riotgames.com";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -34,11 +35,12 @@ function getRateLimitStatus(ip: string): { limited: boolean; remaining: number; 
 }
 
 async function proxyToRiot(
-  riotPath: string, 
+  riotPath: string,
   apiKey: string, 
-  rateLimitHeaders?: Record<string, string>
+  rateLimitHeaders?: Record<string, string>,
+  baseUrl: string = ACCOUNT_REGION_BASE_URL
 ): Promise<Response> {
-  const riotUrl = `${RIOT_BASE_URL}${riotPath}`;
+  const riotUrl = `${baseUrl}${riotPath}`;
   const riotRes = await fetch(riotUrl, {
     headers: { "X-Riot-Token": apiKey },
   });
@@ -70,7 +72,7 @@ function safeDecode(segment: string): string {
   }
 }
 
-export default {
+const worker = {
   async fetch(request: Request, env: Env): Promise<Response> {
     // CORS preflight
     if (request.method === "OPTIONS") {
@@ -140,6 +142,41 @@ export default {
       );
     }
 
+    // Route: GET /api/rank/{summonerIdOrPuuid}
+    const rankMatch = path.match(/^\/api\/rank\/([^/]+)$/);
+    if (rankMatch) {
+      const identifier = safeDecode(rankMatch[1]);
+      const bySummonerResponse = await proxyToRiot(
+        `/lol/league/v4/entries/by-summoner/${encodeURIComponent(identifier)}`,
+        env.RIOT_API_KEY,
+        rateLimitHeaders,
+        PLATFORM_REGION_BASE_URL
+      );
+
+      if (bySummonerResponse.status !== 403) {
+        return bySummonerResponse;
+      }
+
+      return proxyToRiot(
+        `/lol/league-exp/v4/entries/by-puuid/${encodeURIComponent(identifier)}`,
+        env.RIOT_API_KEY,
+        rateLimitHeaders,
+        PLATFORM_REGION_BASE_URL
+      );
+    }
+
+    // Route: GET /api/summoner/by-puuid/{puuid}
+    const summonerByPuuidMatch = path.match(/^\/api\/summoner\/by-puuid\/([^/]+)$/);
+    if (summonerByPuuidMatch) {
+      const puuid = safeDecode(summonerByPuuidMatch[1]);
+      return proxyToRiot(
+        `/lol/summoner/v4/summoners/by-puuid/${encodeURIComponent(puuid)}`,
+        env.RIOT_API_KEY,
+        rateLimitHeaders,
+        PLATFORM_REGION_BASE_URL
+      );
+    }
+
     // Route: GET /api/match/{matchId}/timeline
     const timelineMatch = path.match(/^\/api\/match\/([^/]+)\/timeline$/);
     if (timelineMatch) {
@@ -165,3 +202,5 @@ export default {
     return jsonError("Not found", 404);
   },
 };
+
+export default worker;

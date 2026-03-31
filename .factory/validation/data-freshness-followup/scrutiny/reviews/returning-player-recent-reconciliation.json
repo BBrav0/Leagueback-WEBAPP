@@ -1,0 +1,28 @@
+{
+  "featureId": "returning-player-recent-reconciliation",
+  "reviewedAt": "2026-03-30T19:05:00Z",
+  "commitId": "0234251b28095db25c21772572f3ea8a71a5a3d8",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The bridge change correctly removes the old \"stored head means fresh\" shortcut and adds better Riot proxy diagnostics, but the reviewed evidence still does not prove the feature's required DB backfill-and-surface behavior on the real returning-player path. The implementation stops at comparing live Riot IDs against existing stored rows and never demonstrates that the missing recent matches were actually persisted into LeagueBack and then surfaced through the refreshed DB-first view without duplicates.",
+    "issues": [
+      {
+        "file": "components/dashboard/lol-stats-dashboard.tsx",
+        "line": 906,
+        "severity": "blocking",
+        "description": "After reconciliation, the dashboard only reloads `/api/stored-matches` if `syncResult.analyzedCount > 0 || syncResult.refreshedStaleCount > 0`, but the reviewed live evidence never proves that path ran successfully for the real returning-player account. The handoff shows `/api/stored-matches` was checked before reconciliation and `/api/match-history` was checked separately, yet it never re-reads stored history after the sync to prove the missing recent Riot matches were backfilled into LeagueBack and surfaced in the DB-first experience without duplicate rows. Because that proof is part of the feature's expected behavior, the implementation remains unverified for the blocking freshness contract."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The mission library now names `Bumsdito#3005` as the preferred returning-player validation account, but it still does not spell out the minimum evidence needed to prove this feature: re-read the DB-backed route after reconciliation and confirm the formerly missing recent IDs are persisted there without duplication.",
+      "evidence": "`.factory/library/user-testing.md` documents the account and a general evidence pattern, while this feature handoff only shows pre-sync `/api/stored-matches` plus separate live `/api/match-history` output and never captures the required post-sync DB-first proof."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the feature record, handoff, transcript skeleton, skill guidance, and commit `0234251`. The code improves recent-window reconciliation logic and Riot proxy error detail, but the feature still fails review because the recorded live evidence does not prove missing recent matches were backfilled into `LeagueBack` and then surfaced through the refreshed DB-first route without duplicates."
+}

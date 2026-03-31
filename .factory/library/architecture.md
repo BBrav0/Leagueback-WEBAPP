@@ -1,0 +1,55 @@
+# Architecture
+
+Architecture decisions, data flow notes, and implementation boundaries for this mission.
+
+---
+
+## Current application shape
+
+- Next.js App Router web app.
+- Main user surface is the dashboard mounted from:
+  - `app/page.tsx`
+  - `app/player/[gameName]/page.tsx`
+- Most current UI/state behavior lives in `components/dashboard/lol-stats-dashboard.tsx`.
+
+## Existing data flow
+
+1. User searches a Riot ID.
+2. Frontend calls `/api/account`.
+3. Stored match history is loaded from `/api/stored-matches`.
+4. Newer or older match data may be fetched through `/api/match-history` and `/api/match-performance`.
+5. Supabase stores cached/raw match data plus precomputed player match rows.
+
+## Mission focus
+
+- Realign the product as web-only.
+- Refresh markdown and workflow truthfulness.
+- Finish non-algorithm web features: saved lookups, richer match surfaces, details UI, filters/preferences, export, copy polish.
+- Follow up on returning-player data freshness so existing Supabase-backed history is reconciled against Riot and stale derived rows do not linger indefinitely.
+
+## Out of scope
+
+- Impact algorithm changes.
+- Desktop/Electron/mobile-native packaging.
+- New auth systems or unrelated infrastructure rewrites.
+
+## Known structural risks
+
+- The dashboard component is large and state-heavy; workers should extract helpers/components only when it directly improves the scoped feature.
+- Current summary data and raw match detail data are separate concerns; details UI should use a deliberate mapping layer rather than overloading the summary shape.
+- Match-details raw source precedence is `match_cache` first, then legacy `match_details`, otherwise an explicit unavailable payload; details work should preserve truthful fallback semantics for both missing and partial raw data.
+- Current returning-player freshness logic is client-driven and treats \"latest stored match exists\" as effectively fresh. Follow-up work should preserve DB-first rendering but add bounded reconciliation against Riot plus durable sync state so missing recent matches and stale derived rows can be corrected against the existing database.
+- Returning-player stale detection must be match-specific, not only player-level. Refreshing one stale row must not mark the whole player fresh if other recent rows were never recomputed.
+- Durable freshness metadata must keep latest-head markers monotonic; reprocessing an older stale match must not move `latest_riot_*` or `latest_db_*` backward.
+- Stale-only refreshes still need to reload the visible DB-first history in the dashboard so the user sees refreshed derived rows immediately after reconciliation.
+- Stored match-card metadata must be persisted through `player_matches` and the DB-backed `/api/stored-matches` path. If role/lane or damage-to-champions are supported on cards, the stored-row mapper must preserve those fields instead of rebuilding every stored card with unavailable fallbacks.
+- Any rank shown on match cards in this mission must be modeled as a current rank snapshot sourced outside the match payload, not as historical per-match rank. Copy and persistence must make that distinction explicit so the UI does not imply unsupported match-time rank history.
+- Riot rank lookups are a moving integration surface: if the live `league-v4 entries/by-summoner` path returns forbidden responses for a verified current identifier, workers should treat that as an endpoint/identifier contract problem and switch to the correct current Riot endpoint/identifier pair rather than forcing the old path.
+- The deployed Riot proxy rank lookup now tries `league-v4/entries/by-summoner/{identifier}` first and falls back to `league-exp-v4/entries/by-puuid/{identifier}` on `403`, so live-rank debugging should verify both the identifier type and that fallback contract before assuming rank data is unavailable.
+- Current-rank card work depends on exposing an authoritative rank identifier through the account/cache flow. `/api/account` and cached account rows may carry a derived `rankLookupId` alongside `summonerId`; DB-backed card refresh/debug flows should inspect those fields before concluding the current-rank snapshot path is broken.
+- `app/api/player-matches/stale-ids/route.ts` is sensitive to query shape because it may evaluate many match IDs at once; workers should prefer one bulk `match_cache` fetch plus in-memory maps over serial per-match Supabase reads.
+- `lib/riot-api-service.ts` must not build raw PostgREST JSON filters by string interpolation with user-controlled values. Favor parameterized/equality-based Supabase filters, safe normalized lookups, or server-side filtering followed by in-process JSON inspection.
+- Treat `package.json` validator scripts as part of the product contract. `lint` must represent real lint coverage (not just `tsc --noEmit`), and duplicated script aliases should be consolidated or intentionally differentiated.
+- The `lol-stats-dashboard.tsx` monolith remains an active maintainability risk; review-driven cleanup should prioritize render-path memoization and extracting shared helper logic without regressing the DB-first user flow.
+- Validation fixture identities must stay obviously synthetic and isolated from real-player flows, and fixture wiring should avoid inflating production/runtime behavior beyond the explicit guarded validation paths.
+- The validation fixture account route is localhost-only in development/test: `app/api/account` resolves `Validation Fixture#LOCAL` only when `NODE_ENV` is `development` or `test` and the request host is `localhost` or `127.0.0.1`. Validators relying on that identity should use the local app/runtime path rather than assuming the fixture exists in broader environments.

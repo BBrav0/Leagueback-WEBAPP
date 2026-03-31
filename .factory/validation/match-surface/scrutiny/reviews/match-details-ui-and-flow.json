@@ -1,0 +1,28 @@
+{
+  "featureId": "match-details-ui-and-flow",
+  "reviewedAt": "2026-03-30T06:38:30Z",
+  "commitId": "08124ed",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature adds a scoped details toggle, team-based details panel, and truthful unavailable-state handling, but it leaves the new route test file outside the committed Vitest include globs so the claimed API coverage is not actually executed by pnpm test.",
+    "issues": [
+      {
+        "file": "C:\\Users\\bendc\\Documents\\GitHub\\Leagueback-WEBAPP\\vitest.config.ts",
+        "line": 6,
+        "severity": "blocking",
+        "description": "The committed test runner only includes lib/**/*.test.ts, so the new app/api/match-details/route.test.ts file introduced for this feature never runs under pnpm test. That means the feature does not satisfy its own claimed route-level automated coverage, and malformed/request-path regressions for the new details endpoint can slip through despite the handoff saying the route test passed."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The web-feature-worker skill tells workers to add failing tests first and run committed mission gates, but it does not warn that the repo's Vitest config only includes lib/**/*.test.ts. This feature's worker added app/api/match-details/route.test.ts, then noted in skillFeedback that the file is outside the committed test run, which is a repeatable trap for future web-route or component work.",
+      "evidence": "C:\\Users\\bendc\\Documents\\GitHub\\Leagueback-WEBAPP\\vitest.config.ts:4-6 limits includes to lib/**/*.test.ts; handoff ...match-details-ui-and-flow__d79ba618-950f-427e-9766-ee27c5b8cfbc.json says route coverage was added but also states the file is not part of pnpm test."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: the UI/details flow itself is implemented coherently, but the feature's new API test is not exercised by the committed test configuration, leaving the new endpoint without real automated validation under the required mission gates."
+}

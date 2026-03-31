@@ -1,0 +1,46 @@
+{
+  "milestone": "match-surface",
+  "round": 2,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "pnpm test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "pnpm run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "pnpm run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 2,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [
+    {
+      "observation": "Carry forward the prior suggestion to add a Windows-safe .factory/init.sh warning to AGENTS.md.",
+      "reason": "already documented in AGENTS.md under Testing & Validation Guidance"
+    },
+    {
+      "observation": "Carry forward the prior suggestion to warn web-feature workers about Vitest include globs for route/component tests.",
+      "reason": "already documented in .factory/skills/web-feature-worker/SKILL.md step 10"
+    },
+    {
+      "observation": "Carry forward the prior suggestion to reinforce lint/static-check as a required gate in the web-feature-worker skill.",
+      "reason": "already documented in .factory/skills/web-feature-worker/SKILL.md step 7"
+    }
+  ],
+  "previousRound": ".factory/validation/match-surface/scrutiny/synthesis.json"
+}
