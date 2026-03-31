@@ -1,0 +1,21 @@
+{
+  "featureId": "pr-review-lint-and-validator-truthfulness",
+  "reviewedAt": "2026-03-31T00:00:00Z",
+  "commitId": "14e021b",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature restores a truthful ESLint-based lint contract, keeps TypeScript checking as a distinct gate, aligns CI/package truth sources, and includes the requested .env.example trailing-newline hygiene fix. The implementation intentionally leaves newly surfaced pre-existing lint findings for the follow-up lint-fix feature rather than masking them, which matches the feature scope.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The completed feature uses the web-feature-worker skill even though the work is purely workflow/config truthfulness; the transcript/handoff still handled the task correctly, but the feature metadata is inconsistent with the dedicated platform-docs-worker skill for package/CI/lint-config updates.",
+      "evidence": "features.json:1377-1379 assigns skillName web-feature-worker to this workflow feature, while .factory/skills/platform-docs-worker/SKILL.md says it should be used for package.json scripts, CI workflow truthfulness, and committed lint config."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. Commit 14e021b truthfully restores ESLint coverage for pnpm run lint, keeps \typecheck separate, differentiates static-check, aligns CI/package truth sources, and applies the .env.example newline fix without introducing regressions in the scoped workflow contract."
+}

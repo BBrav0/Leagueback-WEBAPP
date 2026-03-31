@@ -1,0 +1,15 @@
+{
+  "featureId": "pr-review-migration-backfill-safety",
+  "reviewedAt": "2026-03-31T01:12:58.642559+00:00",
+  "commitId": "16cd308cb584d7764b20bec01c713eeb5c6b7fdf",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature resolves the review concern correctly: the migration is now schema-only, and the expensive role/damage population work moved into a bounded resumable script that batch-loads candidate player rows, bulk-fetches match_cache rows, and upserts updates without running a full-table JSON expansion inside migration execution. I did not find a blocking correctness or regression issue in the scoped remediation.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The risky inline backfill was removed from migration 20260330174500, and the replacement script provides a safer operational path for existing environments like LeagueBack without reintroducing the original large-table migration risk."
+}

@@ -1,0 +1,21 @@
+{
+  "featureId": "pr-review-dashboard-and-fixture-cleanup",
+  "reviewedAt": "2026-03-31T01:13:01Z",
+  "commitId": "e781705",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed commit e781705 against the feature contract and did not find blocking or non-blocking correctness issues. The change set keeps the cleanup review-sized: duplicated duration/dedup helpers were centralized into a shared helper, the dashboard now memoizes the deduped loaded-match set used for champion options without disturbing the DB-first flow, and the validation fixture account route is restricted to localhost development/test contexts so the synthetic identity does not leak into broader runtime behavior.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "Shared state does not currently document the new localhost-only guard on the validation fixture account route, even though future validators/workers may rely on the fixture identity and need to know why it only resolves in development/test on localhost.",
+      "evidence": "app/api/account/route.ts:8-14 gates the fixture to NODE_ENV development/test and host localhost/127.0.0.1; .factory/library/architecture.md notes fixture isolation in general but does not record the concrete localhost-only account-route contract, and AGENTS.md has no fixture-specific runtime note."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The feature resolves the scoped dashboard/helper/fixture cleanup items without introducing reviewable regressions; only a shared-state documentation gap remains around the new localhost-only validation-fixture account guard."
+}

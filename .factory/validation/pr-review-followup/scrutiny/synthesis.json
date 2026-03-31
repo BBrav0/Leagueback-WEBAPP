@@ -1,0 +1,60 @@
+{
+  "milestone": "pr-review-followup",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "pnpm test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "pnpm run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "pnpm run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 5,
+    "passed": 4,
+    "failed": 1,
+    "failedFeatures": [
+      "pr-review-query-and-sync-hardening"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "pr-review-query-and-sync-hardening",
+      "severity": "blocking",
+      "description": "getCachedSummonerIdFromMatchParticipants() now does an unfiltered match_cache scan ordered by match_id and capped at 25 rows, then searches participants in-process. This removes the unsafe interpolated filter, but it also changes behavior from finding any cached row containing this PUUID to finding this PUUID only if it appears in the latest 25 cached matches overall. For many real players, especially older or low-activity cached accounts whose matches are not among the newest 25 global rows, the fallback now returns undefined even when a valid cached summonerId exists, so the review remediation is incomplete and introduces a correctness regression on the fallback path."
+    }
+  ],
+  "appliedUpdates": [
+    {
+      "target": "library",
+      "description": "Documented that the Validation Fixture account route only resolves on localhost in development/test so future validators understand the runtime guard.",
+      "sourceFeature": "pr-review-dashboard-and-fixture-cleanup"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md / feature planning",
+      "suggestion": "When assigning workflow/config truthfulness features that primarily touch package scripts, CI, .env examples, or validation-command contracts, prefer platform-docs-worker over web-feature-worker.",
+      "evidence": "features.json:1377-1379 assigns skillName web-feature-worker to this workflow feature, while .factory/skills/platform-docs-worker/SKILL.md says it should be used for package.json scripts, CI workflow truthfulness, and committed lint config.",
+      "isSystemic": true
+    },
+    {
+      "target": "skills",
+      "suggestion": "Clarify worker selection for backend-only remediation features: either document a backend-only verification path under web-feature-worker or route such features to a more appropriate skill so browser-oriented guidance is not the default for non-user-facing API/query fixes.",
+      "evidence": "Feature pr-review-query-and-sync-hardening lists skillName web-feature-worker in mission features.json, while the change set only edits app/api route handlers, lib/riot-api-service.ts, and tests; the transcript and handoff contain no browser verification because none was relevant.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}
