@@ -1,7 +1,7 @@
 {
   "milestone": "pr-review-followup",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
   "validatorsRun": {
     "test": {
       "passed": true,
@@ -20,20 +20,12 @@
     }
   },
   "reviewsSummary": {
-    "total": 5,
-    "passed": 4,
-    "failed": 1,
-    "failedFeatures": [
-      "pr-review-query-and-sync-hardening"
-    ]
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "failedFeatures": []
   },
-  "blockingIssues": [
-    {
-      "featureId": "pr-review-query-and-sync-hardening",
-      "severity": "blocking",
-      "description": "getCachedSummonerIdFromMatchParticipants() now does an unfiltered match_cache scan ordered by match_id and capped at 25 rows, then searches participants in-process. This removes the unsafe interpolated filter, but it also changes behavior from finding any cached row containing this PUUID to finding this PUUID only if it appears in the latest 25 cached matches overall. For many real players, especially older or low-activity cached accounts whose matches are not among the newest 25 global rows, the fallback now returns undefined even when a valid cached summonerId exists, so the review remediation is incomplete and introduces a correctness regression on the fallback path."
-    }
-  ],
+  "blockingIssues": [],
   "appliedUpdates": [
     {
       "target": "library",
@@ -51,10 +43,10 @@
     {
       "target": "skills",
       "suggestion": "Clarify worker selection for backend-only remediation features: either document a backend-only verification path under web-feature-worker or route such features to a more appropriate skill so browser-oriented guidance is not the default for non-user-facing API/query fixes.",
-      "evidence": "Feature pr-review-query-and-sync-hardening lists skillName web-feature-worker in mission features.json, while the change set only edits app/api route handlers, lib/riot-api-service.ts, and tests; the transcript and handoff contain no browser verification because none was relevant.",
+      "evidence": "Both pr-review-query-and-sync-hardening and its fix pr-review-safe-match-cache-lookup-fix were assigned web-feature-worker even though the changes only touched API/helper code and targeted tests, so reviewers repeatedly had to note that the browser-oriented skill was an awkward fit for backend-only PR-review remediation.",
       "isSystemic": true
     }
   ],
   "rejectedObservations": [],
-  "previousRound": null
+  "previousRound": ".factory/validation/pr-review-followup/scrutiny/synthesis.json (round 1)"
 }
