@@ -1,0 +1,15 @@
+{
+  "featureId": "current-rank-card-snapshot",
+  "reviewedAt": "2026-03-30T23:59:00Z",
+  "commitId": "8cfd3dd",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Re-reviewed the original current-rank feature together with the later live-rank identifier fix. The prior blocker is resolved in the current repo state: `/api/account` now returns the `getAccountByRiotId()` result with derived `summonerId`/`rankLookupId` when available, and `/api/match-performance` now prefers the authoritative match-participant `summonerId` for rank lookups before falling back to `puuid`. Within the user-approved limitation that live non-unavailable rank proof may remain deferred while Riot rank requests are forbidden/rate-limited, the combined implementation now satisfies the reviewed feature scope and preserves truthful unavailable fallback behavior.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": ".factory/validation/match-card-metadata-followup/scrutiny/reviews/current-rank-card-snapshot.json",
+  "summary": "Reviewed both `current-rank-card-snapshot` (commit `9cc2c42`) and its fix `live-rank-summoner-id-wiring-fix` (commit `8cfd3dd`) using the mission feature definitions, both handoffs, both transcript skeletons, the prior failing review, and the current repo code/diff. The original failure is adequately addressed: `lib/riot-api-service.ts` now derives and returns `rankLookupId`, `app/api/account/route.ts` returns that enriched account payload, and `app/api/match-performance/route.ts` uses the authoritative participant `summonerId` path for current-rank snapshots while keeping explicit unavailable fallback behavior under the approved external Riot limitation. No remaining blocking code issues were found for this rerun review."
+}

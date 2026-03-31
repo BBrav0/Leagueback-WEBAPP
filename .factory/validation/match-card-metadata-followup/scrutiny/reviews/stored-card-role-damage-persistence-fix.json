@@ -1,0 +1,15 @@
+{
+  "featureId": "stored-card-role-damage-persistence-fix",
+  "reviewedAt": "2026-03-30T23:50:29Z",
+  "commitId": "f9956dc",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature satisfies the stored-card metadata follow-up: role and damage fields are now persisted into player_matches from both ingest paths, the DB-backed mapper reuses those stored values for /api/stored-matches, and fallback labels still come only from genuinely null persisted/source metadata via buildMatchMetadata. The migration backfills existing rows from match_cache participant data and keeps unsupported INVALID/negative values null, which matches the truthful-fallback requirement. No blocking or non-blocking implementation issues were identified in the reviewed diff.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the handoff, transcript skeleton, skill instructions, and commit f9956dc diff. The implementation adequately fixes DB-first stored-card role/damage persistence, includes a tracked migration/backfill for the live LeagueBack project, and preserves truthful unavailable labels only when source metadata is genuinely missing."
+}
