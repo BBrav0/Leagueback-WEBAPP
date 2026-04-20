@@ -17,16 +17,21 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
  *
  * Prefer the service role so RLS misconfiguration cannot block reads/writes.
  * Falls back to the anon key if the service role is unset (local dev).
+ *
+ * All `process.env` reads are deferred to call-time so this module works on
+ * Cloudflare Workers where env vars are only available inside a request context.
  */
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-const anonKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
 
 /** Lazy singleton — recreated if the effective key changes (e.g. after adding SUPABASE_SERVICE_ROLE_KEY). */
 let _supabaseServer: SupabaseClient | null = null;
 let _lastServerKey: string | undefined;
 
 export function getSupabaseServer(): SupabaseClient {
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+
   if (!supabaseUrl || !anonKey) {
     throw new Error(
       "Missing Supabase environment variables. Set SUPABASE_URL and SUPABASE_ANON_KEY (or NEXT_PUBLIC_*)."

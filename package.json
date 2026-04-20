@@ -11,10 +11,13 @@
     "static-check": "pnpm run lint && pnpm run typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "backfill:player-match-role-damage": "tsx scripts/backfill-player-match-role-damage.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
+    "@opennextjs/cloudflare": "^1.19.1",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",
     "@radix-ui/react-aspect-ratio": "1.1.1",
@@ -43,7 +46,6 @@
     "@radix-ui/react-toggle-group": "1.1.1",
     "@radix-ui/react-tooltip": "1.1.6",
     "@supabase/supabase-js": "^2.95.3",
-    "@vercel/analytics": "^1.6.1",
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -65,7 +67,11 @@
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.6",
+    "wrangler": "^4.83.0",
     "zod": "^3.24.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "workerd"]
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
@@ -78,8 +84,8 @@
     "postcss": "^8.5",
     "supabase": "^2.26.9",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5",
     "tsx": "^4.20.6",
+    "typescript": "^5",
     "vitest": "^3.0.5"
   }
 }

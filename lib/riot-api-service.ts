@@ -2,8 +2,9 @@ import { getSupabaseServer } from "./supabase-server";
 import type { AccountDto, MatchDto, MatchTimelineDto } from "./types";
 import type { LeagueEntryDto } from "./rank-snapshot";
 
-const WORKER_URL =
-  process.env.RIOT_PROXY_URL ?? "https://riot-proxy.riot-proxy.workers.dev";
+function getWorkerUrl(): string {
+  return process.env.RIOT_PROXY_URL ?? "https://riot-proxy.riot-proxy.workers.dev";
+}
 
 async function getCachedSummonerIdByPuuid(
   puuid: string
@@ -131,7 +132,7 @@ export async function getAccountByRiotId(
 
   // Fetch from worker
   const res = await fetch(
-    `${WORKER_URL}/api/account/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`
+    `${getWorkerUrl()}/api/account/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`
   );
   if (!res.ok) {
     const bodyText = await res.text();
@@ -199,7 +200,7 @@ export async function getSummonerIdByPuuid(
   }
 
   const res = await fetch(
-    `${WORKER_URL}/api/summoner/by-puuid/${encodeURIComponent(puuid)}`
+    `${getWorkerUrl()}/api/summoner/by-puuid/${encodeURIComponent(puuid)}`
   );
 
   if (!res.ok) {
@@ -233,7 +234,7 @@ export async function getMatchHistory(
   start: number = 0
 ): Promise<string[]> {
   // Always fetch fresh — new matches may have appeared
-  const requestUrl = `${WORKER_URL}/api/matches/${encodeURIComponent(puuid)}?type=ranked&count=${count}&start=${start}`;
+  const requestUrl = `${getWorkerUrl()}/api/matches/${encodeURIComponent(puuid)}?type=ranked&count=${count}&start=${start}`;
   const res = await fetch(requestUrl);
   if (!res.ok) {
     const bodyText = await res.text();
@@ -284,7 +285,7 @@ export async function getMatchDetails(
 
   // Fetch from worker
   const res = await fetch(
-    `${WORKER_URL}/api/match/${encodeURIComponent(matchId)}`
+    `${getWorkerUrl()}/api/match/${encodeURIComponent(matchId)}`
   );
   if (!res.ok) {
     throw new Error(`Failed to get match details. Status: ${res.status}`);
@@ -319,7 +320,7 @@ export async function getMatchTimeline(
 
   // Fetch from worker
   const res = await fetch(
-    `${WORKER_URL}/api/match/${encodeURIComponent(matchId)}/timeline`
+    `${getWorkerUrl()}/api/match/${encodeURIComponent(matchId)}/timeline`
   );
   if (!res.ok) {
     throw new Error(`Failed to get match timeline. Status: ${res.status}`);
@@ -342,7 +343,7 @@ export async function getCurrentRankEntries(
   summonerId: string
 ): Promise<LeagueEntryDto[]> {
   const res = await fetch(
-    `${WORKER_URL}/api/rank/${encodeURIComponent(summonerId)}`
+    `${getWorkerUrl()}/api/rank/${encodeURIComponent(summonerId)}`
   );
 
   if (!res.ok) {
