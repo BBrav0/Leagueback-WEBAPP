@@ -2,8 +2,9 @@ name: Supabase Keep Awake
 
 on:
   schedule:
-    # Every 3 days (UTC). Keeps free-tier project active (7-day inactivity threshold).
-    - cron: "0 3 */3 * *"
+    # Daily at 03:00 UTC. Keeps free-tier project active (7-day inactivity threshold).
+    # Running daily provides margin for GitHub Actions delays/skips.
+    - cron: "0 3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -18,29 +19,55 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ]; then
             echo "SUPABASE_URL and SUPABASE_ANON_KEY must be set in repository secrets."
             exit 1
           fi
+          if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo "::warning::SUPABASE_SERVICE_ROLE_KEY not set; DB write ping will be skipped."
+          fi
 
-      - name: Ping Supabase REST API
+      - name: Ping Supabase REST API (read)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           set -euo pipefail
-          # Hit the REST API so Supabase registers project activity.
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             "${SUPABASE_URL}/rest/v1/accounts?select=puuid&limit=1" \
             -H "apikey: ${SUPABASE_ANON_KEY}" \
             -H "Authorization: Bearer ${SUPABASE_ANON_KEY}")
-          echo "REST API responded with HTTP ${HTTP_STATUS}"
+          echo "REST API read ping responded with HTTP ${HTTP_STATUS}"
           if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
             echo "Unexpected status code from Supabase REST API"
             exit 1
+          fi
+
+      - name: Write to keepalive table (database mutation)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo "Skipping DB write ping (no service role key)."
+            exit 0
+          fi
+          # Upsert a row into the keepalive table to register a real DB write.
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${SUPABASE_URL}/rest/v1/keepalive" \
+            -X POST \
+            -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: resolution=merge-duplicates" \
+            -d '{"id": 1, "pinged_at": "'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}')
+          echo "Keepalive write responded with HTTP ${HTTP_STATUS}"
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "::warning::Keepalive write failed with HTTP ${HTTP_STATUS}"
           fi
 
       - name: Ping Supabase database (direct)
