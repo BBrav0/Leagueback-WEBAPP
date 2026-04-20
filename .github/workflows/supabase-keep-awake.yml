@@ -70,15 +70,17 @@ jobs:
             echo "::warning::Keepalive write failed with HTTP ${HTTP_STATUS}"
           fi
 
-      - name: Ping Supabase database (direct)
+      - name: Ping Supabase database (direct write)
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           set -euo pipefail
           if [ -n "${SUPABASE_DB_URL:-}" ]; then
             sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
-            psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -c "SELECT 1;"
-            echo "Direct DB ping succeeded."
+            psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -c \
+              "INSERT INTO public.keepalive (id, pinged_at) VALUES (1, now())
+               ON CONFLICT (id) DO UPDATE SET pinged_at = now();"
+            echo "Direct DB write ping succeeded."
           else
             echo "SUPABASE_DB_URL not set, skipping direct DB ping."
           fi
