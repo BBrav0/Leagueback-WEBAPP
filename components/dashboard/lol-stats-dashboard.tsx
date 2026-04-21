@@ -123,6 +123,30 @@ function parsePlayerFromUrl(pathname: string, hash: string): { gameName: string;
   };
 }
 
+type SyncAge = "fresh" | "stale" | "expired";
+
+function computeSyncAge(lastSyncAt: string | null): SyncAge {
+  if (!lastSyncAt) return "expired";
+  const ageMs = Date.now() - new Date(lastSyncAt).getTime();
+  const THIRTY_MINUTES = 30 * 60 * 1000;
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+  if (ageMs < THIRTY_MINUTES) return "fresh";
+  if (ageMs < ONE_DAY) return "stale";
+  return "expired";
+}
+
+function formatSyncAge(lastSyncAt: string): string {
+  const ageMs = Date.now() - new Date(lastSyncAt).getTime();
+  const seconds = Math.floor(ageMs / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
 /**
  * Single module-level element so Recharts `content` prop keeps a stable reference.
  * Safe only while ChartTooltipContent stays stateless; if it later needs context
@@ -629,6 +653,8 @@ export default function Component() {
   const [fetchingMatchesFromApi, setFetchingMatchesFromApi] = useState(false);
   const [isValidationFixtureActive, setIsValidationFixtureActive] = useState(false);
   const [recentSyncWindowSize, setRecentSyncWindowSize] = useState(25);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null | undefined>(undefined);
+  const [syncAge, setSyncAge] = useState<SyncAge | null>(null);
   const didHydrateHistoryPreferencesRef = useRef(false);
   const scrollSentinelRef = useRef<HTMLDivElement>(null);
   const autoSearchKeyRef = useRef<string | null>(null);
@@ -816,6 +842,8 @@ export default function Component() {
     setHasMoreDbMatches(false);
     setAllDbMatchesLoaded(false);
     setRecentSyncWindowSize(25);
+    setLastSyncAt(undefined);
+    setSyncAge(null);
 
     let loadingDismissedEarly = false;
     try {
@@ -866,64 +894,83 @@ export default function Component() {
       setLoading(false);
       loadingDismissedEarly = true;
 
-      // Returning players: Riot may have newer games than DB head; sync only the new prefix (see BackendBridge.syncNewHeadMatchesFromRiot).
+      // Returning players: check sync status and conditionally sync from Riot.
       if (storedResult.totalCount > 0) {
-        const syncRate = rateLimiter.checkRateLimit();
-        if (syncRate.allowed) {
-          setFetchingMatchesFromApi(true);
-          try {
-            const syncResult = await BackendBridge.syncNewHeadMatchesFromRiot(
-              account.puuid,
-              storedResult.totalCount,
-              {
-                recentWindowSize: recentSyncWindowSize,
-                windowSize: recentSyncWindowSize,
-                analyzeDelayMs: 1500,
-                maxSyncRounds: 12,
-              }
-            );
-            if (syncResult.syncMetadata?.recentMatchWindow) {
-              setRecentSyncWindowSize(syncResult.syncMetadata.recentMatchWindow);
-            }
-            if (
-              !syncResult.skippedAlreadyFresh &&
-              !syncResult.skippedNoHistory &&
-              syncResult.analyzedCount === 0 &&
-              syncResult.failedAnalyzeAttempts > 0
-            ) {
-              setError(
-                "We could not save new match results. Please try again later."
-              );
-              if (process.env.NODE_ENV === "development") {
-                console.warn(
-                  "[head-sync] All analyze attempts failed to persist (common fix: set SUPABASE_SERVICE_ROLE_KEY in .env.local for server routes; check terminal for player_matches upsert errors)."
-                );
-              }
-            }
-            if (syncResult.analyzedCount > 0 || syncResult.refreshedStaleCount > 0) {
-              const refreshed = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
-              setMatchesData(refreshed.matches);
-              setTotalDbMatches(refreshed.totalCount);
-              setLoadedDbMatches(refreshed.matches.length);
-              setHasMoreDbMatches(refreshed.hasMore);
-              matchesForStats = refreshed.matches;
+        const syncStatus = await BackendBridge.getSyncStatus(account.puuid);
+        setLastSyncAt(syncStatus.lastSyncAt);
+        const age = computeSyncAge(syncStatus.lastSyncAt);
+        setSyncAge(age);
 
-              if (!refreshed.hasMore) {
-                setAllDbMatchesLoaded(true);
-                const more = await BackendBridge.checkApiHasMore(
-                  account.puuid,
-                  refreshed.totalCount
-                );
-                setHasMoreMatches(more);
-                setMatchesStart(refreshed.totalCount);
-              } else {
-                setAllDbMatchesLoaded(false);
+        if (age === "expired") {
+          // Auto-sync: data is older than 1 day (or never synced)
+          const syncRate = rateLimiter.checkRateLimit();
+          if (syncRate.allowed) {
+            setFetchingMatchesFromApi(true);
+            try {
+              const syncResult = await BackendBridge.syncNewHeadMatchesFromRiot(
+                account.puuid,
+                storedResult.totalCount,
+                {
+                  recentWindowSize: recentSyncWindowSize,
+                  windowSize: recentSyncWindowSize,
+                  analyzeDelayMs: 1500,
+                  maxSyncRounds: 12,
+                }
+              );
+              // Record the sync attempt regardless of outcome
+              const tsResult = await BackendBridge.updateSyncTimestamp(account.puuid);
+              if (tsResult.lastSyncAt) {
+                setLastSyncAt(tsResult.lastSyncAt);
+                setSyncAge(computeSyncAge(tsResult.lastSyncAt));
               }
+
+              if (syncResult.syncMetadata?.recentMatchWindow) {
+                setRecentSyncWindowSize(syncResult.syncMetadata.recentMatchWindow);
+              }
+              if (
+                !syncResult.skippedAlreadyFresh &&
+                !syncResult.skippedNoHistory &&
+                syncResult.analyzedCount === 0 &&
+                syncResult.failedAnalyzeAttempts > 0
+              ) {
+                setError(
+                  "We could not save new match results. Please try again later."
+                );
+                if (process.env.NODE_ENV === "development") {
+                  console.warn(
+                    "[head-sync] All analyze attempts failed to persist (common fix: set SUPABASE_SERVICE_ROLE_KEY in .env.local for server routes; check terminal for player_matches upsert errors)."
+                  );
+                }
+              }
+              if (syncResult.analyzedCount > 0 || syncResult.refreshedStaleCount > 0) {
+                const refreshed = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
+                setMatchesData(refreshed.matches);
+                setTotalDbMatches(refreshed.totalCount);
+                setLoadedDbMatches(refreshed.matches.length);
+                setHasMoreDbMatches(refreshed.hasMore);
+                matchesForStats = refreshed.matches;
+
+                if (!refreshed.hasMore) {
+                  setAllDbMatchesLoaded(true);
+                  const more = await BackendBridge.checkApiHasMore(
+                    account.puuid,
+                    refreshed.totalCount
+                  );
+                  setHasMoreMatches(more);
+                  setMatchesStart(refreshed.totalCount);
+                } else {
+                  setAllDbMatchesLoaded(false);
+                }
+              }
+            } finally {
+              setFetchingMatchesFromApi(false);
             }
-          } finally {
-            setFetchingMatchesFromApi(false);
+          } else {
+            // Rate limiter blocked the auto-sync — treat as stale so user sees the manual button
+            setSyncAge("stale");
           }
         }
+        // If 'stale' or 'fresh', just show the timestamp — user can manually trigger if stale
       }
 
       // If user exists but DB has no categorized matches, auto-fetch first 10 from API
@@ -946,6 +993,13 @@ export default function Component() {
             setHasMoreMatches(result.hasMore);
             setMatchesStart(result.nextStart);
             matchesForStats = result.matches;
+
+            // Set the initial sync timestamp after first-visit fetch
+            const tsResult = await BackendBridge.updateSyncTimestamp(account.puuid);
+            if (tsResult.lastSyncAt) {
+              setLastSyncAt(tsResult.lastSyncAt);
+              setSyncAge(computeSyncAge(tsResult.lastSyncAt));
+            }
           } finally {
             setFetchingMatchesFromApi(false);
           }
@@ -986,6 +1040,80 @@ export default function Component() {
   const handleSavedLookupClick = async (lookup: SavedLookup) => {
     await runSearch(lookup.gameName, lookup.tagLine, { syncUrl: true });
   };
+
+  const handleManualUpdate = useCallback(async () => {
+    if (!currentPuuid || fetchingMatchesFromApi || syncAge !== "stale") return;
+
+    const syncRate = rateLimiter.checkRateLimit();
+    if (!syncRate.allowed) {
+      setError(`Rate limit exceeded. Please wait ${syncRate.retryAfter} seconds.`);
+      return;
+    }
+
+    setFetchingMatchesFromApi(true);
+    setError(null);
+    try {
+      const syncResult = await BackendBridge.syncNewHeadMatchesFromRiot(
+        currentPuuid,
+        totalDbMatches,
+        {
+          recentWindowSize: recentSyncWindowSize,
+          windowSize: recentSyncWindowSize,
+          analyzeDelayMs: 1500,
+          maxSyncRounds: 12,
+        }
+      );
+
+      // Record the sync attempt regardless of outcome
+      const tsResult = await BackendBridge.updateSyncTimestamp(currentPuuid);
+      if (tsResult.lastSyncAt) {
+        setLastSyncAt(tsResult.lastSyncAt);
+        setSyncAge(computeSyncAge(tsResult.lastSyncAt));
+      }
+
+      if (syncResult.syncMetadata?.recentMatchWindow) {
+        setRecentSyncWindowSize(syncResult.syncMetadata.recentMatchWindow);
+      }
+      if (
+        !syncResult.skippedAlreadyFresh &&
+        !syncResult.skippedNoHistory &&
+        syncResult.analyzedCount === 0 &&
+        syncResult.failedAnalyzeAttempts > 0
+      ) {
+        setError(
+          "We could not save new match results. Please try again later."
+        );
+      }
+      if (syncResult.analyzedCount > 0 || syncResult.refreshedStaleCount > 0) {
+        const refreshed = await BackendBridge.getStoredMatches(currentPuuid, 20, 0);
+        setMatchesData(refreshed.matches);
+        setTotalDbMatches(refreshed.totalCount);
+        setLoadedDbMatches(refreshed.matches.length);
+        setHasMoreDbMatches(refreshed.hasMore);
+
+        if (!refreshed.hasMore) {
+          setAllDbMatchesLoaded(true);
+          const more = await BackendBridge.checkApiHasMore(
+            currentPuuid,
+            refreshed.totalCount
+          );
+          setHasMoreMatches(more);
+          setMatchesStart(refreshed.totalCount);
+        } else {
+          setAllDbMatchesLoaded(false);
+        }
+
+        if (currentPuuid !== VALIDATION_FIXTURE_ACCOUNT.puuid) {
+          await syncImpactStats(currentPuuid, refreshed.matches);
+        }
+      }
+    } catch (err) {
+      console.error("Manual update failed:", err);
+      setError("Leagueback could not complete the update. Please try again in a moment.");
+    } finally {
+      setFetchingMatchesFromApi(false);
+    }
+  }, [currentPuuid, fetchingMatchesFromApi, syncAge, totalDbMatches, recentSyncWindowSize, syncImpactStats]);
 
   const updateHistoryPreferences = useCallback(
     (updates: Partial<HistoryPreferences>) => {
@@ -1515,12 +1643,32 @@ export default function Component() {
           </Alert>
         )}
 
-        {hasSearched && fetchingMatchesFromApi && (
-          <Alert className="border-blue-600/50 bg-slate-800/50">
-            <AlertDescription className="text-slate-200 text-sm">
-              Leagueback is requesting additional match data from Riot. This can take about a minute.
-            </AlertDescription>
-          </Alert>
+        {hasSearched && !loading && lastSyncAt !== undefined && (
+          <div className="flex items-center justify-between rounded-lg border border-slate-700/60 bg-slate-800/50 px-4 py-3 text-sm text-slate-400">
+            <span>
+              {lastSyncAt
+                ? `Last updated ${formatSyncAge(lastSyncAt)}`
+                : "Never updated"}
+            </span>
+            <div className="flex items-center gap-3">
+              {syncAge === "stale" && !fetchingMatchesFromApi && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleManualUpdate()}
+                  className="border-slate-600 bg-slate-900/60 text-xs text-slate-100 hover:bg-slate-700 hover:text-white"
+                >
+                  Update now
+                </Button>
+              )}
+              {syncAge === "fresh" && (
+                <span className="text-xs text-slate-500">Up to date</span>
+              )}
+              {fetchingMatchesFromApi && (
+                <span className="text-xs text-blue-400">Updating...</span>
+              )}
+            </div>
+          </div>
         )}
 
         {/* Loading State */}

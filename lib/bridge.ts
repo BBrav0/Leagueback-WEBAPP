@@ -425,6 +425,60 @@ export class BackendBridge {
   }
 
   /**
+   * Get the last sync timestamp for a player.
+   */
+  static async getSyncStatus(
+    puuid: string
+  ): Promise<{ lastSyncAt: string | null }> {
+    try {
+      const res = await fetch(
+        `/api/player-sync-status?puuid=${encodeURIComponent(puuid)}`
+      );
+      if (!res.ok) {
+        console.error("Failed to get sync status", res.status);
+        return { lastSyncAt: null };
+      }
+      const data = (await res.json()) as { lastSyncAt?: string | null; error?: string };
+      if (data.error) {
+        console.error("Backend error:", data.error);
+        return { lastSyncAt: null };
+      }
+      return { lastSyncAt: data.lastSyncAt ?? null };
+    } catch (error) {
+      console.error("Error calling getSyncStatus:", error);
+      return { lastSyncAt: null };
+    }
+  }
+
+  /**
+   * Record that a Riot sync was attempted for a player (updates last_riot_sync_at).
+   */
+  static async updateSyncTimestamp(
+    puuid: string
+  ): Promise<{ success: boolean; lastSyncAt: string | null }> {
+    try {
+      const res = await fetch("/api/player-sync-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ puuid }),
+      });
+      if (!res.ok) {
+        console.error("Failed to update sync timestamp", res.status);
+        return { success: false, lastSyncAt: null };
+      }
+      const data = (await res.json()) as { success?: boolean; lastSyncAt?: string | null; error?: string };
+      if (data.error) {
+        console.error("Backend error:", data.error);
+        return { success: false, lastSyncAt: null };
+      }
+      return { success: true, lastSyncAt: data.lastSyncAt ?? null };
+    } catch (error) {
+      console.error("Error calling updateSyncTimestamp:", error);
+      return { success: false, lastSyncAt: null };
+    }
+  }
+
+  /**
    * Lightweight check if Riot API has more matches beyond what's stored
    */
   static async checkApiHasMore(
