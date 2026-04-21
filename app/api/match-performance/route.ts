@@ -133,6 +133,7 @@ export async function GET(request: NextRequest) {
       rank_queue: matchSummary.rankQueue,
       role: matchSummary.role,
       damage_to_champions: matchSummary.damageToChampions,
+      is_remake: userParticipant.gameEndedInEarlySurrender === true || (!("gameEndedInEarlySurrender" in userParticipant) && matchDetails.info.gameDuration < 300),
     };
 
     const persistError = await upsertPlayerMatch(row);

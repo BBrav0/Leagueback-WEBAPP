@@ -29,6 +29,7 @@ export interface PlayerMatchRow {
   rank_queue: "RANKED_SOLO_5x5" | "RANKED_FLEX_SR" | null;
   role: string | null;
   damage_to_champions: number | null;
+  is_remake?: boolean;
 }
 
 export interface PlayerSyncMetadataRow {
@@ -82,6 +83,7 @@ function rowToMatchSummary(row: PlayerMatchRow): MatchSummary {
     data: row.chart_data,
     yourImpact: row.your_impact,
     teamImpact: row.team_impact,
+    isRemake: row.is_remake ?? false,
   };
 }
 
@@ -99,6 +101,7 @@ export async function getPlayerMatchesPaginated(
     .from("player_matches")
     .select("*", { count: "exact" })
     .eq("puuid", puuid)
+    .eq("is_remake", false)
     .order("game_creation", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -229,7 +232,8 @@ export async function getImpactCategoriesForUser(
   const { data, error } = await getSupabaseServer()
     .from("player_matches")
     .select("impact_category")
-    .eq("puuid", puuid);
+    .eq("puuid", puuid)
+    .eq("is_remake", false);
 
   if (error) {
     console.error("Error fetching impact categories:", error);
@@ -250,6 +254,7 @@ export async function getRecentImpactCategories(
     .from("player_matches")
     .select("impact_category")
     .eq("puuid", puuid)
+    .eq("is_remake", false)
     .order("game_creation", { ascending: false })
     .limit(limit);
 

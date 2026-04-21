@@ -117,9 +117,10 @@ export function filterAndSortMatches(
   matches: MatchSummary[],
   preferences: HistoryPreferences
 ): MatchSummary[] {
+  const nonRemakes = matches.filter((m) => !m.isRemake);
   const championQuery = preferences.champion.trim().toLocaleLowerCase();
 
-  const filtered = matches
+  const filtered = nonRemakes
     .map((match, index) => ({ match, index }))
     .filter(({ match }) => {
     if (preferences.result !== "all" && match.gameResult !== preferences.result) {

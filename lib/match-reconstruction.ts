@@ -119,6 +119,14 @@ export function reconstructMatchSummary(
     teamImpactAvg
   );
 
+  // Detect remakes: authoritative field first, heuristic fallback
+  const hasEarlySurrenderField = matchDetails.info.participants.some(
+    (p) => "gameEndedInEarlySurrender" in p
+  );
+  const isRemake = hasEarlySurrenderField
+    ? matchDetails.info.participants.some((p) => p.gameEndedInEarlySurrender === true)
+    : duration < 300;
+
   return {
     id: matchId,
     summonerName: userParticipant.summonerName,
@@ -138,6 +146,7 @@ export function reconstructMatchSummary(
     data: chartData,
     teamImpact: teamImpactAvg,
     yourImpact: yourImpactAvg,
+    isRemake,
   };
 }
 

@@ -45,7 +45,9 @@ describe("getPlayerMatchesPaginated", () => {
     });
 
     mockedOrder.mockReturnValueOnce({ range: mockedRange });
-    mockedEq.mockReturnValueOnce({ order: mockedOrder });
+    mockedEq
+      .mockReturnValueOnce({ eq: mockedEq })   // first .eq("puuid") → returns chain for second .eq
+      .mockReturnValueOnce({ order: mockedOrder }); // second .eq("is_remake") → returns chain for .order
     mockedSelect.mockReturnValueOnce({ eq: mockedEq });
 
     const { getPlayerMatchesPaginated } = await import("./database-queries");
@@ -90,7 +92,9 @@ describe("getPlayerMatchesPaginated", () => {
     });
 
     mockedOrder.mockReturnValueOnce({ range: mockedRange });
-    mockedEq.mockReturnValueOnce({ order: mockedOrder });
+    mockedEq
+      .mockReturnValueOnce({ eq: mockedEq })   // first .eq("puuid") → returns chain for second .eq
+      .mockReturnValueOnce({ order: mockedOrder }); // second .eq("is_remake") → returns chain for .order
     mockedSelect.mockReturnValueOnce({ eq: mockedEq });
 
     const { getPlayerMatchesPaginated } = await import("./database-queries");

@@ -18,13 +18,14 @@ export function deriveImpactCountsFromMatches(matches: MatchSummary[]): {
   pie: ImpactCounts;
   lifetime: ImpactCounts;
 } {
+  const nonRemakes = matches.filter((m) => !m.isRemake);
   const lifetime: ImpactCounts = {
     impactWins: 0,
     impactLosses: 0,
     guaranteedWins: 0,
     guaranteedLosses: 0,
   };
-  for (const m of matches) {
+  for (const m of nonRemakes) {
     lifetime[classifyMatch(m)]++;
   }
   const pie: ImpactCounts = {
@@ -33,7 +34,7 @@ export function deriveImpactCountsFromMatches(matches: MatchSummary[]): {
     guaranteedWins: 0,
     guaranteedLosses: 0,
   };
-  for (const m of matches.slice(0, 10)) {
+  for (const m of nonRemakes.slice(0, 10)) {
     pie[classifyMatch(m)]++;
   }
   return { pie, lifetime };

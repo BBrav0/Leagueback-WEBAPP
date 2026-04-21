@@ -126,6 +126,9 @@ export async function POST(request: NextRequest) {
           summary.teamImpact
         );
 
+        const userParticipant = matchDetails.info.participants.find(
+          (p) => p.puuid === puuid
+        );
         rows.push({
           match_id,
           puuid,
@@ -146,6 +149,7 @@ export async function POST(request: NextRequest) {
           rank_queue: summary.rankQueue,
           role: summary.role,
           damage_to_champions: summary.damageToChampions,
+          is_remake: userParticipant?.gameEndedInEarlySurrender === true || (!(userParticipant && "gameEndedInEarlySurrender" in userParticipant) && matchDetails.info.gameDuration < 300),
         });
       } catch (err) {
         console.error("Backfill row reconstruction failed:", err);

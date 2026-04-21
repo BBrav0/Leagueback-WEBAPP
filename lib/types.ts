@@ -37,6 +37,7 @@ export interface Participant {
   puuid: string;
   participantId: number;
   teamPosition: string;
+  gameEndedInEarlySurrender?: boolean;
 }
 
 export interface Team {
@@ -109,6 +110,7 @@ export interface MatchSummary {
   data: ChartDataPoint[];
   yourImpact: number;
   teamImpact: number;
+  isRemake?: boolean;
 }
 
 export interface MatchDetailsTeamSummary {
