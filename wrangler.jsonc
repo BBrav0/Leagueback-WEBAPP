@@ -14,4 +14,4 @@
 // - SUPABASE_ANON_KEY / NEXT_PUBLIC_SUPABASE_ANON_KEY
 // - SUPABASE_SERVICE_ROLE_KEY
 // - BACKFILL_SECRET
-// - RIOT_PROXY_URL (optional)
+// - RIOT_API_KEY (calls Riot API directly from server-side routes)

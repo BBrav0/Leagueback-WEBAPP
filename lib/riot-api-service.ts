@@ -2,8 +2,33 @@ import { getSupabaseServer } from "./supabase-server";
 import type { AccountDto, MatchDto, MatchTimelineDto } from "./types";
 import type { LeagueEntryDto } from "./rank-snapshot";
 
-function getWorkerUrl(): string {
-  return process.env.RIOT_PROXY_URL ?? "https://riot-proxy.riot-proxy.workers.dev";
+/* ── Riot API constants ─────────────────────────────────────────────── */
+
+const ACCOUNT_REGION_BASE = "https://americas.api.riotgames.com";
+const PLATFORM_REGION_BASE = "https://na1.api.riotgames.com";
+
+/* ── Helpers ─────────────────────────────────────────────────────────── */
+
+/** Read at call-time (not module-load) for Cloudflare Worker compatibility. */
+function getRiotApiKey(): string {
+  const key = process.env.RIOT_API_KEY;
+  if (!key) {
+    throw new Error("RIOT_API_KEY is not configured");
+  }
+  return key;
+}
+
+/**
+ * Fetch from the Riot API directly, attaching the API key header.
+ * `path` must start with `/` (e.g. `/riot/account/v1/...`).
+ */
+async function riotFetch(
+  path: string,
+  baseUrl: string = ACCOUNT_REGION_BASE
+): Promise<Response> {
+  return fetch(`${baseUrl}${path}`, {
+    headers: { "X-Riot-Token": getRiotApiKey() },
+  });
 }
 
 async function getCachedSummonerIdByPuuid(
@@ -130,9 +155,9 @@ export async function getAccountByRiotId(
     };
   }
 
-  // Fetch from worker
-  const res = await fetch(
-    `${getWorkerUrl()}/api/account/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`
+  // Fetch from Riot API
+  const res = await riotFetch(
+    `/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`
   );
   if (!res.ok) {
     const bodyText = await res.text();
@@ -199,8 +224,9 @@ export async function getSummonerIdByPuuid(
     return cachedSummonerId;
   }
 
-  const res = await fetch(
-    `${getWorkerUrl()}/api/summoner/by-puuid/${encodeURIComponent(puuid)}`
+  const res = await riotFetch(
+    `/lol/summoner/v4/summoners/by-puuid/${encodeURIComponent(puuid)}`,
+    PLATFORM_REGION_BASE
   );
 
   if (!res.ok) {
@@ -234,8 +260,9 @@ export async function getMatchHistory(
   start: number = 0
 ): Promise<string[]> {
   // Always fetch fresh — new matches may have appeared
-  const requestUrl = `${getWorkerUrl()}/api/matches/${encodeURIComponent(puuid)}?type=ranked&count=${count}&start=${start}`;
-  const res = await fetch(requestUrl);
+  const path = `/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids?type=ranked&start=${start}&count=${count}`;
+  const requestUrl = `${ACCOUNT_REGION_BASE}${path}`;
+  const res = await riotFetch(path);
   if (!res.ok) {
     const bodyText = await res.text();
     let detail = "";
@@ -251,7 +278,7 @@ export async function getMatchHistory(
       }
     }
 
-    console.error("Failed to get match history from Riot proxy", {
+    console.error("Failed to get match history from Riot API", {
       status: res.status,
       requestUrl,
       puuid,
@@ -283,9 +310,9 @@ export async function getMatchDetails(
     return cached.match_data as MatchDto;
   }
 
-  // Fetch from worker
-  const res = await fetch(
-    `${getWorkerUrl()}/api/match/${encodeURIComponent(matchId)}`
+  // Fetch from Riot API
+  const res = await riotFetch(
+    `/lol/match/v5/matches/${encodeURIComponent(matchId)}`
   );
   if (!res.ok) {
     throw new Error(`Failed to get match details. Status: ${res.status}`);
@@ -318,9 +345,9 @@ export async function getMatchTimeline(
     return cached.timeline_data as MatchTimelineDto;
   }
 
-  // Fetch from worker
-  const res = await fetch(
-    `${getWorkerUrl()}/api/match/${encodeURIComponent(matchId)}/timeline`
+  // Fetch from Riot API
+  const res = await riotFetch(
+    `/lol/match/v5/matches/${encodeURIComponent(matchId)}/timeline`
   );
   if (!res.ok) {
     throw new Error(`Failed to get match timeline. Status: ${res.status}`);
@@ -342,15 +369,33 @@ export async function getMatchTimeline(
 export async function getCurrentRankEntries(
   summonerId: string
 ): Promise<LeagueEntryDto[]> {
-  const res = await fetch(
-    `${getWorkerUrl()}/api/rank/${encodeURIComponent(summonerId)}`
+  // Try by-summoner first, fall back to by-puuid on 403
+  const res = await riotFetch(
+    `/lol/league/v4/entries/by-summoner/${encodeURIComponent(summonerId)}`,
+    PLATFORM_REGION_BASE
   );
 
-  if (!res.ok) {
-    if (res.status === 404 || res.status === 403) {
-      return [];
+  if (res.status === 403) {
+    const fallbackRes = await riotFetch(
+      `/lol/league-exp/v4/entries/by-puuid/${encodeURIComponent(summonerId)}`,
+      PLATFORM_REGION_BASE
+    );
+
+    if (!fallbackRes.ok) {
+      if (fallbackRes.status === 404 || fallbackRes.status === 403) {
+        return [];
+      }
+      throw new Error(`Failed to get current rank data. Status: ${fallbackRes.status}`);
     }
 
+    const data = (await fallbackRes.json()) as LeagueEntryDto[];
+    return Array.isArray(data) ? data : [];
+  }
+
+  if (!res.ok) {
+    if (res.status === 404) {
+      return [];
+    }
     throw new Error(`Failed to get current rank data. Status: ${res.status}`);
   }
 

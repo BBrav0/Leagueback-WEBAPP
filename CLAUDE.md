@@ -9,7 +9,6 @@
 **Stack:**
 - Next.js 16 (App Router) + React 18 + TypeScript
 - Supabase (PostgreSQL) for caching and precomputed match data
-- Cloudflare Worker (`worker/`) as a Riot API proxy (holds the API key; rate-limits by IP)
 - Tailwind CSS + Radix UI (shadcn/ui components in `components/ui/`)
 - Vercel for hosting; Vitest for tests
 
@@ -21,13 +20,13 @@ NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY   # server-only; bypasses RLS
 BACKFILL_SECRET             # header secret for /api/backfill
-RIOT_PROXY_URL              # defaults to https://riot-proxy.riot-proxy.workers.dev
+RIOT_API_KEY                # Riot Games API key for direct API calls
 ```
 
 ### Data Flow
-1. User submits a Riot ID → frontend calls `/api/account` → cached in `accounts` table or proxied through Worker to Riot API
-2. Frontend calls `/api/match-history` (fresh fetch from Riot via Worker, not cached)
-3. For each match, frontend calls `/api/match-performance` → checks `match_cache`, fetches from Worker if cold, stores in `match_cache` and `player_matches`
+1. User submits a Riot ID → frontend calls `/api/account` → cached in `accounts` table or fetched directly from Riot API
+2. Frontend calls `/api/match-history` (fresh fetch from Riot API directly, not cached)
+3. For each match, frontend calls `/api/match-performance` → checks `match_cache`, fetches from Riot API if cold, stores in `match_cache` and `player_matches`
 4. Paginated DB results served from `player_matches` via `/api/stored-matches`
 5. Impact category stats served from `/api/impact-categories`
 
@@ -66,7 +65,7 @@ return NextResponse.json({ success: false, error: ... });
 `next.config.mjs`: Both `eslint.ignoreDuringBuilds` and `typescript.ignoreBuildErrors` flags have been removed. TypeScript now runs clean with zero errors on every build.
 
 **S3 — Rate limiter is client-side only and bypassable** (open — server-side rate limiting requires new infrastructure)
-`lib/rate-limiter.ts`: The entire implementation uses `sessionStorage`. Any user can clear storage, use a private window, or use a non-browser client to bypass it entirely. The Worker already applies per-IP rate limiting (60 req/min), which is the real server-side guard, but the Next.js API routes themselves have no server-side rate limiting.
+`lib/rate-limiter.ts`: The entire implementation uses `sessionStorage`. Any user can clear storage, use a private window, or use a non-browser client to bypass it entirely. The Next.js API routes themselves have no server-side rate limiting.
 
 **S4 — Silent cache write failures in riot-api-service.ts** ✅ Fixed
 `lib/riot-api-service.ts` lines 63–69, 114–116, 146–148: Supabase `.upsert()` results are awaited but return values are discarded — errors are never checked. If a cache write fails (quota, RLS mismatch, network), the app continues silently with no log.
@@ -79,9 +78,6 @@ await getSupabaseServer().from("accounts").upsert({ ... });
 
 **S5 — No `.env.example` file** ✅ Fixed
 No `.env.example` or `.env.local.example` exists. New contributors (or new deployments) have no reference for which variables are required. The full list is documented above in this file.
-
-**S6 — Worker CORS allows all origins**
-`worker/src/index.ts`: CORS headers set `Access-Control-Allow-Origin: *`. Acceptable for public Riot data, but note that this means any site can proxy requests through your Worker and consume your rate limit quota.
 
 ---
 
@@ -154,9 +150,6 @@ Impact category syncing (`syncImpactStats`), match reconstruction calls, and rat
 
 **D2 — `images: { unoptimized: true }` in next.config.mjs**
 `next.config.mjs` line 10: Image optimization is disabled. This is likely intentional for static export or Cloudflare Pages compatibility, but means Next.js won't auto-optimize images.
-
-**D3 — pnpm + npm/bun lockfile inconsistency in worker/**
-`worker/` has both `package-lock.json` (npm) and `bun.lock` (bun). This is harmless but indicates the worker was initialized with multiple package managers. The root project uses pnpm.
 
 ---
 

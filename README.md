@@ -23,7 +23,7 @@ The current repository state supports these user-visible behaviors:
 - Load the same player directly from a player route without re-submitting the form
 - View stored match history and load additional history as available
 - See impact category statistics, lifetime analytics, and related dashboard charts
-- Use the existing web API routes backed by Supabase and the Riot proxy worker
+- Use the existing web API routes backed by Supabase and the Riot API
 
 ## Backlog / not shipped yet
 
@@ -64,7 +64,7 @@ Required variables are:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `BACKFILL_SECRET`
-- `RIOT_PROXY_URL` (optional if using the default proxy URL)
+- `RIOT_API_KEY`
 
 ### 3. Start the web app
 
@@ -95,7 +95,7 @@ CI runs the same validation flow from `.github/workflows/ci.yml`.
 - Framework: Next.js 16 App Router + React + TypeScript
 - Styling/UI: Tailwind CSS + Radix UI / shadcn components
 - Data/cache: Supabase
-- Riot access: Cloudflare Worker proxy
+- Riot access: Direct Riot API calls via RIOT_API_KEY
 - Hosting target: Vercel
 
 ## Disclaimer

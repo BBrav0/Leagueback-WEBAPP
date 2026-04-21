@@ -23,6 +23,8 @@ describe("riot-api-service account summonerId wiring", () => {
     vi.resetModules();
     vi.clearAllMocks();
 
+    process.env.RIOT_API_KEY = "test-riot-api-key";
+
     mockedFrom.mockImplementation((table: string) => {
       if (table === "accounts") {
         return {
@@ -135,7 +137,10 @@ describe("riot-api-service account summonerId wiring", () => {
     });
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining("/api/summoner/by-puuid/puuid-1")
+      expect.stringContaining("/lol/summoner/v4/summoners/by-puuid/puuid-1"),
+      expect.objectContaining({
+        headers: { "X-Riot-Token": "test-riot-api-key" },
+      })
     );
     expect(mockedUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
