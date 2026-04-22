@@ -93,6 +93,104 @@ function simulateSavedLookupClick(
   };
 }
 
+type SearchStepResult = {
+  requestId: number;
+  currentRequestId: number;
+  accountPuuid?: string;
+  storedResult?: { totalCount: number; matchIds: string[]; hasMore: boolean };
+  syncStatus?: { lastSyncAt: string | null };
+  gateResult?: boolean | null;
+  retryStoredResult?: { totalCount: number; matchIds: string[]; hasMore: boolean };
+  batchResult?: { matchIds: string[]; hasMore: boolean; nextStart: number };
+  timestampResult?: { lastSyncAt: string | null };
+};
+
+type SimulatedDashboardState = {
+  currentPuuid: string | null;
+  matchesData: string[];
+  error: string | null;
+  lastSyncAt: string | null | undefined;
+  syncAge: "fresh" | "stale" | "expired" | null;
+  hasMoreMatches: boolean;
+  totalDbMatches: number;
+  loadedDbMatches: number;
+  hasMoreDbMatches: boolean;
+  allDbMatchesLoaded: boolean;
+};
+
+function createDashboardState(): SimulatedDashboardState {
+  return {
+    currentPuuid: null,
+    matchesData: [],
+    error: null,
+    lastSyncAt: undefined,
+    syncAge: null,
+    hasMoreMatches: false,
+    totalDbMatches: 0,
+    loadedDbMatches: 0,
+    hasMoreDbMatches: false,
+    allDbMatchesLoaded: false,
+  };
+}
+
+function applyRunSearchStepWithGuard(
+  state: SimulatedDashboardState,
+  step: SearchStepResult
+): boolean {
+  if (step.currentRequestId !== step.requestId) {
+    return false;
+  }
+
+  if (step.accountPuuid) {
+    state.currentPuuid = step.accountPuuid;
+  }
+
+  if (step.storedResult) {
+    state.matchesData = step.storedResult.matchIds;
+    state.totalDbMatches = step.storedResult.totalCount;
+    state.loadedDbMatches = step.storedResult.matchIds.length;
+    state.hasMoreDbMatches = step.storedResult.hasMore;
+    state.allDbMatchesLoaded = !step.storedResult.hasMore;
+  }
+
+  if (step.syncStatus) {
+    state.lastSyncAt = step.syncStatus.lastSyncAt;
+    let age = computeSyncAge(step.syncStatus.lastSyncAt);
+    if (age === "expired" && state.totalDbMatches > 0 && !step.syncStatus.lastSyncAt) {
+      age = "stale";
+    }
+    state.syncAge = age;
+  }
+
+  if (step.gateResult !== undefined) {
+    state.hasMoreMatches = step.gateResult === true;
+  }
+
+  if (step.retryStoredResult) {
+    state.matchesData = step.retryStoredResult.matchIds;
+    state.totalDbMatches = step.retryStoredResult.totalCount;
+    state.loadedDbMatches = step.retryStoredResult.matchIds.length;
+    state.hasMoreDbMatches = step.retryStoredResult.hasMore;
+    state.allDbMatchesLoaded = !step.retryStoredResult.hasMore;
+    state.error = step.retryStoredResult.totalCount === 0
+      ? "Data is temporarily unavailable. Please try again in a few minutes."
+      : null;
+  }
+
+  if (step.batchResult) {
+    state.matchesData = step.batchResult.matchIds;
+    state.totalDbMatches = step.batchResult.matchIds.length;
+    state.hasMoreMatches = step.batchResult.hasMore;
+  }
+
+  if (step.timestampResult) {
+    state.lastSyncAt = step.timestampResult.lastSyncAt;
+    state.syncAge = computeSyncAge(step.timestampResult.lastSyncAt);
+  }
+
+  return true;
+}
+
 // ─── VAL-CROSS-001: Fresh profile — infinite scroll loads from DB only ──────
 
 describe("VAL-CROSS-001: Fresh profile — infinite scroll loads from DB only", () => {
@@ -916,5 +1014,150 @@ describe("Second-visit regression: stale visit sets hasMoreMatches correctly", (
     expect(decision.syncAge).toBe("stale");
     expect(decision.shouldAutoSync).toBe(false);
     expect(decision.shouldShowUpdateButton).toBe(true);
+  });
+});
+
+describe("Multi-player revisit race regression", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-22T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("player A → player B → revisit A → revisit B keeps state scoped to the latest request", () => {
+    const state = createDashboardState();
+
+    const requestA1 = 1;
+    const requestB1 = 2;
+    const requestA2 = 3;
+    const requestB2 = 4;
+
+    expect(
+      applyRunSearchStepWithGuard(state, {
+        requestId: requestA1,
+        currentRequestId: requestA1,
+        accountPuuid: "puuid-a",
+        storedResult: { totalCount: 1, matchIds: ["A-match-1"], hasMore: false },
+      })
+    ).toBe(true);
+    expect(state.matchesData).toEqual(["A-match-1"]);
+
+    expect(
+      applyRunSearchStepWithGuard(state, {
+        requestId: requestB1,
+        currentRequestId: requestB1,
+        accountPuuid: "puuid-b",
+        storedResult: { totalCount: 1, matchIds: ["B-match-1"], hasMore: false },
+      })
+    ).toBe(true);
+    expect(state.matchesData).toEqual(["B-match-1"]);
+
+    expect(
+      applyRunSearchStepWithGuard(state, {
+        requestId: requestA2,
+        currentRequestId: requestA2,
+        accountPuuid: "puuid-a",
+        storedResult: { totalCount: 1, matchIds: ["A-match-2"], hasMore: false },
+      })
+    ).toBe(true);
+    expect(state.matchesData).toEqual(["A-match-2"]);
+    expect(state.currentPuuid).toBe("puuid-a");
+
+    expect(
+      applyRunSearchStepWithGuard(state, {
+        requestId: requestB2,
+        currentRequestId: requestB2,
+        accountPuuid: "puuid-b",
+        storedResult: { totalCount: 1, matchIds: ["B-match-2"], hasMore: false },
+      })
+    ).toBe(true);
+
+    expect(state.currentPuuid).toBe("puuid-b");
+    expect(state.matchesData).toEqual(["B-match-2"]);
+
+    expect(
+      applyRunSearchStepWithGuard(state, {
+        requestId: requestA2,
+        currentRequestId: requestB2,
+        retryStoredResult: { totalCount: 0, matchIds: [], hasMore: false },
+      })
+    ).toBe(false);
+
+    expect(state.currentPuuid).toBe("puuid-b");
+    expect(state.matchesData).toEqual(["B-match-2"]);
+    expect(state.error).toBeNull();
+  });
+
+  it("stale completion from an older player search cannot overwrite newer player error/sync state", () => {
+    const state = createDashboardState();
+    const olderRequestId = 10;
+    const newerRequestId = 11;
+    const freshTs = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+    expect(
+      applyRunSearchStepWithGuard(state, {
+        requestId: newerRequestId,
+        currentRequestId: newerRequestId,
+        accountPuuid: "puuid-b",
+        storedResult: { totalCount: 1, matchIds: ["B-match"], hasMore: false },
+        syncStatus: { lastSyncAt: freshTs },
+      })
+    ).toBe(true);
+
+    expect(
+      applyRunSearchStepWithGuard(state, {
+        requestId: olderRequestId,
+        currentRequestId: newerRequestId,
+        retryStoredResult: { totalCount: 0, matchIds: [], hasMore: false },
+        timestampResult: { lastSyncAt: null },
+      })
+    ).toBe(false);
+
+    expect(state.currentPuuid).toBe("puuid-b");
+    expect(state.matchesData).toEqual(["B-match"]);
+    expect(state.error).toBeNull();
+    expect(state.lastSyncAt).toBe(freshTs);
+    expect(state.syncAge).toBe("fresh");
+  });
+
+  it("same-player second-visit retry still applies when the request remains active", () => {
+    const state = createDashboardState();
+    const requestId = 21;
+    const freshTs = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+
+    expect(
+      applyRunSearchStepWithGuard(state, {
+        requestId,
+        currentRequestId: requestId,
+        accountPuuid: "puuid-a",
+        storedResult: { totalCount: 0, matchIds: [], hasMore: false },
+      })
+    ).toBe(true);
+
+    expect(
+      applyRunSearchStepWithGuard(state, {
+        requestId,
+        currentRequestId: requestId,
+        gateResult: null,
+      })
+    ).toBe(true);
+
+    expect(
+      applyRunSearchStepWithGuard(state, {
+        requestId,
+        currentRequestId: requestId,
+        retryStoredResult: { totalCount: 1, matchIds: ["A-retry-match"], hasMore: false },
+        syncStatus: { lastSyncAt: freshTs },
+      })
+    ).toBe(true);
+
+    expect(state.currentPuuid).toBe("puuid-a");
+    expect(state.matchesData).toEqual(["A-retry-match"]);
+    expect(state.error).toBeNull();
+    expect(state.lastSyncAt).toBe(freshTs);
+    expect(state.syncAge).toBe("fresh");
   });
 });

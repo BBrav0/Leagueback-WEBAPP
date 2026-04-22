@@ -646,6 +646,7 @@ export default function Component() {
   const didHydrateHistoryPreferencesRef = useRef(false);
   const scrollSentinelRef = useRef<HTMLDivElement>(null);
   const autoSearchKeyRef = useRef<string | null>(null);
+  const activeSearchRequestIdRef = useRef(0);
   const matchesDataRef = useRef<MatchSummary[]>([]);
   const loadedDbMatchesRef = useRef(0);
   const pageScrollLockYRef = useRef<number | null>(null);
@@ -753,6 +754,10 @@ export default function Component() {
     rawTagLine: string,
     options?: { syncUrl?: boolean }
   ) => {
+    const searchRequestId = activeSearchRequestIdRef.current + 1;
+    activeSearchRequestIdRef.current = searchRequestId;
+    const isSearchStale = () => activeSearchRequestIdRef.current !== searchRequestId;
+
     const normalizedGameName = rawGameName.trim();
     const normalizedTagLine = normalizeTagLine(rawTagLine, rawGameName);
 
@@ -840,6 +845,7 @@ export default function Component() {
     let errorAlreadySet = false;
     try {
       const account = await BackendBridge.getAccount(normalizedGameName, normalizedTagLine);
+      if (isSearchStale()) return;
       if (!account) {
         throw new Error("Failed to get account information");
       }
@@ -855,6 +861,7 @@ export default function Component() {
 
       // Fetch first page of stored matches from DB
       let storedResult = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
+      if (isSearchStale()) return;
       console.log("[SYNC] storedResult.totalCount:", storedResult.totalCount, "matchesCount:", storedResult.matches.length);
 
       setMatchesData(storedResult.matches);
@@ -885,6 +892,7 @@ export default function Component() {
         loadingDismissedEarly = true;
 
         const syncStatus = await BackendBridge.getSyncStatus(account.puuid);
+        if (isSearchStale()) return;
         setLastSyncAt(syncStatus.lastSyncAt);
         let age = computeSyncAge(syncStatus.lastSyncAt);
         // Pre-existing players without a metadata row should be treated as stale
@@ -901,6 +909,7 @@ export default function Component() {
               account.puuid,
               storedResult.totalCount
             );
+            if (isSearchStale()) return;
             setHasMoreMatches(apiHasMore);
           }
 
@@ -920,6 +929,7 @@ export default function Component() {
                   maxSyncRounds: 12,
                 }
               );
+              if (isSearchStale()) return;
 
               if (syncResult.syncMetadata?.recentMatchWindow) {
                 setRecentSyncWindowSize(syncResult.syncMetadata.recentMatchWindow);
@@ -941,6 +951,7 @@ export default function Component() {
               }
               if (syncResult.analyzedCount > 0 || syncResult.refreshedStaleCount > 0) {
                 const refreshed = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
+                if (isSearchStale()) return;
                 setMatchesData(refreshed.matches);
                 setTotalDbMatches(refreshed.totalCount);
                 setLoadedDbMatches(refreshed.matches.length);
@@ -953,6 +964,7 @@ export default function Component() {
                     account.puuid,
                     refreshed.totalCount
                   );
+                  if (isSearchStale()) return;
                   setHasMoreMatches(more);
                   setMatchesStart(refreshed.totalCount);
                 } else {
@@ -962,6 +974,7 @@ export default function Component() {
             } finally {
               // Always record the sync attempt, even on partial/total failure
               const tsResult = await BackendBridge.updateSyncTimestamp(account.puuid);
+              if (isSearchStale()) return;
               if (tsResult.lastSyncAt) {
                 setLastSyncAt(tsResult.lastSyncAt);
                 setSyncAge(computeSyncAge(tsResult.lastSyncAt));
@@ -981,6 +994,7 @@ export default function Component() {
             account.puuid,
             storedResult.totalCount
           );
+          if (isSearchStale()) return;
           setHasMoreMatches(apiHasMore);
         }
         // If 'fresh': skip Riot API calls entirely, just show stored data.
@@ -993,10 +1007,12 @@ export default function Component() {
             account.puuid,
             storedResult.totalCount
           );
+          if (isSearchStale()) return;
           if (gateResult === null) {
             // Sync gate blocked (429) — player was recently synced. Retry stored-matches
             // in case the first query returned 0 transiently.
             const retryStored = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
+            if (isSearchStale()) return;
             if (retryStored.totalCount > 0) {
               // Second visit: data exists in DB, first query missed it. Use the retry data.
               setMatchesData(retryStored.matches);
@@ -1010,6 +1026,7 @@ export default function Component() {
               }
               // Fetch sync status for this returning player
               const syncStatus = await BackendBridge.getSyncStatus(account.puuid);
+              if (isSearchStale()) return;
               setLastSyncAt(syncStatus.lastSyncAt);
               const retryAge = computeSyncAge(syncStatus.lastSyncAt);
               setSyncAge(retryAge);
@@ -1049,6 +1066,7 @@ export default function Component() {
               10,
               1500
             );
+          if (isSearchStale()) return;
             setMatchesData(result.matches);
             setTotalDbMatches(result.matches.length);
             setHasMoreMatches(result.hasMore);
@@ -1057,6 +1075,7 @@ export default function Component() {
 
             // Set the initial sync timestamp after first-visit fetch
             const tsResult = await BackendBridge.updateSyncTimestamp(account.puuid);
+            if (isSearchStale()) return;
             if (tsResult.lastSyncAt) {
               setLastSyncAt(tsResult.lastSyncAt);
               setSyncAge(computeSyncAge(tsResult.lastSyncAt));
@@ -1069,6 +1088,7 @@ export default function Component() {
 
       if (account.puuid !== VALIDATION_FIXTURE_ACCOUNT.puuid) {
         await syncImpactStats(account.puuid, matchesForStats);
+        if (isSearchStale()) return;
       }
 
       setRateLimitStatus({
@@ -1083,10 +1103,12 @@ export default function Component() {
         setError("No ranked match history is available for this Riot ID yet.");
       }
     } catch (err) {
+      if (isSearchStale()) return;
       setError(err instanceof Error ? err.message : "Leagueback could not load this player's match history.");
       setMatchesData([]);
       setCurrentPuuid(null);
     } finally {
+      if (isSearchStale()) return;
       setFetchingMatchesFromApi(false);
       if (!loadingDismissedEarly) {
         setLoading(false);
