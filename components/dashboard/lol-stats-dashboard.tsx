@@ -938,7 +938,7 @@ export default function Component() {
                 );
                 if (process.env.NODE_ENV === "development") {
                   console.warn(
-                    "[head-sync] All analyze attempts failed to persist (common fix: set SUPABASE_SERVICE_ROLE_KEY in .env.local for server routes; check terminal for player_matches upsert errors)."
+                    "[head-sync] All analyze attempts failed to persist (common fix: set DATABASE_URL in .env.local for server routes; check terminal for player_matches upsert errors)."
                   );
                 }
               }
