@@ -138,3 +138,52 @@ describe("formatSyncAge", () => {
     expect(formatSyncAge(threeDaysAgo)).toBe("3 days ago");
   });
 });
+
+/**
+ * VAL-SYNC-014: "Load more from Riot" button gated during fresh window.
+ *
+ * The gate condition is `syncAge !== "fresh"` — the Load More button must not
+ * be rendered (or must be disabled) when the player's sync is fresh. This
+ * describes pure-function tests for the condition; the component JSX in
+ * lol-stats-dashboard.tsx applies the same check.
+ */
+describe("load-more sync-age gate condition", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-22T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("blocks load-more when sync is fresh (5 min ago)", () => {
+    const syncAge = computeSyncAge(new Date(Date.now() - 5 * 60 * 1000).toISOString());
+    expect(syncAge).toBe("fresh");
+    expect(syncAge !== "fresh").toBe(false);
+  });
+
+  it("blocks load-more when sync is fresh (just now)", () => {
+    const syncAge = computeSyncAge(new Date().toISOString());
+    expect(syncAge).toBe("fresh");
+    expect(syncAge !== "fresh").toBe(false);
+  });
+
+  it("allows load-more when sync is stale (1 hour ago)", () => {
+    const syncAge = computeSyncAge(new Date(Date.now() - 60 * 60 * 1000).toISOString());
+    expect(syncAge).toBe("stale");
+    expect(syncAge !== "fresh").toBe(true);
+  });
+
+  it("allows load-more when sync is expired (2 days ago)", () => {
+    const syncAge = computeSyncAge(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString());
+    expect(syncAge).toBe("expired");
+    expect(syncAge !== "fresh").toBe(true);
+  });
+
+  it("allows load-more when sync is stale (exactly 30 min boundary)", () => {
+    const syncAge = computeSyncAge(new Date(Date.now() - 30 * 60 * 1000).toISOString());
+    expect(syncAge).toBe("stale");
+    expect(syncAge !== "fresh").toBe(true);
+  });
+});

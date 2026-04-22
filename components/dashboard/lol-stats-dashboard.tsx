@@ -1153,6 +1153,7 @@ export default function Component() {
 
   const handleLoadMore = async () => {
     if (!currentPuuid || loadingMore || !allDbMatchesLoaded) return;
+    if (syncAge === "fresh") return;
 
     // Check rate limit and COUNT this request (hits Riot API)
     const rateLimitCheck = rateLimiter.checkRateLimit();
@@ -1608,8 +1609,8 @@ export default function Component() {
                 </div>
               )}
 
-              {/* Load More Button — only after all DB matches are loaded */}
-              {allDbMatchesLoaded && hasMoreMatches && (
+              {/* Load More Button — only after all DB matches are loaded, and not during fresh sync window */}
+              {allDbMatchesLoaded && hasMoreMatches && syncAge !== "fresh" && (
                 <div className="flex flex-col items-center gap-4 pt-4">
                   {rateLimitStatus && rateLimitStatus.remaining < 10 && (
                     <Alert className="bg-yellow-900/50 border-yellow-600 max-w-md">
@@ -1709,7 +1710,7 @@ export default function Component() {
                   ? "Request matches from Riot to add the first set of loaded history for this player."
                   : "Check the Riot ID spelling or search for a different player."}
               </div>
-              {allDbMatchesLoaded && hasMoreMatches && (
+              {allDbMatchesLoaded && hasMoreMatches && syncAge !== "fresh" && (
                 <Button
                   onClick={handleLoadMore}
                   disabled={loadingMore || !hasMoreMatches}
