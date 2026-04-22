@@ -4,6 +4,8 @@ import {
   getValidationFixtureMatchHistory,
   VALIDATION_FIXTURE_ACCOUNT,
 } from "@/lib/validation-fixture";
+import { getPlayerSyncMetadata } from "@/lib/database-queries";
+import { checkSyncGate } from "@/lib/sync-gate";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -16,8 +18,16 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Validation fixture bypasses sync gate entirely.
     if (puuid === VALIDATION_FIXTURE_ACCOUNT.puuid) {
       return NextResponse.json(getValidationFixtureMatchHistory(count, start));
+    }
+
+    // Server-side sync gate: reject Riot-bound requests during the fresh window.
+    const syncMetadata = await getPlayerSyncMetadata(puuid);
+    const gateResult = checkSyncGate(syncMetadata?.last_riot_sync_at ?? null);
+    if (gateResult) {
+      return NextResponse.json(gateResult, { status: 429 });
     }
 
     const matchIds = await getMatchHistory(puuid, count, start);

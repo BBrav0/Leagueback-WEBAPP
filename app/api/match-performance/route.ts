@@ -16,6 +16,7 @@ import {
   upsertPlayerSyncMetadata,
 } from "@/lib/database-queries";
 import { getSql } from "@/lib/neon";
+import { checkSyncGate } from "@/lib/sync-gate";
 import type { PlayerMatchRow } from "@/lib/database-queries";
 import { selectCurrentRankSnapshot } from "@/lib/rank-snapshot";
 
@@ -39,6 +40,16 @@ export async function GET(request: NextRequest) {
     let matchTimeline = cacheEntry.timelineData;
     let matchDetailsError: unknown;
     let matchTimelineError: unknown;
+
+    // Server-side sync gate: when cache is cold, reject Riot-bound requests
+    // during the fresh window to prevent unnecessary API calls.
+    if (!matchDetails || !matchTimeline) {
+      const syncMetadata = await getPlayerSyncMetadata(userPuuid);
+      const gateResult = checkSyncGate(syncMetadata?.last_riot_sync_at ?? null);
+      if (gateResult) {
+        return NextResponse.json(gateResult, { status: 429 });
+      }
+    }
 
     if (!matchDetails || !matchTimeline) {
       const [matchDetailsResult, matchTimelineResult] = await Promise.allSettled([
