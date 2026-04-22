@@ -139,5 +139,5 @@ body::before {
 }
 
 .leagueback-loading-icon {
-  animation: leagueback-bounce-rotate 1.4s ease-in-out infinite;
+  animation: leagueback-bounce-rotate 2s ease-in-out infinite;
 }
