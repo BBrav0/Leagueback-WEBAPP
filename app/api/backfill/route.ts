@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabase-server";
+import { getSql } from "@/lib/neon";
 import {
   reconstructMatchSummary,
   determineImpactCategory,
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const supabase = getSupabaseServer();
+  const sql = getSql();
   const params = request.nextUrl.searchParams;
   const startOffsetRaw = Number.parseInt(params.get("offset") || "0", 10);
   const requestedLimit = Number.parseInt(params.get("limit") || "1000", 10);
@@ -33,14 +33,16 @@ export async function POST(request: NextRequest) {
   let totalTimelines = 0;
 
   while (true) {
-    const { data: impactRows, error: impactError } = await supabase
-      .from("impact_categories")
-      .select("match_id, puuid")
-      .range(offset, offset + PAGE_SIZE - 1);
-
-    if (impactError) {
+    let impactRows: Array<{ match_id: string; puuid: string }>;
+    try {
+      impactRows = await sql`
+        SELECT match_id, puuid FROM impact_categories
+        ORDER BY match_id
+        LIMIT ${PAGE_SIZE} OFFSET ${offset}
+      ` as Array<{ match_id: string; puuid: string }>;
+    } catch (err) {
       return NextResponse.json(
-        { error: "Failed to read impact_categories", detail: impactError.message },
+        { error: "Failed to read impact_categories", detail: err instanceof Error ? err.message : String(err) },
         { status: 500 }
       );
     }
@@ -57,44 +59,40 @@ export async function POST(request: NextRequest) {
 
     for (let i = 0; i < uniqueMatchIds.length; i += CHUNK) {
       const chunk = uniqueMatchIds.slice(i, i + CHUNK);
-      const [detailsRes, timelinesRes, cacheRes] = await Promise.all([
-        supabase
-          .from("match_details")
-          .select("match_id, match_data")
-          .in("match_id", chunk),
-        supabase
-          .from("match_timelines")
-          .select("match_id, timeline_data")
-          .in("match_id", chunk),
-        supabase
-          .from("match_cache")
-          .select("match_id, match_data, timeline_data")
-          .in("match_id", chunk),
-      ]);
+      try {
+        const [detailsRows, timelinesRows, cacheRows] = await Promise.all([
+          sql`
+            SELECT match_id, match_data FROM match_details
+            WHERE match_id = ANY(${chunk})
+          `,
+          sql`
+            SELECT match_id, timeline_data FROM match_timelines
+            WHERE match_id = ANY(${chunk})
+          `,
+          sql`
+            SELECT match_id, match_data, timeline_data FROM match_cache
+            WHERE match_id = ANY(${chunk})
+          `,
+        ]);
 
-      if (detailsRes.error || timelinesRes.error || cacheRes.error) {
-        console.error("Backfill chunk query failed", {
-          detailsError: detailsRes.error?.message,
-          timelinesError: timelinesRes.error?.message,
-          cacheError: cacheRes.error?.message,
-        });
+        for (const d of detailsRows as Array<{ match_id: string; match_data: MatchDto }>) {
+          detailsMap.set(d.match_id, d.match_data);
+        }
+        for (const t of timelinesRows as Array<{ match_id: string; timeline_data: MatchTimelineDto }>) {
+          timelinesMap.set(t.match_id, t.timeline_data);
+        }
+        for (const c of cacheRows as Array<{ match_id: string; match_data: MatchDto; timeline_data: MatchTimelineDto }>) {
+          cacheMap.set(c.match_id, {
+            match_data: c.match_data,
+            timeline_data: c.timeline_data,
+          });
+        }
+      } catch (err) {
+        console.error("Backfill chunk query failed:", err);
         return NextResponse.json(
           { error: "Backfill query failed; see server logs for details." },
           { status: 500 }
         );
-      }
-
-      for (const d of detailsRes.data ?? []) {
-        detailsMap.set(d.match_id, d.match_data as MatchDto);
-      }
-      for (const t of timelinesRes.data ?? []) {
-        timelinesMap.set(t.match_id, t.timeline_data as MatchTimelineDto);
-      }
-      for (const c of cacheRes.data ?? []) {
-        cacheMap.set(c.match_id, {
-          match_data: c.match_data as MatchDto,
-          timeline_data: c.timeline_data as MatchTimelineDto,
-        });
       }
     }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabase-server";
+import { getSql } from "@/lib/neon";
 
 const MAX_IDS = 100;
 const MATCH_ID_PATTERN = /^[A-Z0-9_]+$/i;
@@ -31,22 +31,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ existingMatchIds: [] });
     }
 
-    const { data, error } = await getSupabaseServer()
-      .from("player_matches")
-      .select("match_id")
-      .eq("puuid", puuid)
-      .in("match_id", matchIds);
+    try {
+      const sql = getSql();
+      const rows = await sql`
+        SELECT match_id FROM player_matches
+        WHERE puuid = ${puuid} AND match_id = ANY(${matchIds})
+      ` as Array<{ match_id: string }>;
 
-    if (error) {
-      console.error("existing-ids query failed:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      const existing = rows.map((r) => r.match_id);
+
+      return NextResponse.json({
+        existingMatchIds: existing,
+      });
+    } catch (dbError) {
+      console.error("existing-ids query failed:", dbError);
+      return NextResponse.json(
+        { error: dbError instanceof Error ? dbError.message : "Database query failed" },
+        { status: 500 }
+      );
     }
-
-    const existing = (data ?? []).map((r) => r.match_id as string);
-
-    return NextResponse.json({
-      existingMatchIds: existing,
-    });
   } catch (e) {
     console.error("existing-ids route error:", e);
     return NextResponse.json(

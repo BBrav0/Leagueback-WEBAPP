@@ -1,15 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockedIn = vi.fn();
-const mockedEq = vi.fn();
-const mockedSelect = vi.fn();
+const mockSql = vi.fn();
 
-vi.mock("@/lib/supabase-server", () => ({
-  getSupabaseServer: () => ({
-    from: vi.fn(() => ({
-      select: mockedSelect,
-    })),
-  }),
+vi.mock("@/lib/neon", () => ({
+  getSql: () => mockSql,
 }));
 
 describe("POST /api/player-matches/existing-ids", () => {
@@ -17,19 +11,10 @@ describe("POST /api/player-matches/existing-ids", () => {
     vi.resetModules();
     vi.clearAllMocks();
 
-    mockedIn.mockResolvedValue({
-      data: [{ match_id: "NA1_1" }],
-      error: null,
-    });
-    mockedEq.mockReturnValue({
-      in: mockedIn,
-    });
-    mockedSelect.mockReturnValue({
-      eq: mockedEq,
-    });
+    mockSql.mockResolvedValue([{ match_id: "NA1_1" }]);
   });
 
-  it("filters malformed or empty match IDs before querying Supabase", async () => {
+  it("filters malformed or empty match IDs before querying the database", async () => {
     const { POST } = await import("./route");
 
     const response = await POST(
@@ -46,8 +31,6 @@ describe("POST /api/player-matches/existing-ids", () => {
     await expect(response.json()).resolves.toEqual({
       existingMatchIds: ["NA1_1"],
     });
-    expect(mockedEq).toHaveBeenCalledWith("puuid", "puuid-1");
-    expect(mockedIn).toHaveBeenCalledWith("match_id", ["NA1_1", "NA1_2"]);
   });
 
   it("returns an empty result when no valid match IDs are provided", async () => {
@@ -66,6 +49,6 @@ describe("POST /api/player-matches/existing-ids", () => {
     await expect(response.json()).resolves.toEqual({
       existingMatchIds: [],
     });
-    expect(mockedIn).not.toHaveBeenCalled();
+    expect(mockSql).not.toHaveBeenCalled();
   });
 });

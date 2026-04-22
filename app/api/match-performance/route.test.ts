@@ -11,7 +11,7 @@ const getPlayerMatchRowsForStaleCheck = vi.fn();
 const upsertPlayerMatch = vi.fn();
 const upsertPlayerSyncMetadata = vi.fn();
 const mockedSelectCurrentRankSnapshot = vi.fn();
-const mockedSupabaseUpsert = vi.fn();
+const mockSql = vi.fn();
 
 vi.mock("@/lib/riot-api-service", () => ({
   getMatchDetails,
@@ -36,12 +36,8 @@ vi.mock("@/lib/rank-snapshot", () => ({
   selectCurrentRankSnapshot: mockedSelectCurrentRankSnapshot,
 }));
 
-vi.mock("@/lib/supabase-server", () => ({
-  getSupabaseServer: () => ({
-    from: vi.fn(() => ({
-      upsert: mockedSupabaseUpsert,
-    })),
-  }),
+vi.mock("@/lib/neon", () => ({
+  getSql: () => mockSql,
 }));
 
 describe("GET /api/match-performance", () => {
@@ -100,7 +96,6 @@ describe("GET /api/match-performance", () => {
     });
     getPlayerMatchRowsForStaleCheck.mockResolvedValue([]);
     upsertPlayerSyncMetadata.mockResolvedValue(null);
-    mockedSupabaseUpsert.mockResolvedValue({ error: null });
   });
 
   it("surfaces sync metadata persistence failures in the response body", async () => {

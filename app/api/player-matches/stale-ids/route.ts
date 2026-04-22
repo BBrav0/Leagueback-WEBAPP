@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabase-server";
+import { getSql } from "@/lib/neon";
 import { getPlayerMatchRowsForStaleCheck, type PlayerSyncMetadataRow } from "@/lib/database-queries";
 
 const CURRENT_DERIVATION_VERSION = "match-summary-v2";
@@ -44,17 +44,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseServer();
-    const [{ data: syncMetadata, error: syncError }] =
-      await Promise.all([
-        supabase
-          .from("player_sync_metadata")
-          .select("derivation_version, recent_match_window, notes")
-          .eq("puuid", puuid)
-          .maybeSingle(),
-      ]);
+    const sql = getSql();
 
-    if (syncError) {
+    // Fetch sync metadata
+    let syncMetadata: {
+      derivation_version: string | null;
+      recent_match_window: number | null;
+      notes: Record<string, unknown> | null;
+    } | null = null;
+    try {
+      const syncRows = await sql`
+        SELECT derivation_version, recent_match_window, notes
+        FROM player_sync_metadata
+        WHERE puuid = ${puuid}
+      ` as Array<{
+        derivation_version: string | null;
+        recent_match_window: number | null;
+        notes: Record<string, unknown> | null;
+      }>;
+      syncMetadata = syncRows[0] ?? null;
+    } catch (syncError) {
       console.error("Error fetching player sync metadata for stale detection:", syncError);
     }
 
@@ -62,23 +71,28 @@ export async function POST(request: NextRequest) {
     const rowByMatchId = new Map(
       playerRows.map((row) => [row.match_id, row])
     );
-    const perMatchDerivationVersions = readPerMatchRecord(syncMetadata?.notes, "perMatchDerivationVersions");
-    const perMatchUpdatedAt = readPerMatchRecord(syncMetadata?.notes, "perMatchUpdatedAt");
+    const perMatchDerivationVersions = readPerMatchRecord(syncMetadata?.notes ?? undefined, "perMatchDerivationVersions");
+    const perMatchUpdatedAt = readPerMatchRecord(syncMetadata?.notes ?? undefined, "perMatchUpdatedAt");
 
-    const { data: cacheRows, error: cacheRowsError } = await supabase
-      .from("match_cache")
-      .select("match_id, match_data")
-      .in("match_id", matchIds);
-
-    if (cacheRowsError) {
-      console.error("Error fetching match cache rows for stale detection:", cacheRowsError);
+    // Fetch match cache rows
+    let cacheRows: Array<{
+      match_id: string;
+      match_data: { info?: { gameCreation?: number; gameDuration?: number } } | null;
+    }> = [];
+    try {
+      cacheRows = await sql`
+        SELECT match_id, match_data FROM match_cache
+        WHERE match_id = ANY(${matchIds})
+      ` as Array<{
+        match_id: string;
+        match_data: { info?: { gameCreation?: number; gameDuration?: number } } | null;
+      }>;
+    } catch (cacheError) {
+      console.error("Error fetching match cache rows for stale detection:", cacheError);
     }
 
     const cacheInfoByMatchId = new Map(
-      ((cacheRows as Array<{
-        match_id: string;
-        match_data?: { info?: { gameCreation?: number; gameDuration?: number } } | null;
-      }> | null) ?? []).map((row) => [
+      cacheRows.map((row) => [
         row.match_id,
         row.match_data?.info ?? null,
       ])

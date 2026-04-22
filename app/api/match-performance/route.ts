@@ -15,7 +15,7 @@ import {
   upsertPlayerMatch,
   upsertPlayerSyncMetadata,
 } from "@/lib/database-queries";
-import { getSupabaseServer } from "@/lib/supabase-server";
+import { getSql } from "@/lib/neon";
 import type { PlayerMatchRow } from "@/lib/database-queries";
 import { selectCurrentRankSnapshot } from "@/lib/rank-snapshot";
 
@@ -142,13 +142,19 @@ export async function GET(request: NextRequest) {
     const existingRow = existingRecentRows[0] ?? null;
     let cacheErrorMessage: string | undefined;
     if (!cacheEntry.matchData || !cacheEntry.timelineData) {
-      const { error: cacheError } = await getSupabaseServer()
-        .from("match_cache")
-        .upsert(
-          { match_id: matchId, match_data: matchDetails, timeline_data: matchTimeline },
-          { onConflict: "match_id" }
-        );
-      cacheErrorMessage = cacheError?.message;
+      try {
+        const sql = getSql();
+        await sql`
+          INSERT INTO match_cache (match_id, match_data, timeline_data)
+          VALUES (${matchId}, ${JSON.stringify(matchDetails)}::jsonb, ${JSON.stringify(matchTimeline)}::jsonb)
+          ON CONFLICT (match_id) DO UPDATE SET
+            match_data = EXCLUDED.match_data,
+            timeline_data = EXCLUDED.timeline_data
+        `;
+      } catch (cacheError) {
+        cacheErrorMessage = cacheError instanceof Error ? cacheError.message : String(cacheError);
+        console.error("match_cache upsert failed:", matchId, cacheError);
+      }
     }
 
     const latestDbCreatedAt = existingSyncMetadata?.latest_db_match_created_at ?? null;
