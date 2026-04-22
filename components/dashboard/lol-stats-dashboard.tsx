@@ -830,6 +830,7 @@ export default function Component() {
     setUpdateError(null);
 
     let loadingDismissedEarly = false;
+    let errorAlreadySet = false;
     try {
       const account = await BackendBridge.getAccount(normalizedGameName, normalizedTagLine);
       if (!account) {
@@ -846,7 +847,7 @@ export default function Component() {
       setIsValidationFixtureActive(account.puuid === VALIDATION_FIXTURE_ACCOUNT.puuid);
 
       // Fetch first page of stored matches from DB
-      const storedResult = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
+      let storedResult = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
       console.log("[SYNC] storedResult.totalCount:", storedResult.totalCount, "matchesCount:", storedResult.matches.length);
 
       setMatchesData(storedResult.matches);
@@ -965,16 +966,58 @@ export default function Component() {
             setSyncAge("stale");
           }
         }
-        // If 'fresh' or 'stale': skip Riot API calls entirely, just show stored data.
-        // User can manually trigger sync if stale via the "Update now" button.
-      } else {
-        // New player (storedResult.totalCount === 0) — need to check Riot API
-        if (!storedResult.hasMore) {
-          setAllDbMatchesLoaded(true);
+
+        // Stale path: check if Riot has more matches so "Load more from Riot" can appear.
+        // Sync gate allows this call since stale > 30 min.
+        if (age === "stale" && !storedResult.hasMore) {
           apiHasMore = await BackendBridge.checkApiHasMore(
             account.puuid,
             storedResult.totalCount
           );
+          setHasMoreMatches(apiHasMore);
+        }
+        // If 'fresh': skip Riot API calls entirely, just show stored data.
+      } else {
+        // New player (storedResult.totalCount === 0) — need to check Riot API
+        // Use the gate-aware variant to distinguish sync-gate-blocked from genuinely no matches.
+        if (!storedResult.hasMore) {
+          setAllDbMatchesLoaded(true);
+          const gateResult = await BackendBridge.checkApiHasMoreWithGateStatus(
+            account.puuid,
+            storedResult.totalCount
+          );
+          if (gateResult === null) {
+            // Sync gate blocked (429) — player was recently synced. Retry stored-matches
+            // in case the first query returned 0 transiently.
+            const retryStored = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
+            if (retryStored.totalCount > 0) {
+              // Second visit: data exists in DB, first query missed it. Use the retry data.
+              setMatchesData(retryStored.matches);
+              setTotalDbMatches(retryStored.totalCount);
+              setLoadedDbMatches(retryStored.matches.length);
+              setHasMoreDbMatches(retryStored.hasMore);
+              matchesForStats = retryStored.matches;
+              if (!retryStored.hasMore) {
+                setAllDbMatchesLoaded(true);
+                setMatchesStart(retryStored.totalCount);
+              }
+              // Fetch sync status for this returning player
+              const syncStatus = await BackendBridge.getSyncStatus(account.puuid);
+              setLastSyncAt(syncStatus.lastSyncAt);
+              const retryAge = computeSyncAge(syncStatus.lastSyncAt);
+              setSyncAge(retryAge);
+              // Mark storedResult as found so the "no matches" error path is skipped
+              storedResult = retryStored;
+            } else {
+              // Sync gate blocked AND no stored matches found on retry —
+              // show a temporary unavailability message instead of "no ranked match history".
+              setError("Data is temporarily unavailable. Please try again in a few minutes.");
+              errorAlreadySet = true;
+            }
+            apiHasMore = false;
+          } else {
+            apiHasMore = gateResult;
+          }
           setHasMoreMatches(apiHasMore);
           setMatchesStart(storedResult.totalCount);
         }
@@ -1028,7 +1071,8 @@ export default function Component() {
 
       // For new players where Riot reported no matches and batch didn't produce results,
       // show a message (no redundant API call — getPlayerMatchDataBatch already checked).
-      if (storedResult.totalCount === 0 && !apiHasMore) {
+      // Only set this if no error was already set (e.g. "temporarily unavailable" from sync gate).
+      if (storedResult.totalCount === 0 && !apiHasMore && !errorAlreadySet) {
         setError("No ranked match history is available for this Riot ID yet.");
       }
     } catch (err) {

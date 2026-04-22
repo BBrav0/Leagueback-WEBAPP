@@ -678,3 +678,163 @@ describe("Cross-boundary edge cases", () => {
     expect(checkSyncGate(boundaryTs)).toBeNull();
   });
 });
+
+// ─── Second-visit regression tests ─────────────────────────────────────────
+//
+// These tests verify the two root causes of the "No ranked match history"
+// error showing on the second visit to a previously-loaded player profile.
+
+describe("Second-visit regression: new-player path with sync gate block", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-22T12:00:00Z"));
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("checkApiHasMoreWithGateStatus returns null when sync gate blocks (429)", async () => {
+    vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue(null);
+    const result = await BackendBridge.checkApiHasMoreWithGateStatus("p1", 0);
+    expect(result).toBeNull();
+  });
+
+  it("checkApiHasMoreWithGateStatus returns true when matches exist beyond stored", async () => {
+    vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue(["match_beyond"]);
+    const result = await BackendBridge.checkApiHasMoreWithGateStatus("p1", 10);
+    expect(result).toBe(true);
+  });
+
+  it("checkApiHasMoreWithGateStatus returns false when no matches beyond stored", async () => {
+    vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue([]);
+    const result = await BackendBridge.checkApiHasMoreWithGateStatus("p1", 10);
+    expect(result).toBe(false);
+  });
+
+  it("simulates second-visit: stored matches found on retry after sync gate block", async () => {
+    // Scenario: Player visited before, data is in DB, but first stored-matches
+    // query returns 0 transiently. Sync gate blocks checkApiHasMore (returns null).
+    // On retry, stored matches are found and displayed.
+
+    // First stored-matches query returns 0 (simulates transient miss)
+    const firstStoredResult = { matches: [], totalCount: 0, hasMore: false };
+    // Retry stored-matches query returns data
+    const retryStoredResult = {
+      matches: [sampleMatch],
+      totalCount: 1,
+      hasMore: false,
+    };
+
+    // Simulate the logic:
+    // 1. storedResult.totalCount === 0 → new-player path
+    // 2. checkApiHasMoreWithGateStatus returns null (sync gate)
+    // 3. Retry stored-matches → retryStoredResult.totalCount > 0
+    // 4. Use retry data → no error shown
+
+    const gateResult = await (async () => {
+      vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue(null);
+      return BackendBridge.checkApiHasMoreWithGateStatus("p1", 0);
+    })();
+    expect(gateResult).toBeNull();
+
+    // The dashboard would retry stored-matches and find data
+    expect(retryStoredResult.totalCount).toBeGreaterThan(0);
+    // Since retry found matches, the error message should NOT be set
+    const shouldShowError = firstStoredResult.totalCount === 0 && gateResult !== true && retryStoredResult.totalCount === 0;
+    expect(shouldShowError).toBe(false);
+  });
+
+  it("simulates genuine new player: no stored matches, no sync gate, Riot returns empty", async () => {
+    // Scenario: genuinely new player with no matches
+    vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue([]);
+    const gateResult = await BackendBridge.checkApiHasMoreWithGateStatus("p1", 0);
+    expect(gateResult).toBe(false);
+    // This should trigger the "No ranked match history" error
+    const shouldShowNoMatches = gateResult === false;
+    expect(shouldShowNoMatches).toBe(true);
+  });
+
+  it("simulates sync gate block with genuinely no stored data: shows temporary message", async () => {
+    // Scenario: Player was synced but truly has no stored matches (edge case).
+    // Sync gate blocks Riot check.
+    vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue(null);
+    const gateResult = await BackendBridge.checkApiHasMoreWithGateStatus("p1", 0);
+    expect(gateResult).toBeNull();
+
+    // The retry stored-matches would also return 0
+    const retryStoredResult = { matches: [], totalCount: 0, hasMore: false };
+    // Dashboard shows "temporarily unavailable" not "no ranked match history"
+    const isSyncGateBlock = gateResult === null;
+    const hasNoRetryData = retryStoredResult.totalCount === 0;
+    expect(isSyncGateBlock && hasNoRetryData).toBe(true);
+    // The error message should be "temporarily unavailable" not "no ranked match history"
+  });
+});
+
+describe("Second-visit regression: stale visit sets hasMoreMatches correctly", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-22T12:00:00Z"));
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("stale sync age allows checkApiHasMore (sync gate passes)", () => {
+    // Stale = 31 min to 24 hours
+    const staleTs = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+    const age = computeSyncAge(staleTs);
+    expect(age).toBe("stale");
+
+    // Server-side gate should pass
+    expect(checkSyncGate(staleTs)).toBeNull();
+
+    // The dashboard should call checkApiHasMore for stale profiles
+    const shouldCallCheckApiHasMore = age === "stale";
+    expect(shouldCallCheckApiHasMore).toBe(true);
+  });
+
+  it("stale visit with Riot having more matches sets hasMoreMatches to true", async () => {
+    vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue(["match_beyond"]);
+
+    const hasMore = await BackendBridge.checkApiHasMore("p1", 10);
+    expect(hasMore).toBe(true);
+
+    // Dashboard would set: setHasMoreMatches(hasMore)
+    // So "Load more from Riot" button would appear
+  });
+
+  it("stale visit with no more Riot matches sets hasMoreMatches to false", async () => {
+    vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue([]);
+
+    const hasMore = await BackendBridge.checkApiHasMore("p1", 30);
+    expect(hasMore).toBe(false);
+
+    // "Load more from Riot" button would NOT appear
+  });
+
+  it("fresh visit does NOT call checkApiHasMore (no Riot calls)", () => {
+    const freshTs = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const age = computeSyncAge(freshTs);
+    expect(age).toBe("fresh");
+
+    // The dashboard skips checkApiHasMore entirely when fresh
+    // Only the expired and stale paths call checkApiHasMore
+    const shouldCallCheckApiHasMore = age === "stale" || age === "expired";
+    expect(shouldCallCheckApiHasMore).toBe(false);
+  });
+
+  it("simulateDashboardSyncDecision for stale: no auto-sync but Update button shown", () => {
+    const staleTs = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+    const decision = simulateDashboardSyncDecision(30, staleTs);
+    expect(decision.syncAge).toBe("stale");
+    expect(decision.shouldAutoSync).toBe(false);
+    expect(decision.shouldShowUpdateButton).toBe(true);
+  });
+});

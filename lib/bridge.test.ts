@@ -79,6 +79,38 @@ describe("BackendBridge", () => {
     expect(hasMore).toBe(true);
   });
 
+  it("checkApiHasMore returns false when match history is empty", async () => {
+    vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue([]);
+    const hasMore = await BackendBridge.checkApiHasMore("p1", 0);
+    expect(hasMore).toBe(false);
+  });
+
+  it("checkApiHasMore returns false on sync gate block (null from getMatchHistory)", async () => {
+    vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue(null);
+    const hasMore = await BackendBridge.checkApiHasMore("p1", 0);
+    expect(hasMore).toBe(false);
+  });
+
+  describe("checkApiHasMoreWithGateStatus", () => {
+    it("returns true when one id exists", async () => {
+      vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue(["m1"]);
+      const result = await BackendBridge.checkApiHasMoreWithGateStatus("p1", 0);
+      expect(result).toBe(true);
+    });
+
+    it("returns false when match history is empty", async () => {
+      vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue([]);
+      const result = await BackendBridge.checkApiHasMoreWithGateStatus("p1", 0);
+      expect(result).toBe(false);
+    });
+
+    it("returns null when sync gate blocks (429 → getMatchHistory returns null)", async () => {
+      vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue(null);
+      const result = await BackendBridge.checkApiHasMoreWithGateStatus("p1", 0);
+      expect(result).toBeNull();
+    });
+  });
+
   it("getPlayerMatchDataBatch aggregates successful analyses", async () => {
     vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue(["m1", "m2"]);
     vi.spyOn(BackendBridge, "analyzeMatchPerformance")

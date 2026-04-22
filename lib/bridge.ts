@@ -488,18 +488,34 @@ export class BackendBridge {
   }
 
   /**
-   * Lightweight check if Riot API has more matches beyond what's stored
+   * Lightweight check if Riot API has more matches beyond what's stored.
+   * Returns true if more matches exist, false if genuinely no more, or null
+   * if the request was blocked by the sync gate (429).
+   */
+  static async checkApiHasMoreWithGateStatus(
+    puuid: string,
+    startFrom: number
+  ): Promise<boolean | null> {
+    try {
+      const matchIds = await this.getMatchHistory(puuid, 1, startFrom);
+      // getMatchHistory returns null on 429 (sync gate active)
+      if (matchIds === null) return null;
+      return matchIds.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Lightweight check if Riot API has more matches beyond what's stored.
+   * Returns true if more matches exist, false otherwise (including sync gate blocks).
    */
   static async checkApiHasMore(
     puuid: string,
     startFrom: number
   ): Promise<boolean> {
-    try {
-      const matchIds = await this.getMatchHistory(puuid, 1, startFrom);
-      return matchIds !== null && matchIds.length > 0;
-    } catch {
-      return false;
-    }
+    const result = await this.checkApiHasMoreWithGateStatus(puuid, startFrom);
+    return result === true;
   }
 
   /**
