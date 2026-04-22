@@ -9,22 +9,15 @@ Environment variables, external dependencies, and setup notes.
 
 ## Required Environment Variables
 
-| Variable | Purpose | Where Used |
-|----------|---------|------------|
-| `DATABASE_URL` | Neon PostgreSQL connection string | `lib/neon.ts`, `scripts/backfill-player-match-role-damage.ts` |
-| `RIOT_API_KEY` | Riot Games API key | `lib/riot-api-service.ts` |
-| `BACKFILL_SECRET` | Secret header for /api/backfill endpoint | `app/api/backfill/route.ts` |
-
-## Neon Database
-
-- **Project:** misty-shadow-24055221 (Leagueback)
-- **Region:** us-east-1
-- **PostgreSQL:** v17
-- **Connection:** via `@neondatabase/serverless` HTTP mode (neon() function)
-- **Database name:** neondb
+| Variable | Purpose | Required for |
+|---|---|---|
+| `DATABASE_URL` | Neon PostgreSQL connection string | All DB operations |
+| `RIOT_API_KEY` | Riot Games API key | Riot API calls (match-history, match-performance, account lookup) |
+| `BACKFILL_SECRET` | Header secret for /api/backfill | Backfill endpoint only |
 
 ## Platform Notes
 
-- **Windows** development environment (PowerShell/CMD)
-- **pnpm** package manager (v10.12.1)
-- Node.js required for `@neondatabase/serverless` >= 19
+- Windows development environment (win32 10.0.26200)
+- Node.js 20, pnpm package manager
+- Neon serverless driver uses HTTP mode (no persistent connections)
+- `server-only` package guards all DB access from client-side import

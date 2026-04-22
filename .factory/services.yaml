@@ -1,14 +1,16 @@
 commands:
-  install: pnpm install
-  typecheck: pnpm typecheck
-  build: pnpm build
+  install: pnpm install --frozen-lockfile
+  dev: pnpm dev
   test: pnpm test
-  lint: pnpm lint
+  typecheck: pnpm run typecheck
+  lint: pnpm run lint
+  build: pnpm run build
+  static-check: pnpm run static-check
 
 services:
   web:
     start: pnpm dev
-    stop: for /f "tokens=5" %a in ('netstat -ano ^| findstr :3005 ^| findstr LISTENING') do taskkill /PID %a /F
+    stop: netstat -ano | findstr :3005 | findstr LISTENING | for /f "tokens=5" %a in ('findstr LISTENING') do taskkill /PID %a /F
     healthcheck: curl -sf http://localhost:3005
     port: 3005
     depends_on: []

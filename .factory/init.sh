@@ -1,5 +1,11 @@
 #!/bin/bash
-set -e
+# Environment setup — idempotent, runs at start of each worker session
 
-# Install dependencies (idempotent)
-pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+# Install dependencies
+pnpm install --frozen-lockfile
+
+# Verify TypeScript compiles
+pnpm run typecheck
+
+# Verify tests pass
+pnpm test

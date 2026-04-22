@@ -6,39 +6,32 @@ Testing surface, required testing skills/tools, and resource cost classification
 
 ## Validation Surface
 
-### Browser (Primary)
-- **URL:** http://localhost:3005
-- **Tool:** agent-browser
-- **What to test:** Full user flow — search Riot ID, see match cards, verify data loads
-- **Setup:** Start dev server with `pnpm dev` (port 3005)
+**Primary surface:** Browser (Next.js web application on localhost:3005)
 
-### API Endpoints (Secondary)
-- **Tool:** curl
-- **Endpoints:**
-  - `GET /api/account?gameName=...&tagLine=...`
-  - `GET /api/match-history?puuid=...&count=10&start=0`
-  - `GET /api/match-performance?matchId=...&userPuuid=...`
-  - `GET /api/stored-matches?puuid=...&limit=20&offset=0`
-  - `GET /api/impact-categories?puuid=...`
-  - `POST /api/player-matches/existing-ids` (body: `{ puuid, matchIds }`)
-  - `POST /api/player-matches/stale-ids` (body: `{ puuid, matchIds }`)
-  - `GET /api/player-sync-status?puuid=...`
-  - `POST /api/player-sync-status` (body: `{ puuid }`)
+**Tool:** agent-browser skill
+- Confirmed working in dry run
+- MUST use semantic locators (`find placeholder`, `find role button --name`, `find text`) — ref-based `@eN` times out on this app's Radix UI components
+- Screenshots and DOM inspection both work
 
-### Validation Fixture
-- **Identity:** `Validation Fixture#LOCAL` (puuid: `validation-fixture-puuid`)
-- **Purpose:** Database-free smoke test path
-- **Works without:** DATABASE_URL, RIOT_API_KEY
+**Limitations:**
+- `RIOT_API_KEY` may not be available in dev — Riot API calls will fail with "RIOT_API_KEY is not configured"
+- Testing focuses on UI state correctness, sync gate behavior, and DB-only flows
+- Full end-to-end with real Riot API data requires the key to be set
+
+**App entry point:** http://localhost:3005
+- Search form with "Game name" and "Tag line" inputs
+- After search, profile page shows match cards, impact stats, sync status bar
 
 ## Validation Concurrency
 
-- **Machine:** 32GB RAM, ~17GB available at baseline
-- **Dev server:** ~200MB RAM
-- **agent-browser instance:** ~300MB RAM
-- **Max concurrent validators:** 5 (5 * 300MB + 200MB = 1.7GB, well within 12GB * 0.7 = 8.4GB budget)
+**Machine:** 32 GB RAM, 24 logical cores, ~15 GB free at baseline
+**Agent-browser cost:** ~1 GB RAM per instance (Chromium + Node)
+**Dev server cost:** ~200 MB RAM (shared across validators)
+**Usable headroom:** 15 GB * 0.7 = ~10.5 GB
+**Max concurrent validators:** 5 (5 * 1 GB + 0.2 GB = 5.2 GB, well within budget)
 
-## Known Considerations
+## Testing Notes
 
-- The app needs `RIOT_API_KEY` for live data flows (looking up real Riot IDs)
-- Without `RIOT_API_KEY`, only the validation fixture flow works
-- The ESLint ignore for `.open-next/**` must be fixed before `pnpm lint` will pass
+- The dev server must be running on port 3005 before testing
+- The Validation Fixture ("Validation Fixture#LOCAL") bypasses sync gate entirely — use it for UI-only testing
+- For sync gate behavior testing, need actual player data in the DB or mock the sync status API responses
