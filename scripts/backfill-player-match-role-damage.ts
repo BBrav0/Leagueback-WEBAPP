@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { neon } from "@neondatabase/serverless";
 
 interface PlayerMatchNeedingBackfillRow {
   match_id: string;
@@ -27,18 +27,15 @@ interface BackfillUpdateRow {
   damage_to_champions: number | null;
 }
 
-const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const databaseUrl = process.env.DATABASE_URL;
 
-if (!supabaseUrl || !serviceRoleKey) {
+if (!databaseUrl) {
   throw new Error(
-    "Missing Supabase environment variables. Set SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY before running the backfill."
+    "Missing DATABASE_URL environment variable. Set it before running the backfill."
   );
 }
 
-const supabase = createClient(supabaseUrl, serviceRoleKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+const sql = neon(databaseUrl);
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(value ?? "", 10);
@@ -84,18 +81,14 @@ function buildParticipantIndex(rows: MatchCacheRow[]): Map<string, MatchParticip
 }
 
 async function fetchBackfillCandidates(limit: number): Promise<PlayerMatchNeedingBackfillRow[]> {
-  const { data, error } = await supabase
-    .from("player_matches")
-    .select("match_id, puuid")
-    .or("role.is.null,damage_to_champions.is.null")
-    .order("game_creation", { ascending: true })
-    .limit(limit);
-
-  if (error) {
-    throw new Error(`Failed to load player_matches backfill candidates: ${error.message}`);
-  }
-
-  return (data as PlayerMatchNeedingBackfillRow[] | null) ?? [];
+  const rows = await sql`
+    SELECT match_id, puuid
+    FROM player_matches
+    WHERE role IS NULL OR damage_to_champions IS NULL
+    ORDER BY game_creation ASC
+    LIMIT ${limit}
+  `;
+  return rows as PlayerMatchNeedingBackfillRow[];
 }
 
 async function fetchMatchCacheRows(matchIds: string[]): Promise<MatchCacheRow[]> {
@@ -103,16 +96,12 @@ async function fetchMatchCacheRows(matchIds: string[]): Promise<MatchCacheRow[]>
     return [];
   }
 
-  const { data, error } = await supabase
-    .from("match_cache")
-    .select("match_id, match_data")
-    .in("match_id", matchIds);
-
-  if (error) {
-    throw new Error(`Failed to load match_cache rows: ${error.message}`);
-  }
-
-  return (data as MatchCacheRow[] | null) ?? [];
+  const rows = await sql`
+    SELECT match_id, match_data
+    FROM match_cache
+    WHERE match_id = ANY(${matchIds})
+  `;
+  return rows as MatchCacheRow[];
 }
 
 async function applyUpdates(rows: BackfillUpdateRow[]): Promise<void> {
@@ -120,27 +109,40 @@ async function applyUpdates(rows: BackfillUpdateRow[]): Promise<void> {
     return;
   }
 
-  const { error } = await supabase
-    .from("player_matches")
-    .upsert(rows, { onConflict: "match_id,puuid" });
+  // Build a multi-row upsert using UNNEST for parameterized batch insert
+  const matchIds = rows.map((r) => r.match_id);
+  const puuids = rows.map((r) => r.puuid);
+  const roles = rows.map((r) => r.role);
+  const damages = rows.map((r) => r.damage_to_champions);
 
-  if (error) {
-    throw new Error(`Failed to upsert player_matches backfill rows: ${error.message}`);
-  }
+  await sql`
+    INSERT INTO player_matches (match_id, puuid, role, damage_to_champions)
+    SELECT * FROM UNNEST(
+      ${matchIds}::text[],
+      ${puuids}::text[],
+      ${roles}::text[],
+      ${damages}::integer[]
+    ) AS t(match_id, puuid, role, damage_to_champions)
+    ON CONFLICT (match_id, puuid)
+    DO UPDATE SET
+      role = EXCLUDED.role,
+      damage_to_champions = EXCLUDED.damage_to_champions
+  `;
 }
 
 async function countRemainingCandidates(): Promise<number | null> {
-  const { count, error } = await supabase
-    .from("player_matches")
-    .select("match_id", { count: "exact", head: true })
-    .or("role.is.null,damage_to_champions.is.null");
-
-  if (error) {
-    console.warn(`[backfill-role-damage] Remaining-count query failed: ${error.message}`);
+  try {
+    const rows = await sql`
+      SELECT COUNT(*)::int AS count
+      FROM player_matches
+      WHERE role IS NULL OR damage_to_champions IS NULL
+    `;
+    return (rows as { count: number }[])[0]?.count ?? 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[backfill-role-damage] Remaining-count query failed: ${message}`);
     return null;
   }
-
-  return count ?? 0;
 }
 
 async function main(): Promise<void> {
