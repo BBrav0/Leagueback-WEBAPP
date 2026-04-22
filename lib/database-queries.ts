@@ -1,4 +1,4 @@
-import { getSupabaseServer } from "./supabase-server";
+import { getSql } from "./neon";
 import type {
   ImpactCategory,
   MatchDetailsData,
@@ -95,41 +95,79 @@ export async function getPlayerMatchesPaginated(
   limit: number = 20,
   offset: number = 0
 ): Promise<{ matches: MatchSummary[]; totalCount: number; hasMore: boolean }> {
-  const supabase = getSupabaseServer();
+  try {
+    const sql = getSql();
 
-  const { data, error, count } = await supabase
-    .from("player_matches")
-    .select("*", { count: "exact" })
-    .eq("puuid", puuid)
-    .eq("is_remake", false)
-    .order("game_creation", { ascending: false })
-    .range(offset, offset + limit - 1);
+    const [rows, countResult] = await Promise.all([
+      sql`
+        SELECT * FROM player_matches
+        WHERE puuid = ${puuid} AND is_remake = false
+        ORDER BY game_creation DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `,
+      sql`
+        SELECT COUNT(*)::int AS count FROM player_matches
+        WHERE puuid = ${puuid} AND is_remake = false
+      `,
+    ]);
 
-  if (error) {
+    const matches = (rows as PlayerMatchRow[]).map(rowToMatchSummary);
+    const totalCount = (countResult as [{ count: number }])[0]?.count ?? 0;
+    const hasMore = offset + matches.length < totalCount;
+
+    return { matches, totalCount, hasMore };
+  } catch (error) {
     console.error("Error fetching player matches:", error);
-    return { matches: [], totalCount: count || 0, hasMore: false };
+    return { matches: [], totalCount: 0, hasMore: false };
   }
-
-  const matches = (data as PlayerMatchRow[]).map(rowToMatchSummary);
-  const totalCount = count || 0;
-  const hasMore = offset + matches.length < totalCount;
-
-  return { matches, totalCount, hasMore };
 }
 
 /**
  * Upsert a precomputed match summary into player_matches.
  */
 export async function upsertPlayerMatch(row: PlayerMatchRow): Promise<string | null> {
-  const { error } = await getSupabaseServer()
-    .from("player_matches")
-    .upsert(row, { onConflict: "match_id,puuid" });
-
-  if (error) {
+  try {
+    const sql = getSql();
+    await sql`
+      INSERT INTO player_matches (
+        match_id, puuid, summoner_name, champion, kda, cs, vision_score,
+        game_result, game_time, your_impact, team_impact, impact_category,
+        chart_data, game_creation, game_duration, rank, rank_queue, role,
+        damage_to_champions, is_remake
+      ) VALUES (
+        ${row.match_id}, ${row.puuid}, ${row.summoner_name}, ${row.champion},
+        ${row.kda}, ${row.cs}, ${row.vision_score}, ${row.game_result},
+        ${row.game_time}, ${row.your_impact}, ${row.team_impact},
+        ${row.impact_category}, ${JSON.stringify(row.chart_data)}::jsonb,
+        ${row.game_creation}, ${row.game_duration}, ${row.rank},
+        ${row.rank_queue}, ${row.role}, ${row.damage_to_champions},
+        ${row.is_remake ?? false}
+      )
+      ON CONFLICT (match_id, puuid) DO UPDATE SET
+        summoner_name = EXCLUDED.summoner_name,
+        champion = EXCLUDED.champion,
+        kda = EXCLUDED.kda,
+        cs = EXCLUDED.cs,
+        vision_score = EXCLUDED.vision_score,
+        game_result = EXCLUDED.game_result,
+        game_time = EXCLUDED.game_time,
+        your_impact = EXCLUDED.your_impact,
+        team_impact = EXCLUDED.team_impact,
+        impact_category = EXCLUDED.impact_category,
+        chart_data = EXCLUDED.chart_data,
+        game_creation = EXCLUDED.game_creation,
+        game_duration = EXCLUDED.game_duration,
+        rank = EXCLUDED.rank,
+        rank_queue = EXCLUDED.rank_queue,
+        role = EXCLUDED.role,
+        damage_to_champions = EXCLUDED.damage_to_champions,
+        is_remake = EXCLUDED.is_remake
+    `;
+    return null;
+  } catch (error) {
     console.error("player_matches upsert failed:", error);
-    return error.message;
+    return error instanceof Error ? error.message : String(error);
   }
-  return null;
 }
 
 /**
@@ -140,47 +178,128 @@ export async function upsertPlayerMatchBatch(
 ): Promise<string | null> {
   if (rows.length === 0) return null;
 
-  const { error } = await getSupabaseServer()
-    .from("player_matches")
-    .upsert(rows, { onConflict: "match_id,puuid" });
+  try {
+    const sql = getSql();
 
-  if (error) {
+    // Build a multi-row INSERT with parameterized values
+    const valuesClauses: string[] = [];
+    const params: unknown[] = [];
+
+    for (const row of rows) {
+      const baseIdx = params.length;
+      params.push(
+        row.match_id, row.puuid, row.summoner_name, row.champion,
+        row.kda, row.cs, row.vision_score, row.game_result,
+        row.game_time, row.your_impact, row.team_impact,
+        row.impact_category, JSON.stringify(row.chart_data),
+        row.game_creation, row.game_duration, row.rank,
+        row.rank_queue, row.role, row.damage_to_champions,
+        row.is_remake ?? false
+      );
+      valuesClauses.push(
+        `($${baseIdx + 1}, $${baseIdx + 2}, $${baseIdx + 3}, $${baseIdx + 4}, $${baseIdx + 5}, $${baseIdx + 6}, $${baseIdx + 7}, $${baseIdx + 8}, $${baseIdx + 9}, $${baseIdx + 10}, $${baseIdx + 11}, $${baseIdx + 12}, $${baseIdx + 13}::jsonb, $${baseIdx + 14}, $${baseIdx + 15}, $${baseIdx + 16}, $${baseIdx + 17}, $${baseIdx + 18}, $${baseIdx + 19}, $${baseIdx + 20})`
+      );
+    }
+
+    const query = `
+      INSERT INTO player_matches (
+        match_id, puuid, summoner_name, champion, kda, cs, vision_score,
+        game_result, game_time, your_impact, team_impact, impact_category,
+        chart_data, game_creation, game_duration, rank, rank_queue, role,
+        damage_to_champions, is_remake
+      ) VALUES ${valuesClauses.join(", ")}
+      ON CONFLICT (match_id, puuid) DO UPDATE SET
+        summoner_name = EXCLUDED.summoner_name,
+        champion = EXCLUDED.champion,
+        kda = EXCLUDED.kda,
+        cs = EXCLUDED.cs,
+        vision_score = EXCLUDED.vision_score,
+        game_result = EXCLUDED.game_result,
+        game_time = EXCLUDED.game_time,
+        your_impact = EXCLUDED.your_impact,
+        team_impact = EXCLUDED.team_impact,
+        impact_category = EXCLUDED.impact_category,
+        chart_data = EXCLUDED.chart_data,
+        game_creation = EXCLUDED.game_creation,
+        game_duration = EXCLUDED.game_duration,
+        rank = EXCLUDED.rank,
+        rank_queue = EXCLUDED.rank_queue,
+        role = EXCLUDED.role,
+        damage_to_champions = EXCLUDED.damage_to_champions,
+        is_remake = EXCLUDED.is_remake
+    `;
+
+    await sql.query(query, params);
+    return null;
+  } catch (error) {
     console.error("player_matches batch upsert failed:", error);
-    return error.message;
+    return error instanceof Error ? error.message : String(error);
   }
-  return null;
 }
 
 export async function getPlayerSyncMetadata(
   puuid: string
 ): Promise<PlayerSyncMetadataRow | null> {
-  const { data, error } = await getSupabaseServer()
-    .from("player_sync_metadata")
-    .select("*")
-    .eq("puuid", puuid)
-    .maybeSingle();
-
-  if (error) {
+  try {
+    const sql = getSql();
+    const rows = await sql`
+      SELECT * FROM player_sync_metadata WHERE puuid = ${puuid}
+    `;
+    return (rows as PlayerSyncMetadataRow[])[0] ?? null;
+  } catch (error) {
     console.error("Error fetching player sync metadata:", error);
     return null;
   }
-
-  return (data as PlayerSyncMetadataRow | null) ?? null;
 }
 
 export async function upsertPlayerSyncMetadata(
   row: PlayerSyncMetadataRow
 ): Promise<string | null> {
-  const { error } = await getSupabaseServer()
-    .from("player_sync_metadata")
-    .upsert(row, { onConflict: "puuid" });
-
-  if (error) {
+  try {
+    const sql = getSql();
+    await sql`
+      INSERT INTO player_sync_metadata (
+        puuid, latest_riot_match_id, latest_riot_match_created_at,
+        latest_db_match_id, latest_db_match_created_at, recent_match_window,
+        reconciled_through_match_created_at, last_riot_sync_at,
+        last_full_refresh_at, last_stale_derived_refresh_at,
+        last_known_account_game_name, last_known_account_tag_line,
+        derivation_version, notes
+      ) VALUES (
+        ${row.puuid}, ${row.latest_riot_match_id ?? null},
+        ${row.latest_riot_match_created_at ?? null},
+        ${row.latest_db_match_id ?? null},
+        ${row.latest_db_match_created_at ?? null},
+        ${row.recent_match_window ?? null},
+        ${row.reconciled_through_match_created_at ?? null},
+        ${row.last_riot_sync_at ?? null},
+        ${row.last_full_refresh_at ?? null},
+        ${row.last_stale_derived_refresh_at ?? null},
+        ${row.last_known_account_game_name ?? null},
+        ${row.last_known_account_tag_line ?? null},
+        ${row.derivation_version ?? null},
+        ${row.notes != null ? JSON.stringify(row.notes) : null}::jsonb
+      )
+      ON CONFLICT (puuid) DO UPDATE SET
+        latest_riot_match_id = EXCLUDED.latest_riot_match_id,
+        latest_riot_match_created_at = EXCLUDED.latest_riot_match_created_at,
+        latest_db_match_id = EXCLUDED.latest_db_match_id,
+        latest_db_match_created_at = EXCLUDED.latest_db_match_created_at,
+        recent_match_window = EXCLUDED.recent_match_window,
+        reconciled_through_match_created_at = EXCLUDED.reconciled_through_match_created_at,
+        last_riot_sync_at = EXCLUDED.last_riot_sync_at,
+        last_full_refresh_at = EXCLUDED.last_full_refresh_at,
+        last_stale_derived_refresh_at = EXCLUDED.last_stale_derived_refresh_at,
+        last_known_account_game_name = EXCLUDED.last_known_account_game_name,
+        last_known_account_tag_line = EXCLUDED.last_known_account_tag_line,
+        derivation_version = EXCLUDED.derivation_version,
+        notes = EXCLUDED.notes
+    `;
+    return null;
+  } catch (error) {
     console.error("player_sync_metadata upsert failed:", error);
-    return error.message;
+    return error instanceof Error ? error.message : String(error);
   }
-
-  return null;
 }
 
 export async function getPlayerMatchRowsForStaleCheck(
@@ -191,36 +310,36 @@ export async function getPlayerMatchRowsForStaleCheck(
     return [];
   }
 
-  const { data, error } = await getSupabaseServer()
-    .from("player_matches")
-    .select("match_id, game_creation, game_duration, created_at")
-    .eq("puuid", puuid)
-    .in("match_id", matchIds);
-
-  if (error) {
+  try {
+    const sql = getSql();
+    const rows = await sql`
+      SELECT match_id, game_creation, game_duration, created_at
+      FROM player_matches
+      WHERE puuid = ${puuid} AND match_id = ANY(${matchIds})
+    `;
+    return rows as PlayerMatchStaleCheckRow[];
+  } catch (error) {
     console.error("Error fetching player matches for stale check:", error);
     return [];
   }
-
-  return (data as PlayerMatchStaleCheckRow[] | null) ?? [];
 }
 
 /**
  * Get all stored match IDs for a player from player_matches.
  */
 export async function getAllStoredMatchIds(puuid: string): Promise<string[]> {
-  const { data, error } = await getSupabaseServer()
-    .from("player_matches")
-    .select("match_id")
-    .eq("puuid", puuid)
-    .order("game_creation", { ascending: false });
-
-  if (error) {
+  try {
+    const sql = getSql();
+    const rows = await sql`
+      SELECT match_id FROM player_matches
+      WHERE puuid = ${puuid}
+      ORDER BY game_creation DESC
+    `;
+    return (rows as [{ match_id: string }]).map((row) => row.match_id);
+  } catch (error) {
     console.error("Error fetching stored match IDs:", error);
     return [];
   }
-
-  return data.map((row) => row.match_id);
 }
 
 /**
@@ -229,18 +348,17 @@ export async function getAllStoredMatchIds(puuid: string): Promise<string[]> {
 export async function getImpactCategoriesForUser(
   puuid: string
 ): Promise<ImpactCategory[]> {
-  const { data, error } = await getSupabaseServer()
-    .from("player_matches")
-    .select("impact_category")
-    .eq("puuid", puuid)
-    .eq("is_remake", false);
-
-  if (error) {
+  try {
+    const sql = getSql();
+    const rows = await sql`
+      SELECT impact_category FROM player_matches
+      WHERE puuid = ${puuid} AND is_remake = false
+    `;
+    return (rows as [{ impact_category: ImpactCategory }]).map((row) => row.impact_category);
+  } catch (error) {
     console.error("Error fetching impact categories:", error);
     return [];
   }
-
-  return data.map((row) => row.impact_category as ImpactCategory);
 }
 
 /**
@@ -250,40 +368,40 @@ export async function getRecentImpactCategories(
   puuid: string,
   limit: number = 10
 ): Promise<ImpactCategory[]> {
-  const { data, error } = await getSupabaseServer()
-    .from("player_matches")
-    .select("impact_category")
-    .eq("puuid", puuid)
-    .eq("is_remake", false)
-    .order("game_creation", { ascending: false })
-    .limit(limit);
-
-  if (error) {
+  try {
+    const sql = getSql();
+    const rows = await sql`
+      SELECT impact_category FROM player_matches
+      WHERE puuid = ${puuid} AND is_remake = false
+      ORDER BY game_creation DESC
+      LIMIT ${limit}
+    `;
+    return (rows as [{ impact_category: ImpactCategory }]).map((row) => row.impact_category);
+  } catch (error) {
     console.error("Error fetching recent impact categories:", error);
     return [];
   }
-
-  return data.map((row) => row.impact_category as ImpactCategory);
 }
 
 export async function getMatchCacheEntry(matchId: string): Promise<{
   matchData: MatchDto | null;
   timelineData: MatchTimelineDto | null;
 }> {
-  const { data, error } = await getSupabaseServer()
-    .from("match_cache")
-    .select("match_data, timeline_data")
-    .eq("match_id", matchId)
-    .maybeSingle();
-
-  if (error) {
+  try {
+    const sql = getSql();
+    const rows = await sql`
+      SELECT match_data, timeline_data FROM match_cache
+      WHERE match_id = ${matchId}
+    `;
+    const row = (rows as [{ match_data: MatchDto; timeline_data: MatchTimelineDto }])[0];
+    return {
+      matchData: row?.match_data ?? null,
+      timelineData: row?.timeline_data ?? null,
+    };
+  } catch (error) {
     console.error("Error fetching match_cache entry:", error);
+    return { matchData: null, timelineData: null };
   }
-
-  return {
-    matchData: (data?.match_data as MatchDto | undefined) ?? null,
-    timelineData: (data?.timeline_data as MatchTimelineDto | undefined) ?? null,
-  };
 }
 
 export async function getMatchDetailsData(
@@ -316,18 +434,17 @@ export async function getStoredMatchDetails(
   const matchMap = new Map<string, MatchDto>();
   if (matchIds.length === 0) return matchMap;
 
-  const { data, error } = await getSupabaseServer()
-    .from("match_details")
-    .select("match_id, match_data")
-    .in("match_id", matchIds);
-
-  if (error) {
+  try {
+    const sql = getSql();
+    const rows = await sql`
+      SELECT match_id, match_data FROM match_details
+      WHERE match_id = ANY(${matchIds})
+    `;
+    for (const row of rows as [{ match_id: string; match_data: MatchDto }]) {
+      matchMap.set(row.match_id, row.match_data);
+    }
+  } catch (error) {
     console.error("Error fetching match details:", error);
-    return matchMap;
-  }
-
-  for (const row of data) {
-    matchMap.set(row.match_id, row.match_data as MatchDto);
   }
   return matchMap;
 }
@@ -338,18 +455,17 @@ export async function getStoredMatchTimelines(
   const timelineMap = new Map<string, MatchTimelineDto>();
   if (matchIds.length === 0) return timelineMap;
 
-  const { data, error } = await getSupabaseServer()
-    .from("match_timelines")
-    .select("match_id, timeline_data")
-    .in("match_id", matchIds);
-
-  if (error) {
+  try {
+    const sql = getSql();
+    const rows = await sql`
+      SELECT match_id, timeline_data FROM match_timelines
+      WHERE match_id = ANY(${matchIds})
+    `;
+    for (const row of rows as [{ match_id: string; timeline_data: MatchTimelineDto }]) {
+      timelineMap.set(row.match_id, row.timeline_data);
+    }
+  } catch (error) {
     console.error("Error fetching match timelines:", error);
-    return timelineMap;
-  }
-
-  for (const row of data) {
-    timelineMap.set(row.match_id, row.timeline_data as MatchTimelineDto);
   }
   return timelineMap;
 }

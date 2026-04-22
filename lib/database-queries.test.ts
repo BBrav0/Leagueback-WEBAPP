@@ -1,23 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PlayerMatchRow } from "./database-queries";
 
-const mockedSelect = vi.fn();
-const mockedEq = vi.fn();
-const mockedOrder = vi.fn();
-const mockedRange = vi.fn();
+// Mock the Neon module to control what sql template calls return
+const mockSql = vi.fn();
 
-vi.mock("./supabase-server", () => ({
-  getSupabaseServer: () => ({
-    from: vi.fn(() => ({
-      select: mockedSelect,
-    })),
-  }),
+vi.mock("./neon", () => ({
+  getSql: () => mockSql,
 }));
 
 describe("getPlayerMatchesPaginated", () => {
   it("preserves stored role and damage metadata from player_matches rows", async () => {
-    mockedRange.mockResolvedValueOnce({
-      data: [
+    // getPlayerMatchesPaginated calls Promise.all with two queries:
+    // 1) data query -> returns player match rows
+    // 2) count query -> returns [{ count: N }]
+    mockSql
+      .mockResolvedValueOnce([
         {
           match_id: "NA1_1",
           puuid: "puuid-1",
@@ -39,16 +36,8 @@ describe("getPlayerMatchesPaginated", () => {
           role: "MIDDLE",
           damage_to_champions: 24876,
         } satisfies PlayerMatchRow,
-      ],
-      error: null,
-      count: 1,
-    });
-
-    mockedOrder.mockReturnValueOnce({ range: mockedRange });
-    mockedEq
-      .mockReturnValueOnce({ eq: mockedEq })   // first .eq("puuid") → returns chain for second .eq
-      .mockReturnValueOnce({ order: mockedOrder }); // second .eq("is_remake") → returns chain for .order
-    mockedSelect.mockReturnValueOnce({ eq: mockedEq });
+      ])
+      .mockResolvedValueOnce([{ count: 1 }]);
 
     const { getPlayerMatchesPaginated } = await import("./database-queries");
     const result = await getPlayerMatchesPaginated("puuid-1", 20, 0);
@@ -63,8 +52,8 @@ describe("getPlayerMatchesPaginated", () => {
   });
 
   it("keeps unavailable labels when stored metadata is genuinely missing", async () => {
-    mockedRange.mockResolvedValueOnce({
-      data: [
+    mockSql
+      .mockResolvedValueOnce([
         {
           match_id: "NA1_2",
           puuid: "puuid-1",
@@ -86,16 +75,8 @@ describe("getPlayerMatchesPaginated", () => {
           role: null,
           damage_to_champions: null,
         } satisfies PlayerMatchRow,
-      ],
-      error: null,
-      count: 1,
-    });
-
-    mockedOrder.mockReturnValueOnce({ range: mockedRange });
-    mockedEq
-      .mockReturnValueOnce({ eq: mockedEq })   // first .eq("puuid") → returns chain for second .eq
-      .mockReturnValueOnce({ order: mockedOrder }); // second .eq("is_remake") → returns chain for .order
-    mockedSelect.mockReturnValueOnce({ eq: mockedEq });
+      ])
+      .mockResolvedValueOnce([{ count: 1 }]);
 
     const { getPlayerMatchesPaginated } = await import("./database-queries");
     const result = await getPlayerMatchesPaginated("puuid-1", 20, 0);
