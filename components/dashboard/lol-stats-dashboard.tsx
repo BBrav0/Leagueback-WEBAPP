@@ -24,7 +24,12 @@ import {
   type ImpactCategory,
   type ImpactCounts,
 } from "@/lib/impact-stats"
-import { saveSuccessfulLookup, subscribeToSavedLookups, type SavedLookup } from "@/lib/saved-lookups"
+import {
+  normalizeTagLine,
+  saveSuccessfulLookup,
+  subscribeToSavedLookups,
+  type SavedLookup,
+} from "@/lib/saved-lookups"
 import {
   countActiveHistoryFilters,
   DEFAULT_HISTORY_PREFERENCES,
@@ -118,10 +123,12 @@ function parsePlayerFromUrl(pathname: string, hash: string): { gameName: string;
   const isPlayerRoute = pathSegments.length >= 2 && pathSegments[0].toLowerCase() === "player";
   const routeGameName = isPlayerRoute ? pathSegments[1] : "";
   const rawHash = hash.startsWith("#") ? hash.slice(1) : hash;
+  const gameName = routeGameName ? safeDecodeURIComponent(routeGameName) : "";
+  const decodedTagLine = rawHash ? safeDecodeURIComponent(rawHash) : "";
 
   return {
-    gameName: routeGameName ? safeDecodeURIComponent(routeGameName) : "",
-    tagLine: rawHash ? safeDecodeURIComponent(rawHash) : "",
+    gameName,
+    tagLine: normalizeTagLine(decodedTagLine, gameName),
   };
 }
 
@@ -747,7 +754,7 @@ export default function Component() {
     options?: { syncUrl?: boolean }
   ) => {
     const normalizedGameName = rawGameName.trim();
-    const normalizedTagLine = rawTagLine.trim();
+    const normalizedTagLine = normalizeTagLine(rawTagLine, rawGameName);
 
     if (!normalizedGameName || !normalizedTagLine) {
       setError("Enter both parts of the Riot ID before searching.");
@@ -1092,7 +1099,14 @@ export default function Component() {
   };
 
   const handleSavedLookupClick = async (lookup: SavedLookup) => {
-    await runSearch(lookup.gameName, lookup.tagLine, { syncUrl: true });
+    const normalizedGameName = lookup.gameName.trim();
+    const normalizedTagLine = normalizeTagLine(lookup.tagLine, lookup.gameName);
+
+    setGameName(normalizedGameName);
+    setTagLine("");
+    setTagLine(normalizedTagLine);
+
+    await runSearch(normalizedGameName, normalizedTagLine, { syncUrl: true });
   };
 
   const handleManualUpdate = useCallback(async () => {
@@ -1284,23 +1298,35 @@ export default function Component() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const { gameName: routeGameName, tagLine: routeTagLine } = parsePlayerFromUrl(pathname, window.location.hash);
+    const syncRouteState = () => {
+      const { gameName: routeGameName, tagLine: routeTagLine } = parsePlayerFromUrl(
+        pathname,
+        window.location.hash
+      );
 
-    if (routeGameName) {
-      setGameName(routeGameName);
-    }
+      if (routeGameName) {
+        setGameName(routeGameName);
+      }
 
-    if (routeTagLine) {
-      setTagLine(routeTagLine);
-    }
+      if (routeTagLine) {
+        setTagLine(routeTagLine);
+      }
 
-    if (!routeGameName || !routeTagLine) return;
+      if (!routeGameName || !routeTagLine) return;
 
-    const routeKey = `${routeGameName}#${routeTagLine}`;
-    if (autoSearchKeyRef.current === routeKey) return;
+      const routeKey = `${routeGameName}#${routeTagLine}`;
+      if (autoSearchKeyRef.current === routeKey) return;
 
-    autoSearchKeyRef.current = routeKey;
-    void runSearch(routeGameName, routeTagLine, { syncUrl: false });
+      autoSearchKeyRef.current = routeKey;
+      void runSearch(routeGameName, routeTagLine, { syncUrl: false });
+    };
+
+    syncRouteState();
+    window.addEventListener("hashchange", syncRouteState);
+
+    return () => {
+      window.removeEventListener("hashchange", syncRouteState);
+    };
   }, [pathname, runSearch]);
 
   // Update rate limit status periodically

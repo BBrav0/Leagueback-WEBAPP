@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   loadSavedLookups,
+  normalizeTagLine,
   saveSuccessfulLookup,
   SAVED_LOOKUPS_STORAGE_KEY,
   subscribeToSavedLookups,
@@ -23,6 +24,20 @@ describe("saved-lookups", () => {
 
     expect(saved).toEqual([{ gameName: "Faker", tagLine: "KR1" }]);
     expect(loadSavedLookups()).toEqual([{ gameName: "Faker", tagLine: "KR1" }]);
+  });
+
+  it("normalizes malformed tag lines to the intended tag portion", () => {
+    expect(normalizeTagLine("#NA1", "Faker")).toBe("NA1");
+    expect(normalizeTagLine("Faker#NA1", "Faker")).toBe("NA1");
+    expect(normalizeTagLine("NA1#NA1", "Faker")).toBe("NA1");
+    expect(normalizeTagLine("  ##KR1  ", "Faker")).toBe("KR1");
+  });
+
+  it("normalizes malformed saved lookups when persisting", () => {
+    const saved = saveSuccessfulLookup({ gameName: "Bumsdito", tagLine: "Bumsdito#3005#3005" });
+
+    expect(saved).toEqual([{ gameName: "Bumsdito", tagLine: "3005" }]);
+    expect(loadSavedLookups()).toEqual([{ gameName: "Bumsdito", tagLine: "3005" }]);
   });
 
   it("deduplicates repeated successful lookups and moves them to the front", () => {

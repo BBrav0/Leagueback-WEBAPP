@@ -12,9 +12,47 @@ function canUseStorage(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
 
+export function normalizeTagLine(tagLine: string, gameName?: string): string {
+  const trimmedTagLine = tagLine.trim();
+  const trimmedGameName = gameName?.trim() ?? "";
+
+  if (!trimmedTagLine) {
+    return "";
+  }
+
+  const withoutLeadingHash = trimmedTagLine.replace(/^#+/, "").trim();
+  if (!withoutLeadingHash) {
+    return "";
+  }
+
+  const gameNamePrefix =
+    trimmedGameName && withoutLeadingHash.startsWith(`${trimmedGameName}#`)
+      ? withoutLeadingHash.slice(trimmedGameName.length + 1)
+      : withoutLeadingHash;
+
+  if (!gameNamePrefix) {
+    return "";
+  }
+
+  const segments = gameNamePrefix
+    .split("#")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  if (segments.length === 0) {
+    return "";
+  }
+
+  if (segments.length === 1) {
+    return segments[0];
+  }
+
+  return segments[segments.length - 1];
+}
+
 function normalizeLookup(lookup: SavedLookup): SavedLookup | null {
   const gameName = lookup.gameName.trim();
-  const tagLine = lookup.tagLine.trim();
+  const tagLine = normalizeTagLine(lookup.tagLine, lookup.gameName);
 
   if (!gameName || !tagLine) {
     return null;

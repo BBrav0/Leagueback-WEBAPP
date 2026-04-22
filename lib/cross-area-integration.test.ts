@@ -13,6 +13,7 @@ import { computeSyncAge, computeCountdownRemaining, formatSyncAge } from "./sync
 import { checkSyncGate } from "./sync-gate";
 import { BackendBridge } from "./bridge";
 import type { MatchSummary } from "./types";
+import { normalizeTagLine } from "./saved-lookups";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,35 @@ function simulateDashboardSyncDecision(
     syncAge: age,
     shouldAutoSync: age === "expired",
     shouldShowUpdateButton: age === "stale",
+  };
+}
+
+function parsePlayerFromUrlForTest(pathname: string, hash: string): { gameName: string; tagLine: string } {
+  const trimmedPath = pathname.replace(/^\/+|\/+$/g, "");
+  const pathSegments = trimmedPath.split("/").filter(Boolean);
+  const isPlayerRoute = pathSegments.length >= 2 && pathSegments[0].toLowerCase() === "player";
+  const routeGameName = isPlayerRoute ? decodeURIComponent(pathSegments[1]) : "";
+  const rawHash = hash.startsWith("#") ? hash.slice(1) : hash;
+
+  return {
+    gameName: routeGameName,
+    tagLine: normalizeTagLine(decodeURIComponent(rawHash), routeGameName),
+  };
+}
+
+function simulateSavedLookupClick(
+  current: { gameName: string; tagLine: string },
+  lookup: { gameName: string; tagLine: string }
+): { gameName: string; tagLine: string; routeKey: string } {
+  const normalizedGameName = lookup.gameName.trim();
+  const normalizedTagLine = normalizeTagLine(lookup.tagLine, lookup.gameName);
+
+  const next = { ...current, gameName: normalizedGameName, tagLine: "" };
+  next.tagLine = normalizedTagLine;
+
+  return {
+    ...next,
+    routeKey: `${normalizedGameName}#${normalizedTagLine}`,
   };
 }
 
@@ -264,6 +294,56 @@ describe("VAL-CROSS-003: Expired auto-sync then scroll — no double API calls",
     const gateResult = checkSyncGate(freshTs);
     expect(gateResult).not.toBeNull();
     expect(gateResult?.success).toBe(false);
+  });
+});
+
+describe("saved lookup Riot ID normalization regressions", () => {
+  it("saved lookup click after manual edits replaces the tag line exactly", () => {
+    const result = simulateSavedLookupClick(
+      { gameName: "ManualName", tagLine: "3005#3005" },
+      { gameName: "Bumsdito", tagLine: "3005" }
+    );
+
+    expect(result).toEqual({
+      gameName: "Bumsdito",
+      tagLine: "3005",
+      routeKey: "Bumsdito#3005",
+    });
+  });
+
+  it("clicking between saved lookups does not append duplicate #tag text", () => {
+    const first = simulateSavedLookupClick(
+      { gameName: "Before", tagLine: "OLD1" },
+      { gameName: "Bumsdito", tagLine: "3005" }
+    );
+    const second = simulateSavedLookupClick(first, {
+      gameName: "Validation Fixture",
+      tagLine: "LOCAL#LOCAL",
+    });
+
+    expect(first.tagLine).toBe("3005");
+    expect(second).toEqual({
+      gameName: "Validation Fixture",
+      tagLine: "LOCAL",
+      routeKey: "Validation Fixture#LOCAL",
+    });
+  });
+
+  it("hash-derived values are normalized before route hydration", () => {
+    expect(parsePlayerFromUrlForTest("/player/Bumsdito", "#3005")).toEqual({
+      gameName: "Bumsdito",
+      tagLine: "3005",
+    });
+
+    expect(parsePlayerFromUrlForTest("/player/Bumsdito", "#Bumsdito%233005")).toEqual({
+      gameName: "Bumsdito",
+      tagLine: "3005",
+    });
+
+    expect(parsePlayerFromUrlForTest("/player/Bumsdito", "#3005%233005")).toEqual({
+      gameName: "Bumsdito",
+      tagLine: "3005",
+    });
   });
 });
 
