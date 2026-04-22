@@ -53,7 +53,7 @@ import {
 } from "@/lib/validation-fixture"
 import { cn } from "@/lib/utils"
 import { rateLimiter } from "@/lib/rate-limiter"
-import { computeSyncAge, formatSyncAge, type SyncAge } from "@/lib/sync-age"
+import { computeSyncAge, computeCountdownRemaining, formatCountdown, formatSyncAge, type SyncAge } from "@/lib/sync-age"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -633,6 +633,9 @@ export default function Component() {
   const [recentSyncWindowSize, setRecentSyncWindowSize] = useState(25);
   const [lastSyncAt, setLastSyncAt] = useState<string | null | undefined>(undefined);
   const [syncAge, setSyncAge] = useState<SyncAge | null>(null);
+  const [countdownRemaining, setCountdownRemaining] = useState(0);
+  const [syncAgeText, setSyncAgeText] = useState<string | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const didHydrateHistoryPreferencesRef = useRef(false);
   const scrollSentinelRef = useRef<HTMLDivElement>(null);
   const autoSearchKeyRef = useRef<string | null>(null);
@@ -822,6 +825,9 @@ export default function Component() {
     setRecentSyncWindowSize(25);
     setLastSyncAt(undefined);
     setSyncAge(null);
+    setCountdownRemaining(0);
+    setSyncAgeText(null);
+    setUpdateError(null);
 
     let loadingDismissedEarly = false;
     try {
@@ -1050,12 +1056,13 @@ export default function Component() {
 
     const syncRate = rateLimiter.checkRateLimit();
     if (!syncRate.allowed) {
-      setError(`Rate limit exceeded. Please wait ${syncRate.retryAfter} seconds.`);
+      setUpdateError(`Rate limit exceeded. Please wait ${syncRate.retryAfter} seconds.`);
       return;
     }
 
     setFetchingMatchesFromApi(true);
     setError(null);
+    setUpdateError(null);
     try {
       const syncResult = await BackendBridge.syncNewHeadMatchesFromRiot(
         currentPuuid,
@@ -1068,11 +1075,16 @@ export default function Component() {
         }
       );
 
+      // Server-side sync gate rejected the request (sync is still fresh)
+      if (syncResult.skippedAlreadyFresh) {
+        setUpdateError("Please wait before updating again. The data is still fresh.");
+        return;
+      }
+
       if (syncResult.syncMetadata?.recentMatchWindow) {
         setRecentSyncWindowSize(syncResult.syncMetadata.recentMatchWindow);
       }
       if (
-        !syncResult.skippedAlreadyFresh &&
         !syncResult.skippedNoHistory &&
         syncResult.analyzedCount === 0 &&
         syncResult.failedAnalyzeAttempts > 0
@@ -1106,7 +1118,13 @@ export default function Component() {
       }
     } catch (err) {
       console.error("Manual update failed:", err);
-      setError("Leagueback could not complete the update. Please try again in a moment.");
+      // Check if it's a 429 / sync gate error from the bridge
+      const message = err instanceof Error ? err.message : "";
+      if (message.includes("429") || message.includes("sync gate") || message.includes("Sync gate")) {
+        setUpdateError("Please wait before updating again. The server rate limit is active.");
+      } else {
+        setError("Leagueback could not complete the update. Please try again in a moment.");
+      }
     } finally {
       // Always record the sync attempt, even on partial/total failure
       try {
@@ -1258,6 +1276,41 @@ export default function Component() {
 
     return () => clearInterval(interval);
   }, [hasSearched]);
+
+  // Real-time sync age text + countdown timer + auto-transition at expiry
+  useEffect(() => {
+    if (!hasSearched || lastSyncAt === undefined) return;
+
+    const tick = () => {
+      // Update the "Last updated X ago" text
+      if (lastSyncAt) {
+        setSyncAgeText(`Last updated ${formatSyncAge(lastSyncAt)}`);
+      } else {
+        setSyncAgeText("Never updated");
+      }
+
+      // Update countdown when fresh
+      if (syncAge === "fresh" && lastSyncAt) {
+        const remaining = computeCountdownRemaining(lastSyncAt);
+        setCountdownRemaining(remaining);
+
+        // Auto-transition: if countdown expired, switch to stale
+        if (remaining <= 0) {
+          setSyncAge("stale");
+        }
+      } else {
+        setCountdownRemaining(0);
+      }
+    };
+
+    // Run immediately
+    tick();
+
+    // Update "Last updated" text every 30s, countdown every 1s
+    const countdownInterval = setInterval(tick, 1000);
+
+    return () => clearInterval(countdownInterval);
+  }, [hasSearched, lastSyncAt, syncAge]);
 
   // Infinite scroll: load more DB matches when sentinel is visible
   const loadMoreDbMatches = useCallback(async () => {
@@ -1506,26 +1559,43 @@ export default function Component() {
         {hasSearched && !loading && lastSyncAt !== undefined && (
           <div className="flex items-center justify-between rounded-lg border border-slate-700/60 bg-slate-800/50 px-4 py-3 text-sm text-slate-400">
             <span>
-              {lastSyncAt
-                ? `Last updated ${formatSyncAge(lastSyncAt)}`
-                : "Never updated"}
+              {syncAgeText ?? (lastSyncAt ? `Last updated ${formatSyncAge(lastSyncAt)}` : "Never updated")}
             </span>
             <div className="flex items-center gap-3">
+              {/* Expired + auto-updating: show "Updating..." with no button */}
+              {syncAge === "expired" && fetchingMatchesFromApi && (
+                <span className="text-xs text-blue-400">Updating...</span>
+              )}
+
+              {/* Fresh: show countdown timer, no button */}
+              {syncAge === "fresh" && !fetchingMatchesFromApi && countdownRemaining > 0 && (
+                <span className="text-xs text-slate-500">
+                  Update available in {formatCountdown(countdownRemaining)}
+                </span>
+              )}
+
+              {/* Stale: show enabled Update button */}
               {syncAge === "stale" && !fetchingMatchesFromApi && (
                 <Button
-                  variant="outline"
                   size="sm"
                   onClick={() => void handleManualUpdate()}
-                  className="border-slate-600 bg-slate-900/60 text-xs text-slate-100 hover:bg-slate-700 hover:text-white"
+                  className="bg-blue-600 text-xs text-white hover:bg-blue-700"
                 >
                   Update now
                 </Button>
               )}
-              {syncAge === "fresh" && (
-                <span className="text-xs text-slate-500">Up to date</span>
+
+              {/* Updating (manual or auto): show spinner */}
+              {fetchingMatchesFromApi && syncAge !== "expired" && (
+                <span className="flex items-center gap-1.5 text-xs text-blue-400">
+                  <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+                  Updating...
+                </span>
               )}
-              {fetchingMatchesFromApi && (
-                <span className="text-xs text-blue-400">Updating...</span>
+
+              {/* Update error: show info message */}
+              {updateError && !fetchingMatchesFromApi && (
+                <span className="text-xs text-amber-400">{updateError}</span>
               )}
             </div>
           </div>

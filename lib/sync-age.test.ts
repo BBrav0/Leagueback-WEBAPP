@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { computeSyncAge, formatSyncAge } from "./sync-age";
+import { computeSyncAge, computeCountdownRemaining, formatCountdown, formatSyncAge } from "./sync-age";
 
 describe("computeSyncAge", () => {
   beforeEach(() => {
@@ -185,5 +185,93 @@ describe("load-more sync-age gate condition", () => {
     const syncAge = computeSyncAge(new Date(Date.now() - 30 * 60 * 1000).toISOString());
     expect(syncAge).toBe("stale");
     expect(syncAge !== "fresh").toBe(true);
+  });
+});
+
+describe("computeCountdownRemaining", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-22T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("returns 0 when lastSyncAt is null", () => {
+    expect(computeCountdownRemaining(null)).toBe(0);
+  });
+
+  it("returns 0 when lastSyncAt is undefined", () => {
+    expect(computeCountdownRemaining(undefined)).toBe(0);
+  });
+
+  it("returns 0 for an invalid date string", () => {
+    expect(computeCountdownRemaining("not-a-date")).toBe(0);
+  });
+
+  it("returns ~30 min remaining for just-now sync", () => {
+    const now = new Date().toISOString();
+    const remaining = computeCountdownRemaining(now);
+    // Should be very close to 30 minutes (allowing for ms rounding)
+    expect(remaining).toBeGreaterThan(29 * 60 * 1000 - 1);
+    expect(remaining).toBeLessThanOrEqual(30 * 60 * 1000);
+  });
+
+  it("returns ~25 min remaining for 5-min-ago sync", () => {
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const remaining = computeCountdownRemaining(fiveMinAgo);
+    expect(remaining).toBeGreaterThan(24 * 60 * 1000 - 1);
+    expect(remaining).toBeLessThanOrEqual(25 * 60 * 1000);
+  });
+
+  it("returns 0 when the fresh window has elapsed (31 min ago)", () => {
+    const thirtyOneMinAgo = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+    expect(computeCountdownRemaining(thirtyOneMinAgo)).toBe(0);
+  });
+
+  it("returns small remaining for 29 min 59 sec ago", () => {
+    const almostExpired = new Date(Date.now() - 29 * 60 * 1000 - 59 * 1000).toISOString();
+    const remaining = computeCountdownRemaining(almostExpired);
+    // Should be about 1 second remaining
+    expect(remaining).toBeLessThanOrEqual(2000);
+    expect(remaining).toBeGreaterThan(0);
+  });
+
+  it("accepts Date objects as input", () => {
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const remaining = computeCountdownRemaining(fiveMinAgo);
+    expect(remaining).toBeGreaterThan(24 * 60 * 1000 - 1);
+    expect(remaining).toBeLessThanOrEqual(25 * 60 * 1000);
+  });
+});
+
+describe("formatCountdown", () => {
+  it("formats 30 minutes as 30:00", () => {
+    expect(formatCountdown(30 * 60 * 1000)).toBe("30:00");
+  });
+
+  it("formats 25 minutes 30 seconds as 25:30", () => {
+    expect(formatCountdown(25 * 60 * 1000 + 30 * 1000)).toBe("25:30");
+  });
+
+  it("formats 1 minute 5 seconds as 01:05", () => {
+    expect(formatCountdown(65 * 1000)).toBe("01:05");
+  });
+
+  it("formats 0 as 00:00", () => {
+    expect(formatCountdown(0)).toBe("00:00");
+  });
+
+  it("formats negative values as 00:00", () => {
+    expect(formatCountdown(-5000)).toBe("00:00");
+  });
+
+  it("formats 5 seconds as 00:05", () => {
+    expect(formatCountdown(5000)).toBe("00:05");
+  });
+
+  it("formats 59 seconds as 00:59", () => {
+    expect(formatCountdown(59 * 1000)).toBe("00:59");
   });
 });

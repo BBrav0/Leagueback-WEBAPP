@@ -33,3 +33,26 @@ export function formatSyncAge(lastSyncAt: string): string {
   const days = Math.floor(hours / 24);
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
+
+/**
+ * Returns milliseconds remaining until the fresh window (30 min) expires.
+ * Returns 0 if the fresh window has already elapsed (or lastSyncAt is null/invalid).
+ */
+export function computeCountdownRemaining(lastSyncAt: string | Date | null | undefined): number {
+  if (!lastSyncAt) return 0;
+  const ts = lastSyncAt instanceof Date ? lastSyncAt.getTime() : new Date(lastSyncAt).getTime();
+  if (isNaN(ts)) return 0;
+  const elapsed = Date.now() - ts;
+  const remaining = THIRTY_MINUTES - elapsed;
+  return Math.max(0, remaining);
+}
+
+/**
+ * Formats a remaining-milliseconds value as "MM:SS" for the countdown timer.
+ */
+export function formatCountdown(remainingMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
