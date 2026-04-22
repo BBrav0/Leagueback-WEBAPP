@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PlayerMatchRow } from "./database-queries";
 
-// Mock the Neon module to control what sql template calls return
-const mockSql = vi.fn();
+// Mock the Neon module to control what sql template/query calls return
+const mockQuery = vi.fn();
+const mockSql = Object.assign(vi.fn(), { query: mockQuery });
 
 vi.mock("./neon", () => ({
   getSql: () => mockSql,
@@ -10,9 +11,9 @@ vi.mock("./neon", () => ({
 
 describe("getPlayerMatchesPaginated", () => {
   it("preserves stored role and damage metadata from player_matches rows", async () => {
-    // getPlayerMatchesPaginated uses a single query with COUNT(*) OVER()
+    // getPlayerMatchesPaginated uses .query() with COUNT(*) OVER()
     // total_count is embedded in each row via the window function
-    mockSql.mockResolvedValueOnce([
+    mockQuery.mockResolvedValueOnce([
       {
         match_id: "NA1_1",
         puuid: "puuid-1",
@@ -50,8 +51,8 @@ describe("getPlayerMatchesPaginated", () => {
   });
 
   it("keeps unavailable labels when stored metadata is genuinely missing", async () => {
-    // Single query with COUNT(*) OVER() — total_count embedded in row
-    mockSql.mockResolvedValueOnce([
+    // .query() with COUNT(*) OVER() — total_count embedded in row
+    mockQuery.mockResolvedValueOnce([
       {
         match_id: "NA1_2",
         puuid: "puuid-1",

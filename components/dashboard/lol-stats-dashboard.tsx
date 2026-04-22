@@ -127,11 +127,9 @@ function parsePlayerFromUrl(pathname: string, hash: string): { gameName: string;
 type SyncAge = "fresh" | "stale" | "expired";
 
 function computeSyncAge(lastSyncAt: string | Date | null | undefined): SyncAge {
-  console.log("[SYNC-DEBUG] computeSyncAge input:", lastSyncAt, "type:", typeof lastSyncAt);
-  if (!lastSyncAt) { console.log("[SYNC-DEBUG] lastSyncAt is falsy, returning expired"); return "expired"; }
+  if (!lastSyncAt) return "expired";
   const ts = lastSyncAt instanceof Date ? lastSyncAt.getTime() : new Date(lastSyncAt).getTime();
-  console.log("[SYNC-DEBUG] parsed timestamp:", ts, "Date.now():", Date.now(), "ageMs:", Date.now() - ts);
-  if (isNaN(ts)) { console.log("[SYNC-DEBUG] ts is NaN, returning expired"); return "expired"; }
+  if (isNaN(ts)) return "expired";
   const ageMs = Date.now() - ts;
   const THIRTY_MINUTES = 30 * 60 * 1000;
   const ONE_DAY = 24 * 60 * 60 * 1000;
@@ -770,7 +768,6 @@ export default function Component() {
     rawTagLine: string,
     options?: { syncUrl?: boolean }
   ) => {
-    console.log("[SYNC-DEBUG] runSearch v2 executing");
     const normalizedGameName = rawGameName.trim();
     const normalizedTagLine = rawTagLine.trim();
 
@@ -885,7 +882,6 @@ export default function Component() {
 
       // Returning players: check sync status FIRST to avoid unnecessary Riot API calls.
       if (storedResult.totalCount > 0) {
-        console.log("[SYNC-DEBUG] storedResult.totalCount:", storedResult.totalCount);
         // Set pagination state from stored data before async work
         if (!storedResult.hasMore) {
           setAllDbMatchesLoaded(true);
@@ -899,15 +895,11 @@ export default function Component() {
         loadingDismissedEarly = true;
 
         const syncStatus = await BackendBridge.getSyncStatus(account.puuid);
-        console.log("[SYNC-DEBUG] syncStatus:", JSON.stringify(syncStatus));
-        console.log("[SYNC-DEBUG] syncStatus.lastSyncAt:", syncStatus.lastSyncAt, "type:", typeof syncStatus.lastSyncAt);
         setLastSyncAt(syncStatus.lastSyncAt);
         const age = computeSyncAge(syncStatus.lastSyncAt);
-        console.log("[SYNC-DEBUG] computeSyncAge result:", age);
         setSyncAge(age);
 
         if (age === "expired") {
-          console.log("[SYNC-DEBUG] ENTERING EXPIRED BRANCH - will call Riot API");
           // Data is older than 1 day (or never synced) — call Riot API to check for new matches
           if (!storedResult.hasMore) {
             apiHasMore = await BackendBridge.checkApiHasMore(
@@ -988,7 +980,6 @@ export default function Component() {
         // If 'fresh' or 'stale': skip Riot API calls entirely, just show stored data.
         // User can manually trigger sync if stale via the "Update now" button.
       } else {
-        console.log("[SYNC-DEBUG] NEW PLAYER PATH - storedResult.totalCount is 0");
         // New player (storedResult.totalCount === 0) — need to check Riot API
         if (!storedResult.hasMore) {
           setAllDbMatchesLoaded(true);

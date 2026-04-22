@@ -101,12 +101,15 @@ export async function getPlayerMatchesPaginated(
   try {
     const sql = getSql();
 
-    const rows = await sql`
-      SELECT *, COUNT(*) OVER()::int AS total_count FROM player_matches
-      WHERE puuid = ${puuid} AND is_remake = false
-      ORDER BY game_creation DESC
-      LIMIT ${limit} OFFSET ${offset}
-    `;
+    // Use .query() with explicit $N parameters to avoid LIMIT/OFFSET
+    // type-inference issues on the Neon HTTP driver (Cloudflare Workers).
+    const rows = await sql.query(
+      `SELECT *, COUNT(*) OVER()::int AS total_count FROM player_matches
+       WHERE puuid = $1 AND is_remake = false
+       ORDER BY game_creation DESC
+       LIMIT $2 OFFSET $3`,
+      [puuid, limit, offset]
+    );
 
     const typedRows = rows as (PlayerMatchRow & { total_count: number })[];
     const totalCount = typedRows[0]?.total_count ?? 0;
@@ -115,7 +118,13 @@ export async function getPlayerMatchesPaginated(
 
     return { matches, totalCount, hasMore };
   } catch (error) {
-    console.error("Error fetching player matches:", error);
+    console.error("Error fetching player matches:", error, {
+      puuid,
+      limit,
+      offset,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    });
     return { matches: [], totalCount: 0, hasMore: false };
   }
 }
@@ -368,12 +377,15 @@ export async function getRecentImpactCategories(
 ): Promise<ImpactCategory[]> {
   try {
     const sql = getSql();
-    const rows = await sql`
-      SELECT impact_category FROM player_matches
-      WHERE puuid = ${puuid} AND is_remake = false
-      ORDER BY game_creation DESC
-      LIMIT ${limit}
-    `;
+    // Use .query() with explicit $N parameters to avoid LIMIT
+    // type-inference issues on the Neon HTTP driver (Cloudflare Workers).
+    const rows = await sql.query(
+      `SELECT impact_category FROM player_matches
+       WHERE puuid = $1 AND is_remake = false
+       ORDER BY game_creation DESC
+       LIMIT $2`,
+      [puuid, limit]
+    );
     return (rows as [{ impact_category: ImpactCategory }]).map((row) => row.impact_category);
   } catch (error) {
     console.error("Error fetching recent impact categories:", error);
