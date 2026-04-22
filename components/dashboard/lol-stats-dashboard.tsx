@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, memo, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
+import Image from "next/image"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis, ReferenceArea, PieChart, Pie, Cell } from "recharts"
 import {
   ChartContainer,
@@ -1522,7 +1523,7 @@ export default function Component() {
         {loading && (
           <Card className="bg-slate-800/50 border-slate-600/50">
             <CardContent className="p-8 text-center flex flex-col items-center gap-3">
-              <img
+              <Image
                 src="/icons/icon.png"
                 alt="Loading"
                 width={64}
@@ -1674,7 +1675,7 @@ export default function Component() {
         {hasSearched && !loading && fetchingMatchesFromApi && matchesData.length === 0 && !error && (
           <Card className="bg-slate-800/50 border-slate-600/50">
             <CardContent className="p-8 text-center flex flex-col items-center gap-3">
-              <img
+              <Image
                 src="/icons/icon.png"
                 alt="Loading"
                 width={64}
