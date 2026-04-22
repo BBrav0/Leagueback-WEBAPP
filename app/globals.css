@@ -114,3 +114,30 @@ body::before {
   transform: translateZ(0);
   will-change: transform;
 }
+
+@keyframes leagueback-bounce-rotate {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    animation-timing-function: ease-in;
+  }
+  30% {
+    transform: translateY(-32px) rotate(180deg);
+    animation-timing-function: ease-out;
+  }
+  50% {
+    transform: translateY(-40px) rotate(360deg);
+    animation-timing-function: ease-in;
+  }
+  70% {
+    transform: translateY(-16px) rotate(360deg);
+    animation-timing-function: ease-in-out;
+  }
+  100% {
+    transform: translateY(0) rotate(360deg);
+    animation-timing-function: ease-out;
+  }
+}
+
+.leagueback-loading-icon {
+  animation: leagueback-bounce-rotate 1.4s ease-in-out infinite;
+}

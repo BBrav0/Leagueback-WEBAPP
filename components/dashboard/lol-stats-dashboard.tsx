@@ -1674,9 +1674,16 @@ export default function Component() {
         {/* Loading State */}
         {loading && (
           <Card className="bg-slate-800/50 border-slate-600/50">
-            <CardContent className="p-8 text-center">
+            <CardContent className="p-8 text-center flex flex-col items-center gap-3">
+              <img
+                src="/icons/icon.png"
+                alt="Loading"
+                width={64}
+                height={64}
+                className="leagueback-loading-icon"
+              />
               <div className="text-white text-lg">Loading player history…</div>
-              <div className="text-slate-300 text-sm mt-2">Leagueback is loading the account and first match results for this Riot ID.</div>
+              <div className="text-slate-300 text-sm">Leagueback is loading the account and first match results for this Riot ID.</div>
             </CardContent>
           </Card>
         )}
@@ -1819,13 +1826,19 @@ export default function Component() {
           </div>
         )}
 
-        {/* No Data State */}
+        {/* Fetching from API */}
         {hasSearched && !loading && fetchingMatchesFromApi && matchesData.length === 0 && !error && (
           <Card className="bg-slate-800/50 border-slate-600/50">
-            <CardContent className="p-8 flex flex-col items-center gap-4 animate-pulse">
-              <div className="h-5 w-52 rounded-md bg-slate-700/80" />
-              <div className="h-4 w-72 max-w-full rounded-md bg-slate-700/60" />
-              <div className="h-10 w-40 rounded-md bg-slate-700/70 mt-2" />
+            <CardContent className="p-8 text-center flex flex-col items-center gap-3">
+              <img
+                src="/icons/icon.png"
+                alt="Loading"
+                width={64}
+                height={64}
+                className="leagueback-loading-icon"
+              />
+              <div className="text-white text-lg">Loading player history…</div>
+              <div className="text-slate-300 text-sm">Fetching match data from Riot API…</div>
             </CardContent>
           </Card>
         )}
