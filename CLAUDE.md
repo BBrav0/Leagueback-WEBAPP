@@ -8,17 +8,13 @@
 
 **Stack:**
 - Next.js 16 (App Router) + React 18 + TypeScript
-- Supabase (PostgreSQL) for caching and precomputed match data
+- Neon (PostgreSQL) for caching and precomputed match data
 - Tailwind CSS + Radix UI (shadcn/ui components in `components/ui/`)
 - Vercel for hosting; Vitest for tests
 
 **Key environment variables (none committed — set locally and in Vercel/GitHub):**
 ```
-SUPABASE_URL
-SUPABASE_ANON_KEY
-NEXT_PUBLIC_SUPABASE_URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY
-SUPABASE_SERVICE_ROLE_KEY   # server-only; bypasses RLS
+DATABASE_URL                # Neon PostgreSQL connection string (used by lib/neon.ts)
 BACKFILL_SECRET             # header secret for /api/backfill
 RIOT_API_KEY                # Riot Games API key for direct API calls
 ```
@@ -40,7 +36,7 @@ RIOT_API_KEY                # Riot Games API key for direct API calls
 | `player_matches` | Precomputed summaries (champion, KDA, impact scores, etc.) |
 | `impact_categories` | (DB table, data read from player_matches in practice) |
 
-RLS is enabled on all tables. Anon role: SELECT only. Service role (server-side): full write access.
+All database access is server-side only (via `lib/neon.ts` with `server-only` guard). No public API keys are exposed to the client.
 
 ---
 
@@ -68,16 +64,16 @@ return NextResponse.json({ success: false, error: ... });
 `lib/rate-limiter.ts`: The entire implementation uses `sessionStorage`. Any user can clear storage, use a private window, or use a non-browser client to bypass it entirely. The Next.js API routes themselves have no server-side rate limiting.
 
 **S4 — Silent cache write failures in riot-api-service.ts** ✅ Fixed
-`lib/riot-api-service.ts` lines 63–69, 114–116, 146–148: Supabase `.upsert()` results are awaited but return values are discarded — errors are never checked. If a cache write fails (quota, RLS mismatch, network), the app continues silently with no log.
+`lib/riot-api-service.ts` lines 63–69, 114–116, 146–148: Neon SQL `INSERT … ON CONFLICT` results are awaited but return values are discarded — errors are never checked. If a cache write fails (quota, network), the app continues silently with no log.
 
 ```typescript
 // line 63 — error discarded
-await getSupabaseServer().from("accounts").upsert({ ... });
-// fix: const { error } = await ...; if (error) console.error(...)
+await sql`INSERT INTO accounts ... ON CONFLICT ...`;
+// fix: wrap in try/catch and log errors
 ```
 
 **S5 — No `.env.example` file** ✅ Fixed
-No `.env.example` or `.env.local.example` exists. New contributors (or new deployments) have no reference for which variables are required. The full list is documented above in this file.
+No `.env.example` or `.env.local.example` exists. New contributors (or new deployments) have no reference for which variables are required. The full list is documented above in this file. (A `.env.example` now exists listing `DATABASE_URL`, `BACKFILL_SECRET`, and `RIOT_API_KEY`.)
 
 ---
 
@@ -91,7 +87,7 @@ No `.env.example` or `.env.local.example` exists. New contributors (or new deplo
 ```typescript
 const matches = (data as PlayerMatchRow[]).map(rowToMatchSummary);
 ```
-`data` from Supabase `.select("*")` is typed as `any[]` when no generic is provided. The cast is safe in practice (Supabase returns the correct shape) but bypasses type checking. The preceding error check (line 56) means `data` won't be null here, but it could still be `null` if the query returns no rows — Supabase returns `[]` not `null` for `.select()` without `.single()`, so this is fine in practice but fragile.
+`data` from Neon `sql` tag results is typed as `any[]`. The cast is safe in practice (Neon returns the correct shape) but bypasses type checking. The preceding error check means `data` won't be null here, and Neon returns `[]` not `null` for queries returning no rows, so this is fine in practice but fragile.
 
 **Q3 — No bounds validation on `limit`/`offset` in three routes** ✅ Fixed
 - `app/api/stored-matches/route.ts` lines 17–18
@@ -133,7 +129,7 @@ The single component handles: URL parsing, rate limiting, API fetching, impact s
 **A2 — No `middleware.ts`**
 There is no Next.js middleware file. Each API route is responsible for its own concerns (auth, logging, etc.). Currently only `/api/backfill` enforces a secret header. All other routes are intentionally public (Riot data is public), but a centralized middleware would be the right place to add logging, request IDs, or future auth if needed.
 
-**A3 — No cache TTL on Supabase tables**
+**A3 — No cache TTL on database tables**
 `accounts`, `match_details`, `match_timelines`, and `match_cache` rows are cached indefinitely. If Riot changes match data retroactively, or a player changes their Riot ID, stale data persists forever. None of the cache tables have a `created_at` timestamp used for expiry. (The `accounts` table may be most affected — players can rename themselves on Riot.)
 
 **A4 — Business logic mixed into the dashboard component**
@@ -143,8 +139,8 @@ Impact category syncing (`syncImpactStats`), match reconstruction calls, and rat
 
 ### Dependencies and Config
 
-**D1 — All packages are current (as of 2026-03-27)**
-- `next: ^16.1.6`, `react: 18.2.0`, `@supabase/supabase-js: ^2.95.3`
+**D1 — All packages are current (as of 2026-04-21)**
+- `next: ^16.1.6`, `react: 18.2.0`, `@neondatabase/serverless`
 - `wrangler: ^4.65.0`, `@cloudflare/workers-types: ^4`
 - No deprecated packages detected. No known critical CVEs in the installed versions.
 
@@ -155,10 +151,9 @@ Impact category syncing (`syncImpactStats`), match reconstruction calls, and rat
 
 ## What Works Well
 
-- All Supabase queries use parameterized filters (`.eq()`, `.in()`, `.ilike()`) — no SQL injection risk
+- All Neon queries use parameterized SQL template tags (`sql` from `@neondatabase/serverless`) — no SQL injection risk
 - No hardcoded secrets anywhere in the codebase
-- `lib/supabase-server.ts` correctly uses the `server-only` package to prevent client-side import
+- `lib/neon.ts` correctly uses the `server-only` package to prevent client-side import
 - `app/api/backfill/route.ts` is a good pattern: validates the secret header, clamps pagination params, handles errors with proper status codes — all other routes should follow this model
-- Test coverage exists for the three core library modules: `bridge.test.ts`, `impact-stats.test.ts`, `rate-limiter.test.ts`, `match-reconstruction.test.ts`
-- RLS is enabled on all tables with a `tighten_rls` migration that restricts anon to SELECT only
+- Test coverage exists for core library modules: `bridge.test.ts`, `impact-stats.test.ts`, `rate-limiter.test.ts`, `match-reconstruction.test.ts`, `database-queries.test.ts`, `riot-api-service.test.ts`
 - CI pipeline runs tests and build on every PR via `.github/workflows/ci.yml`
