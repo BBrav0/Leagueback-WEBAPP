@@ -1,8 +1,14 @@
 commands:
   install: pnpm install
-  build: pnpm exec opennextjs-cloudflare build
-  next-build: pnpm exec next build
+  typecheck: pnpm typecheck
+  build: pnpm build
   test: pnpm test
   lint: pnpm lint
-  typecheck: pnpm typecheck
-  deploy: pnpm exec opennextjs-cloudflare deploy
+
+services:
+  web:
+    start: pnpm dev
+    stop: for /f "tokens=5" %a in ('netstat -ano ^| findstr :3005 ^| findstr LISTENING') do taskkill /PID %a /F
+    healthcheck: curl -sf http://localhost:3005
+    port: 3005
+    depends_on: []
