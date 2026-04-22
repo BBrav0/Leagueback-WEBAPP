@@ -871,17 +871,6 @@ export default function Component() {
       setHasMoreDbMatches(storedResult.hasMore);
 
       let apiHasMore = false;
-      if (!storedResult.hasMore) {
-        // All DB matches fit on first page (or there are none)
-        setAllDbMatchesLoaded(true);
-        apiHasMore = await BackendBridge.checkApiHasMore(
-          account.puuid,
-          storedResult.totalCount
-        );
-        setHasMoreMatches(apiHasMore);
-        setMatchesStart(storedResult.totalCount);
-      }
-
       let matchesForStats = storedResult.matches;
 
       if (account.puuid === VALIDATION_FIXTURE_ACCOUNT.puuid) {
@@ -889,21 +878,36 @@ export default function Component() {
         setLifetimeCounts(VALIDATION_FIXTURE_MIXED_IMPACT_COUNTS.lifetime);
       }
 
-      // Dismiss full-screen "Analyzing" as soon as account + first DB page are known.
-      // Riot backfill (if any) is indicated by `fetchingMatchesFromApi` so we avoid
-      // a long blocking spinner without hiding ongoing work.
-      setLoading(false);
-      loadingDismissedEarly = true;
-
-      // Returning players: check sync status and conditionally sync from Riot.
+      // Returning players: check sync status FIRST to avoid unnecessary Riot API calls.
       if (storedResult.totalCount > 0) {
+        // Set pagination state from stored data before async work
+        if (!storedResult.hasMore) {
+          setAllDbMatchesLoaded(true);
+          setMatchesStart(storedResult.totalCount);
+        }
+
+        // Dismiss full-screen "Analyzing" as soon as account + first DB page are known.
+        // Riot backfill (if any) is indicated by `fetchingMatchesFromApi` so we avoid
+        // a long blocking spinner without hiding ongoing work.
+        setLoading(false);
+        loadingDismissedEarly = true;
+
         const syncStatus = await BackendBridge.getSyncStatus(account.puuid);
         setLastSyncAt(syncStatus.lastSyncAt);
         const age = computeSyncAge(syncStatus.lastSyncAt);
         setSyncAge(age);
 
         if (age === "expired") {
-          // Auto-sync: data is older than 1 day (or never synced)
+          // Data is older than 1 day (or never synced) — call Riot API to check for new matches
+          if (!storedResult.hasMore) {
+            apiHasMore = await BackendBridge.checkApiHasMore(
+              account.puuid,
+              storedResult.totalCount
+            );
+            setHasMoreMatches(apiHasMore);
+          }
+
+          // Auto-sync from Riot
           const syncRate = rateLimiter.checkRateLimit();
           if (syncRate.allowed) {
             setFetchingMatchesFromApi(true);
@@ -971,7 +975,23 @@ export default function Component() {
             setSyncAge("stale");
           }
         }
-        // If 'stale' or 'fresh', just show the timestamp — user can manually trigger if stale
+        // If 'fresh' or 'stale': skip Riot API calls entirely, just show stored data.
+        // User can manually trigger sync if stale via the "Update now" button.
+      } else {
+        // New player (storedResult.totalCount === 0) — need to check Riot API
+        if (!storedResult.hasMore) {
+          setAllDbMatchesLoaded(true);
+          apiHasMore = await BackendBridge.checkApiHasMore(
+            account.puuid,
+            storedResult.totalCount
+          );
+          setHasMoreMatches(apiHasMore);
+          setMatchesStart(storedResult.totalCount);
+        }
+
+        // Dismiss full-screen "Analyzing" for new players too.
+        setLoading(false);
+        loadingDismissedEarly = true;
       }
 
       // If user exists but DB has no categorized matches, auto-fetch first 10 from API
