@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     const existing = await getPlayerSyncMetadata(puuid);
     const now = new Date().toISOString();
 
-    await upsertPlayerSyncMetadata({
+    const upsertError = await upsertPlayerSyncMetadata({
       puuid,
       latest_riot_match_id: existing?.latest_riot_match_id ?? null,
       latest_riot_match_created_at: existing?.latest_riot_match_created_at ?? null,
@@ -65,6 +65,14 @@ export async function POST(request: NextRequest) {
       last_riot_sync_at: now,
       notes: existing?.notes ?? {},
     });
+
+    if (upsertError) {
+      console.error("player_sync_metadata upsert failed:", upsertError);
+      return NextResponse.json(
+        { error: upsertError },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ success: true, lastSyncAt: now });
   } catch (error) {
