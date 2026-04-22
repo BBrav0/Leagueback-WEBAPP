@@ -1,0 +1,69 @@
+{
+  "milestone": "sync-gate-followup",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "pnpm test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "pnpm run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "pnpm run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 3,
+    "passed": 2,
+    "failed": 1,
+    "failedFeatures": [
+      "fix-second-visit-regression"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "fix-second-visit-regression",
+      "severity": "blocking",
+      "description": "When the sync-gate retry restores stored matches and `retryStored.hasMore` is true, `runSearch` leaves `matchesStart` at 0, so the next DB pagination fetch can re-request page 1 and duplicate entries.",
+      "file": "components/dashboard/lol-stats-dashboard.tsx",
+      "line": 997
+    },
+    {
+      "featureId": "fix-second-visit-regression",
+      "severity": "blocking",
+      "description": "After retry recovery, the branch falls through with `apiHasMore = false`, so `setHasMoreMatches(apiHasMore)` clears downstream load-more state even when recovered stored data indicates more DB rows remain.",
+      "file": "components/dashboard/lol-stats-dashboard.tsx",
+      "line": 1018
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Clarify in the web-feature-worker skill that required browser verification cannot be skipped for user-facing dashboard changes just because unit tests pass; if environment issues block agent-browser, workers must record the deviation accurately and return that limitation in the handoff.",
+      "evidence": "Both `fix-second-visit-regression` and `fix-saved-lookup-tagline-reset` changed user-facing dashboard behavior but skipped agent-browser verification, and one of them shipped a blocking pagination-state regression that the logic-only tests missed.",
+      "isSystemic": true
+    },
+    {
+      "target": "skills",
+      "suggestion": "Strengthen the web-feature-worker guidance for dashboard-flow regressions to require at least one test or validation path that exercises the real state transition path, not only helper-level or synthetic logic approximations.",
+      "evidence": "`fix-second-visit-regression` added logic-only tests in `lib/cross-area-integration.test.ts` that did not execute the actual `runSearch` retry branch, allowing a pagination-state bug in `matchesStart`/`hasMoreMatches` to slip through review and validators.",
+      "isSystemic": false
+    },
+    {
+      "target": "skills",
+      "suggestion": "Make the Windows startup caveat more explicit in the worker skill by stating that `.factory/init.sh` should not be executed via Python or other interpreters on Windows unless the mission specifically requires it.",
+      "evidence": "The `fix-multi-player-revisit-race` worker spent time attempting to run `.factory/init.sh` through Python on Windows before treating it as a no-op, indicating the current wording still permits avoidable confusion.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}

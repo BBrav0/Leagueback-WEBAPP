@@ -1,0 +1,21 @@
+{
+  "featureId": "fix-multi-player-revisit-race",
+  "reviewedAt": "2026-04-22T22:34:59.418927+00:00",
+  "commitId": "6dfe61a",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The request-id guard added to runSearch consistently blocks stale async completions from mutating active-player dashboard state, and the feature diff does not show a correctness regression in the covered search paths. Regression tests exercise the intended multi-player revisit ordering, stale-completion isolation, and same-player retry preservation via a lightweight state model that matches the guarded writes in runSearch.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker deviated from the web-feature-worker startup procedure by attempting to run .factory/init.sh through Python on Windows before concluding it should be treated as a no-op. The skill already documents the Windows caveat, but the transcript shows this still led to wasted effort and a syntax-error detour.",
+      "evidence": "worker-transcripts.jsonl entry for session d8eb663b-6d50-44f4-aea7-90dbb1af6178 includes a python invocation of .factory/init.sh before the worker recorded a deviation suggesting the skill should more explicitly say not to attempt this on Windows."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed commit 6dfe61a and the worker transcript for fix-multi-player-revisit-race. The runSearch request-identity guard appears correctly applied to the relevant awaited search steps, and the added regression coverage supports the intended multi-player revisit behavior. No actionable code issues found."
+}

@@ -1,0 +1,39 @@
+{
+  "featureId": "fix-second-visit-regression",
+  "reviewedAt": "2026-04-22T22:35:29Z",
+  "commitId": "8e62264",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The stale-path fix is correct, but the second-visit retry path regresses pagination state: when the retry recovers stored matches and the first page still has more DB rows, runSearch leaves hasMoreMatches false and matchesStart at 0, which can hide the Load More from Riot button and can cause duplicate DB pagination on the next load. The added tests do not exercise the real dashboard state transitions for this branch, so the bug slipped through.",
+    "issues": [
+      {
+        "file": "components/dashboard/lol-stats-dashboard.tsx",
+        "line": 997,
+        "severity": "blocking",
+        "description": "When the sync-gate retry finds stored matches, the code only updates matchesStart inside `if (!retryStored.hasMore)`. For the common case where the first retry page still has more DB rows, `matchesStart` remains 0 instead of `retryStored.matches.length`, so the next `loadMoreDbMatches` request re-fetches the first page and duplicates entries."
+      },
+      {
+        "file": "components/dashboard/lol-stats-dashboard.tsx",
+        "line": 1018,
+        "severity": "blocking",
+        "description": "After the retry recovers stored matches, the branch falls through to `setHasMoreMatches(apiHasMore)` with `apiHasMore = false`, even when `retryStored.hasMore` is true. That suppresses the downstream Riot pagination state for a player who actually has more stored/older matches, so the recovered second-visit path does not restore the same load-more behavior as a normal first visit."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker claimed browser verification was optional once unit tests passed, but this feature changes a user-facing dashboard flow and the web-feature-worker skill explicitly requires agent-browser verification whenever available. The transcript shows repeated attempts to start the dev server, then the worker skipped interactive validation after environment trouble and still marked `followedProcedure: true`.",
+      "evidence": "web-feature-worker SKILL.md step 6 requires agent-browser verification; worker transcript for session 735e8ce0-e16e-4a20-a6a0-1ba04f019e61 shows failed dev-server startup attempts and an empty `interactiveChecks` array in the handoff."
+    },
+    {
+      "area": "skills",
+      "observation": "The skill warns to confirm new test files are actually covered by the committed test runner. The worker added broad logic-only tests in `lib/cross-area-integration.test.ts`, but those tests do not execute the real `runSearch` branch and therefore missed the pagination-state regression in the implemented code. This suggests the skill could more strongly emphasize exercising actual state transitions for dashboard-flow fixes, not just helper-level approximations.",
+      "evidence": "web-feature-worker SKILL.md step 11; commit 8e62264 adds synthetic tests in `lib/cross-area-integration.test.ts` that assert booleans around imagined branches rather than running the dashboard code path that mishandles `matchesStart`/`hasMoreMatches`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed: the retry path for second visits restores match data but leaves pagination state inconsistent, creating duplicate DB loads and incorrect load-more behavior. Report written for scrutiny triage."
+}
