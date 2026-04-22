@@ -206,8 +206,12 @@ export async function GET(request: NextRequest) {
       last_known_account_tag_line: existingSyncMetadata?.last_known_account_tag_line ?? null,
       derivation_version: CURRENT_DERIVATION_VERSION,
       last_stale_derived_refresh_at: new Date().toISOString(),
-      last_full_refresh_at: existingSyncMetadata?.last_full_refresh_at ?? null,
-      last_riot_sync_at: existingSyncMetadata?.last_riot_sync_at ?? null,
+      last_full_refresh_at: existingSyncMetadata?.last_full_refresh_at instanceof Date
+        ? existingSyncMetadata.last_full_refresh_at.toISOString()
+        : (existingSyncMetadata?.last_full_refresh_at ?? null),
+      last_riot_sync_at: existingSyncMetadata?.last_riot_sync_at instanceof Date
+        ? existingSyncMetadata.last_riot_sync_at.toISOString()
+        : (existingSyncMetadata?.last_riot_sync_at ?? null),
       notes: matchFreshness,
     });
 

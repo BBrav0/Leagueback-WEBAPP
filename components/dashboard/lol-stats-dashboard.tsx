@@ -126,9 +126,11 @@ function parsePlayerFromUrl(pathname: string, hash: string): { gameName: string;
 
 type SyncAge = "fresh" | "stale" | "expired";
 
-function computeSyncAge(lastSyncAt: string | null): SyncAge {
+function computeSyncAge(lastSyncAt: string | Date | null | undefined): SyncAge {
   if (!lastSyncAt) return "expired";
-  const ageMs = Date.now() - new Date(lastSyncAt).getTime();
+  const ts = lastSyncAt instanceof Date ? lastSyncAt.getTime() : new Date(lastSyncAt).getTime();
+  if (isNaN(ts)) return "expired";
+  const ageMs = Date.now() - ts;
   const THIRTY_MINUTES = 30 * 60 * 1000;
   const ONE_DAY = 24 * 60 * 60 * 1000;
   if (ageMs < THIRTY_MINUTES) return "fresh";
@@ -1550,7 +1552,7 @@ export default function Component() {
                 height={64}
                 className="leagueback-loading-icon"
               />
-              <div className="text-white text-lg">Loading player history…</div>
+              <div className="text-white text-lg">Loading player data...</div>
               <div className="text-slate-300 text-sm">Leagueback is loading the account and first match results for this Riot ID.</div>
             </CardContent>
           </Card>
@@ -1702,8 +1704,8 @@ export default function Component() {
                 height={64}
                 className="leagueback-loading-icon"
               />
-              <div className="text-white text-lg">Loading player history…</div>
-              <div className="text-slate-300 text-sm">Fetching match data from Riot API…</div>
+              <div className="text-white text-lg">Fetching match data from Riot API...</div>
+              <div className="text-slate-300 text-sm">Leagueback is syncing recent match history from the Riot Games API.</div>
             </CardContent>
           </Card>
         )}

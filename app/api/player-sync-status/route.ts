@@ -14,7 +14,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const metadata = await getPlayerSyncMetadata(puuid);
-    return NextResponse.json({ lastSyncAt: metadata?.last_riot_sync_at ?? null });
+    const lastSyncAt = metadata?.last_riot_sync_at;
+    const serialized = lastSyncAt instanceof Date ? lastSyncAt.toISOString() : (lastSyncAt ?? null);
+    return NextResponse.json({ lastSyncAt: serialized });
   } catch (error) {
     console.error("Error fetching player sync status:", error);
     return NextResponse.json(
@@ -60,8 +62,12 @@ export async function POST(request: NextRequest) {
       last_known_account_game_name: existing?.last_known_account_game_name ?? null,
       last_known_account_tag_line: existing?.last_known_account_tag_line ?? null,
       derivation_version: existing?.derivation_version ?? null,
-      last_stale_derived_refresh_at: existing?.last_stale_derived_refresh_at ?? null,
-      last_full_refresh_at: existing?.last_full_refresh_at ?? null,
+      last_stale_derived_refresh_at: existing?.last_stale_derived_refresh_at instanceof Date
+        ? existing.last_stale_derived_refresh_at.toISOString()
+        : (existing?.last_stale_derived_refresh_at ?? null),
+      last_full_refresh_at: existing?.last_full_refresh_at instanceof Date
+        ? existing.last_full_refresh_at.toISOString()
+        : (existing?.last_full_refresh_at ?? null),
       last_riot_sync_at: now,
       notes: existing?.notes ?? {},
     });

@@ -40,12 +40,14 @@ export interface PlayerSyncMetadataRow {
   latest_db_match_created_at?: number | null;
   recent_match_window?: number;
   reconciled_through_match_created_at?: number | null;
-  last_riot_sync_at?: string | null;
-  last_full_refresh_at?: string | null;
-  last_stale_derived_refresh_at?: string | null;
+  last_riot_sync_at?: string | Date | null;
+  last_full_refresh_at?: string | Date | null;
+  last_stale_derived_refresh_at?: string | Date | null;
   last_known_account_game_name?: string | null;
   last_known_account_tag_line?: string | null;
   derivation_version?: string | null;
+  created_at?: string | Date | null;
+  updated_at?: string | Date | null;
   notes?: Record<string, unknown>;
 }
 
