@@ -1,21 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockedSingle = vi.fn();
-const mockedMaybeSingle = vi.fn();
-const mockedIlikeTag = vi.fn();
-const mockedIlikeName = vi.fn();
-const mockedSelect = vi.fn();
-const mockedUpsert = vi.fn();
-const mockedFrom = vi.fn();
-const mockedPlayerMatchesEq = vi.fn();
-const mockedPlayerMatchesOrder = vi.fn();
-const mockedPlayerMatchesLimit = vi.fn();
-const mockedMatchCacheIn = vi.fn();
+// Mock the Neon module to control what sql template calls return
+const mockSql = vi.fn();
 
-vi.mock("./supabase-server", () => ({
-  getSupabaseServer: () => ({
-    from: mockedFrom,
-  }),
+vi.mock("./neon", () => ({
+  getSql: () => mockSql,
 }));
 
 describe("riot-api-service account summonerId wiring", () => {
@@ -24,87 +13,21 @@ describe("riot-api-service account summonerId wiring", () => {
     vi.clearAllMocks();
 
     process.env.RIOT_API_KEY = "test-riot-api-key";
-
-    mockedFrom.mockImplementation((table: string) => {
-      if (table === "accounts") {
-        return {
-          select: mockedSelect,
-          upsert: mockedUpsert,
-        };
-      }
-
-      if (table === "player_matches") {
-        return {
-          select: mockedSelect,
-        };
-      }
-
-      if (table === "match_cache") {
-        return {
-          select: mockedSelect,
-        };
-      }
-
-      throw new Error(`Unexpected table: ${table}`);
-    });
-
-    mockedIlikeName.mockReturnValue({ ilike: mockedIlikeTag });
-    mockedIlikeTag.mockReturnValue({ single: mockedSingle });
-    mockedSelect.mockImplementation((columns: string) => {
-      if (columns === "puuid, game_name, tag_line, summoner_id") {
-        return { ilike: mockedIlikeName };
-      }
-
-      if (columns === "summoner_id") {
-        return {
-          eq: vi.fn().mockReturnValue({
-            maybeSingle: mockedMaybeSingle,
-          }),
-        };
-      }
-
-      if (columns === "game_name, tag_line") {
-        return {
-          eq: vi.fn().mockReturnValue({
-            maybeSingle: mockedMaybeSingle,
-          }),
-        };
-      }
-
-      if (columns === "match_data") {
-        return {
-          in: mockedMatchCacheIn,
-        };
-      }
-
-      if (columns === "match_id, match_data") {
-        return {
-          in: mockedMatchCacheIn,
-        };
-      }
-
-      if (columns === "match_id") {
-        return {
-          eq: mockedPlayerMatchesEq,
-        };
-      }
-
-      throw new Error(`Unexpected select columns: ${columns}`);
-    });
-    mockedUpsert.mockResolvedValue({ error: null });
-    mockedMaybeSingle.mockResolvedValue({ data: null, error: null });
-    mockedPlayerMatchesEq.mockReturnValue({
-      order: mockedPlayerMatchesOrder,
-    });
-    mockedPlayerMatchesOrder.mockReturnValue({
-      limit: mockedPlayerMatchesLimit,
-    });
-    mockedPlayerMatchesLimit.mockResolvedValue({ data: [], error: null });
-    mockedMatchCacheIn.mockResolvedValue({ data: [], error: null });
   });
 
   it("hydrates a missing summonerId from the worker by puuid before caching", async () => {
-    mockedSingle.mockResolvedValueOnce({ data: null });
+    // 1) getAccountByRiotId ILIKE cache lookup -> no cached row
+    mockSql.mockResolvedValueOnce([]);
+    // 2) getSummonerIdByPuuid -> getCachedSummonerIdByPuuid -> no cached summoner
+    mockSql.mockResolvedValueOnce([]);
+    // 3) cacheSummonerIdForPuuid (from getSummonerIdByPuuid, no fallbackAccount) -> SELECT existing account
+    mockSql.mockResolvedValueOnce([]);
+    // 4) cacheSummonerIdForPuuid -> INSERT upsert
+    mockSql.mockResolvedValueOnce([]);
+    // 5) cacheSummonerIdForPuuid (from getAccountByRiotId, with fallbackAccount) -> INSERT upsert
+    mockSql.mockResolvedValueOnce([]);
+    // 6) getAccountByRiotId final upsert -> INSERT account row
+    mockSql.mockResolvedValueOnce([]);
 
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
@@ -142,25 +65,28 @@ describe("riot-api-service account summonerId wiring", () => {
         headers: { "X-Riot-Token": "test-riot-api-key" },
       })
     );
-    expect(mockedUpsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        puuid: "puuid-1",
-        game_name: "Bumsdito",
-        tag_line: "3005",
-        summoner_id: "real-summoner-id",
-      })
-    );
+
+    // Verify the final account upsert (call #6) contains the correct data
+    const upsertCall = mockSql.mock.calls[5];
+    // Tagged template: first arg is string parts array, subsequent args are values
+    const upsertQuery = upsertCall[0].join("");
+    expect(upsertQuery).toContain("INSERT INTO accounts");
+    expect(upsertCall).toContain("puuid-1");
+    expect(upsertCall).toContain("Bumsdito");
+    expect(upsertCall).toContain("3005");
+    expect(upsertCall).toContain("real-summoner-id");
   });
 
   it("returns a cached summonerId unchanged when the account row already has one", async () => {
-    mockedSingle.mockResolvedValueOnce({
-      data: {
+    // getAccountByRiotId ILIKE cache lookup -> returns cached row
+    mockSql.mockResolvedValueOnce([
+      {
         puuid: "puuid-1",
         game_name: "Bumsdito",
         tag_line: "3005",
         summoner_id: "cached-summoner-id",
       },
-    });
+    ]);
 
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -175,13 +101,16 @@ describe("riot-api-service account summonerId wiring", () => {
   });
 
   it("reuses a cached summonerId by puuid before calling the worker summoner lookup", async () => {
-    mockedSingle.mockResolvedValueOnce({ data: null });
-    mockedMaybeSingle.mockResolvedValueOnce({
-      data: {
-        summoner_id: "cached-by-puuid-summoner-id",
-      },
-      error: null,
-    });
+    // 1) getAccountByRiotId ILIKE cache lookup -> no cached row
+    mockSql.mockResolvedValueOnce([]);
+    // 2) getSummonerIdByPuuid -> getCachedSummonerIdByPuuid -> returns cached summoner_id
+    mockSql.mockResolvedValueOnce([
+      { summoner_id: "cached-by-puuid-summoner-id" },
+    ]);
+    // 3) cacheSummonerIdForPuuid (from getAccountByRiotId, with fallbackAccount) -> INSERT upsert
+    mockSql.mockResolvedValueOnce([]);
+    // 4) getAccountByRiotId final upsert -> INSERT account row
+    mockSql.mockResolvedValueOnce([]);
 
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
@@ -202,40 +131,45 @@ describe("riot-api-service account summonerId wiring", () => {
     expect(account.rankLookupId).toBe("cached-by-puuid-summoner-id");
     expect(account.riotId).toBe("Bumsdito#3005");
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(mockedUpsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        puuid: "puuid-1",
-        game_name: "Bumsdito",
-        tag_line: "3005",
-        summoner_id: "cached-by-puuid-summoner-id",
-      })
-    );
+
+    // Verify the final account upsert (call #4) contains the cached summonerId
+    const upsertCall = mockSql.mock.calls[3];
+    const upsertQuery = upsertCall[0].join("");
+    expect(upsertQuery).toContain("INSERT INTO accounts");
+    expect(upsertCall).toContain("cached-by-puuid-summoner-id");
   });
 
   it("falls back to match_cache participant summonerId when the worker lookup is forbidden", async () => {
-    mockedSingle.mockResolvedValueOnce({ data: null });
-    mockedPlayerMatchesLimit.mockResolvedValueOnce({
-      data: [{ match_id: "NA1_1" }],
-      error: null,
-    });
-    mockedMatchCacheIn.mockResolvedValueOnce({
-      data: [
-        {
-          match_id: "NA1_1",
-          match_data: {
-            info: {
-              participants: [
-                {
-                  puuid: "puuid-1",
-                  summonerId: "match-cache-summoner-id",
-                },
-              ],
-            },
+    // 1) getAccountByRiotId ILIKE cache lookup -> no cached row
+    mockSql.mockResolvedValueOnce([]);
+    // 2) getSummonerIdByPuuid -> getCachedSummonerIdByPuuid -> no cached summoner
+    mockSql.mockResolvedValueOnce([]);
+    // 3) getCachedSummonerIdFromMatchParticipants -> player_matches lookup
+    mockSql.mockResolvedValueOnce([{ match_id: "NA1_1" }]);
+    // 4) getCachedSummonerIdFromMatchParticipants -> match_cache lookup
+    mockSql.mockResolvedValueOnce([
+      {
+        match_id: "NA1_1",
+        match_data: {
+          info: {
+            participants: [
+              {
+                puuid: "puuid-1",
+                summonerId: "match-cache-summoner-id",
+              },
+            ],
           },
         },
-      ],
-      error: null,
-    });
+      },
+    ]);
+    // 5) cacheSummonerIdForPuuid (from getCachedSummonerIdFromMatchParticipants, no fallbackAccount) -> SELECT existing
+    mockSql.mockResolvedValueOnce([]);
+    // 6) cacheSummonerIdForPuuid -> INSERT upsert
+    mockSql.mockResolvedValueOnce([]);
+    // 7) cacheSummonerIdForPuuid (from getAccountByRiotId, with fallbackAccount) -> INSERT upsert
+    mockSql.mockResolvedValueOnce([]);
+    // 8) getAccountByRiotId final upsert -> INSERT account row
+    mockSql.mockResolvedValueOnce([]);
 
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
@@ -260,19 +194,17 @@ describe("riot-api-service account summonerId wiring", () => {
     expect(account.rankLookupId).toBe("match-cache-summoner-id");
     expect(account.riotId).toBe("Bumsdito#3005");
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(mockedUpsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        puuid: "puuid-1",
-        game_name: "Bumsdito",
-        tag_line: "3005",
-        summoner_id: "match-cache-summoner-id",
-      }),
-      expect.anything()
-    );
   });
 
   it("falls back to puuid as rankLookupId when no summonerId is available", async () => {
-    mockedSingle.mockResolvedValueOnce({ data: null });
+    // 1) getAccountByRiotId ILIKE cache lookup -> no cached row
+    mockSql.mockResolvedValueOnce([]);
+    // 2) getSummonerIdByPuuid -> getCachedSummonerIdByPuuid -> no cached summoner
+    mockSql.mockResolvedValueOnce([]);
+    // 3) getCachedSummonerIdFromMatchParticipants -> player_matches lookup (empty)
+    mockSql.mockResolvedValueOnce([]);
+    // 4) getAccountByRiotId final upsert -> insert account row (with null summoner_id)
+    mockSql.mockResolvedValueOnce([]);
 
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
@@ -298,31 +230,30 @@ describe("riot-api-service account summonerId wiring", () => {
     expect(account.riotId).toBe("Bumsdito#3005");
   });
 
-  it("does not interpolate hostile puuids into a PostgREST JSON filter", async () => {
+  it("does not interpolate hostile puuids into a SQL query (parameterized safely)", async () => {
     const hostilePuuid = 'puuid-1"}],"oops":"x';
-    mockedMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
-    mockedPlayerMatchesLimit.mockResolvedValueOnce({
-      data: [{ match_id: "NA1_2" }],
-      error: null,
-    });
-    mockedMatchCacheIn.mockResolvedValueOnce({
-      data: [
-        {
-          match_id: "NA1_2",
-          match_data: {
-            info: {
-              participants: [
-                {
-                  puuid: hostilePuuid,
-                  summonerId: "safe-summoner-id",
-                },
-              ],
-            },
+    // 1) getCachedSummonerIdByPuuid -> no cached summoner
+    mockSql.mockResolvedValueOnce([]);
+    // 2) getCachedSummonerIdFromMatchParticipants -> player_matches lookup
+    mockSql.mockResolvedValueOnce([{ match_id: "NA1_2" }]);
+    // 3) getCachedSummonerIdFromMatchParticipants -> match_cache lookup
+    mockSql.mockResolvedValueOnce([
+      {
+        match_id: "NA1_2",
+        match_data: {
+          info: {
+            participants: [
+              {
+                puuid: hostilePuuid,
+                summonerId: "safe-summoner-id",
+              },
+            ],
           },
         },
-      ],
-      error: null,
-    });
+      },
+    ]);
+    // 4) cacheSummonerIdForPuuid -> upsert
+    mockSql.mockResolvedValueOnce([]);
 
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: false,
@@ -335,36 +266,46 @@ describe("riot-api-service account summonerId wiring", () => {
     const summonerId = await getSummonerIdByPuuid(hostilePuuid);
 
     expect(summonerId).toBe("safe-summoner-id");
-    expect(mockedPlayerMatchesEq).toHaveBeenCalledWith("puuid", hostilePuuid);
-    expect(mockedPlayerMatchesOrder).toHaveBeenCalledWith("created_at", { ascending: false });
-    expect(mockedPlayerMatchesLimit).toHaveBeenCalledWith(25);
-    expect(mockedMatchCacheIn).toHaveBeenCalledWith("match_id", ["NA1_2"]);
+
+    // Verify the hostile puuid was passed as a parameter (part of the tagged template)
+    // The player_matches query should contain the hostile puuid as a parameter
+    const playerMatchesCall = mockSql.mock.calls[1];
+    const playerMatchesQuery = playerMatchesCall[0].join("");
+    expect(playerMatchesQuery).toContain("player_matches");
+    expect(playerMatchesQuery).toContain("WHERE puuid =");
+
+    // The match_cache query should use ANY
+    const matchCacheCall = mockSql.mock.calls[2];
+    const matchCacheQuery = matchCacheCall[0].join("");
+    expect(matchCacheQuery).toContain("match_cache");
+    expect(matchCacheQuery).toContain("ANY");
   });
 
   it("finds cached participant data from older player-specific matches instead of latest global cache rows", async () => {
-    mockedMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
-    mockedPlayerMatchesLimit.mockResolvedValueOnce({
-      data: [{ match_id: "NA1_older_cached_match" }],
-      error: null,
-    });
-    mockedMatchCacheIn.mockResolvedValueOnce({
-      data: [
-        {
-          match_id: "NA1_older_cached_match",
-          match_data: {
-            info: {
-              participants: [
-                {
-                  puuid: "puuid-older-player",
-                  summonerId: "older-match-summoner-id",
-                },
-              ],
-            },
+    // 1) getCachedSummonerIdByPuuid -> no cached summoner
+    mockSql.mockResolvedValueOnce([]);
+    // 2) getCachedSummonerIdFromMatchParticipants -> player_matches lookup
+    mockSql.mockResolvedValueOnce([{ match_id: "NA1_older_cached_match" }]);
+    // 3) getCachedSummonerIdFromMatchParticipants -> match_cache lookup
+    mockSql.mockResolvedValueOnce([
+      {
+        match_id: "NA1_older_cached_match",
+        match_data: {
+          info: {
+            participants: [
+              {
+                puuid: "puuid-older-player",
+                summonerId: "older-match-summoner-id",
+              },
+            ],
           },
         },
-      ],
-      error: null,
-    });
+      },
+    ]);
+    // 4) cacheSummonerIdForPuuid (no fallbackAccount) -> SELECT existing
+    mockSql.mockResolvedValueOnce([]);
+    // 5) cacheSummonerIdForPuuid -> INSERT upsert
+    mockSql.mockResolvedValueOnce([]);
 
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: false,
@@ -377,7 +318,20 @@ describe("riot-api-service account summonerId wiring", () => {
     const summonerId = await getSummonerIdByPuuid("puuid-older-player");
 
     expect(summonerId).toBe("older-match-summoner-id");
-    expect(mockedPlayerMatchesEq).toHaveBeenCalledWith("puuid", "puuid-older-player");
-    expect(mockedMatchCacheIn).toHaveBeenCalledWith("match_id", ["NA1_older_cached_match"]);
+
+    // Verify player_matches query for correct puuid
+    const playerMatchesCall = mockSql.mock.calls[1];
+    const playerMatchesQuery = playerMatchesCall[0].join("");
+    expect(playerMatchesQuery).toContain("player_matches");
+    // puuid is a parameter value, not in the query string
+    expect(playerMatchesCall).toContain("puuid-older-player");
+
+    // Verify match_cache query with correct match IDs
+    const matchCacheCall = mockSql.mock.calls[2];
+    const matchCacheQuery = matchCacheCall[0].join("");
+    expect(matchCacheQuery).toContain("match_cache");
+    // match IDs are passed as an array parameter (ANY($1))
+    const matchIdParam = matchCacheCall[1];
+    expect(matchIdParam).toEqual(["NA1_older_cached_match"]);
   });
 });

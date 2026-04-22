@@ -1,4 +1,4 @@
-import { getSupabaseServer } from "./supabase-server";
+import { getSql } from "./neon";
 import type { AccountDto, MatchDto, MatchTimelineDto } from "./types";
 import type { LeagueEntryDto } from "./rank-snapshot";
 
@@ -34,18 +34,17 @@ async function riotFetch(
 async function getCachedSummonerIdByPuuid(
   puuid: string
 ): Promise<string | undefined> {
-  const { data, error } = await getSupabaseServer()
-    .from("accounts")
-    .select("summoner_id")
-    .eq("puuid", puuid)
-    .maybeSingle();
-
-  if (error) {
-    console.error("accounts summoner_id lookup failed:", error.message);
+  try {
+    const sql = getSql();
+    const rows = await sql`
+      SELECT summoner_id FROM accounts WHERE puuid = ${puuid}
+    `;
+    const row = rows as [{ summoner_id: string | null }];
+    return row[0]?.summoner_id?.trim() || undefined;
+  } catch (error) {
+    console.error("accounts summoner_id lookup failed:", error);
     return undefined;
   }
-
-  return data?.summoner_id?.trim() || undefined;
 }
 
 async function cacheSummonerIdForPuuid(
@@ -53,106 +52,110 @@ async function cacheSummonerIdForPuuid(
   summonerId: string,
   fallbackAccount?: Pick<AccountDto, "gameName" | "tagLine">
 ): Promise<void> {
-  const existingAccount = fallbackAccount
-    ? null
-    : await getSupabaseServer()
-        .from("accounts")
-        .select("game_name, tag_line")
-        .eq("puuid", puuid)
-        .maybeSingle();
+  try {
+    const sql = getSql();
 
-  const gameName =
-    fallbackAccount?.gameName ?? existingAccount?.data?.game_name ?? null;
-  const tagLine =
-    fallbackAccount?.tagLine ?? existingAccount?.data?.tag_line ?? null;
+    let gameName: string | null;
+    let tagLine: string | null;
 
-  const { error } = await getSupabaseServer()
-    .from("accounts")
-    .upsert(
-      { puuid, game_name: gameName, tag_line: tagLine, summoner_id: summonerId },
-      { onConflict: "puuid" }
-    );
+    if (fallbackAccount) {
+      gameName = fallbackAccount.gameName;
+      tagLine = fallbackAccount.tagLine;
+    } else {
+      const rows = await sql`
+        SELECT game_name, tag_line FROM accounts WHERE puuid = ${puuid}
+      `;
+      const existing = (rows as [{ game_name: string | null; tag_line: string | null }])[0];
+      gameName = existing?.game_name ?? null;
+      tagLine = existing?.tag_line ?? null;
+    }
 
-  if (error) {
-    console.error("accounts summoner_id cache upsert failed:", error.message);
+    await sql`
+      INSERT INTO accounts (puuid, game_name, tag_line, summoner_id)
+      VALUES (${puuid}, ${gameName}, ${tagLine}, ${summonerId})
+      ON CONFLICT (puuid) DO UPDATE SET
+        game_name = COALESCE(EXCLUDED.game_name, accounts.game_name),
+        tag_line = COALESCE(EXCLUDED.tag_line, accounts.tag_line),
+        summoner_id = EXCLUDED.summoner_id
+    `;
+  } catch (error) {
+    console.error("accounts summoner_id cache upsert failed:", error);
   }
 }
 
 async function getCachedSummonerIdFromMatchParticipants(
   puuid: string
 ): Promise<string | undefined> {
-  const { data: playerMatches, error: playerMatchesError } = await getSupabaseServer()
-    .from("player_matches")
-    .select("match_id")
-    .eq("puuid", puuid)
-    .order("created_at", { ascending: false })
-    .limit(25);
+  try {
+    const sql = getSql();
 
-  if (playerMatchesError) {
-    console.error(
-      "player_matches summonerId candidate lookup failed:",
-      playerMatchesError.message
+    const playerMatchRows = await sql`
+      SELECT match_id FROM player_matches
+      WHERE puuid = ${puuid}
+      ORDER BY created_at DESC
+      LIMIT 25
+    `;
+
+    const matchIds = Array.from(
+      new Set(
+        ((playerMatchRows as { match_id: string }[]))
+          .map((row) => row.match_id?.trim())
+          .filter((matchId): matchId is string => Boolean(matchId))
+      )
     );
-    return undefined;
-  }
 
-  const matchIds = Array.from(
-    new Set(
-      (playerMatches ?? [])
-        .map((row) => row.match_id?.trim())
-        .filter((matchId): matchId is string => Boolean(matchId))
-    )
-  );
-
-  if (matchIds.length === 0) {
-    return undefined;
-  }
-
-  const { data, error } = await getSupabaseServer()
-    .from("match_cache")
-    .select("match_id, match_data")
-    .in("match_id", matchIds);
-
-  if (error) {
-    console.error("match_cache summonerId lookup failed:", error.message);
-    return undefined;
-  }
-
-  for (const row of data ?? []) {
-    const participants = (row.match_data as MatchDto | undefined)?.info?.participants;
-    const participant = participants?.find((entry) => entry.puuid === puuid);
-    const summonerId = participant?.summonerId?.trim();
-
-    if (summonerId) {
-      await cacheSummonerIdForPuuid(puuid, summonerId);
-      return summonerId;
+    if (matchIds.length === 0) {
+      return undefined;
     }
-  }
 
-  return undefined;
+    const cacheRows = await sql`
+      SELECT match_id, match_data FROM match_cache
+      WHERE match_id = ANY(${matchIds})
+    `;
+
+    for (const row of cacheRows as [{ match_id: string; match_data: MatchDto }]) {
+      const participants = row.match_data?.info?.participants;
+      const participant = participants?.find((entry) => entry.puuid === puuid);
+      const summonerId = participant?.summonerId?.trim();
+
+      if (summonerId) {
+        await cacheSummonerIdForPuuid(puuid, summonerId);
+        return summonerId;
+      }
+    }
+
+    return undefined;
+  } catch (error) {
+    console.error("match participant summonerId lookup failed:", error);
+    return undefined;
+  }
 }
 
 export async function getAccountByRiotId(
   gameName: string,
   tagLine: string
 ): Promise<AccountDto> {
-  // Check Supabase cache (case-insensitive — Riot names are case-insensitive)
-  const { data: cached } = await getSupabaseServer()
-    .from("accounts")
-    .select("puuid, game_name, tag_line, summoner_id")
-    .ilike("game_name", gameName)
-    .ilike("tag_line", tagLine)
-    .single();
+  // Check Neon cache (case-insensitive — Riot names are case-insensitive)
+  try {
+    const sql = getSql();
+    const cachedRows = await sql`
+      SELECT puuid, game_name, tag_line, summoner_id FROM accounts
+      WHERE game_name ILIKE ${gameName} AND tag_line ILIKE ${tagLine}
+    `;
+    const cached = (cachedRows as [{ puuid: string; game_name: string; tag_line: string; summoner_id: string | null }])[0];
 
-  if (cached) {
-    return {
-      puuid: cached.puuid,
-      gameName: cached.game_name,
-      tagLine: cached.tag_line,
-      summonerId: cached.summoner_id ?? undefined,
-      riotId: `${cached.game_name}#${cached.tag_line}`,
-      rankLookupId: cached.summoner_id ?? cached.puuid,
-    };
+    if (cached) {
+      return {
+        puuid: cached.puuid,
+        gameName: cached.game_name,
+        tagLine: cached.tag_line,
+        summonerId: cached.summoner_id ?? undefined,
+        riotId: `${cached.game_name}#${cached.tag_line}`,
+        rankLookupId: cached.summoner_id ?? cached.puuid,
+      };
+    }
+  } catch (error) {
+    console.error("accounts cache lookup failed:", error);
   }
 
   // Fetch from Riot API
@@ -200,17 +203,19 @@ export async function getAccountByRiotId(
 
   account.rankLookupId = account.summonerId ?? account.puuid;
 
-  // Cache in Supabase — must await on Vercel serverless
-  const { error: accountCacheError } = await getSupabaseServer()
-    .from("accounts")
-    .upsert({
-      puuid: account.puuid,
-      game_name: account.gameName,
-      tag_line: account.tagLine,
-      summoner_id: account.summonerId ?? null,
-    });
-  if (accountCacheError) {
-    console.error("accounts cache upsert failed:", accountCacheError.message);
+  // Cache in Neon — must await on Vercel serverless
+  try {
+    const sql = getSql();
+    await sql`
+      INSERT INTO accounts (puuid, game_name, tag_line, summoner_id)
+      VALUES (${account.puuid}, ${account.gameName}, ${account.tagLine}, ${account.summonerId ?? null})
+      ON CONFLICT (puuid) DO UPDATE SET
+        game_name = EXCLUDED.game_name,
+        tag_line = EXCLUDED.tag_line,
+        summoner_id = COALESCE(EXCLUDED.summoner_id, accounts.summoner_id)
+    `;
+  } catch (error) {
+    console.error("accounts cache upsert failed:", error);
   }
 
   return account;
@@ -299,15 +304,19 @@ export async function getMatchHistory(
 export async function getMatchDetails(
   matchId: string
 ): Promise<MatchDto> {
-  // Check Supabase cache
-  const { data: cached } = await getSupabaseServer()
-    .from("match_details")
-    .select("match_data")
-    .eq("match_id", matchId)
-    .single();
+  // Check Neon cache
+  try {
+    const sql = getSql();
+    const rows = await sql`
+      SELECT match_data FROM match_details WHERE match_id = ${matchId}
+    `;
+    const cached = (rows as [{ match_data: MatchDto }])[0];
 
-  if (cached) {
-    return cached.match_data as MatchDto;
+    if (cached) {
+      return cached.match_data;
+    }
+  } catch (error) {
+    console.error("match_details cache lookup failed:", error);
   }
 
   // Fetch from Riot API
@@ -320,12 +329,17 @@ export async function getMatchDetails(
 
   const matchDto: MatchDto = await res.json();
 
-  // Cache in Supabase — must await on Vercel serverless
-  const { error: detailsCacheError } = await getSupabaseServer()
-    .from("match_details")
-    .upsert({ match_id: matchId, match_data: matchDto });
-  if (detailsCacheError) {
-    console.error("match_details cache upsert failed:", detailsCacheError.message);
+  // Cache in Neon — must await on Vercel serverless
+  try {
+    const sql = getSql();
+    await sql`
+      INSERT INTO match_details (match_id, match_data)
+      VALUES (${matchId}, ${JSON.stringify(matchDto)}::jsonb)
+      ON CONFLICT (match_id) DO UPDATE SET
+        match_data = EXCLUDED.match_data
+    `;
+  } catch (error) {
+    console.error("match_details cache upsert failed:", error);
   }
 
   return matchDto;
@@ -334,15 +348,19 @@ export async function getMatchDetails(
 export async function getMatchTimeline(
   matchId: string
 ): Promise<MatchTimelineDto> {
-  // Check Supabase cache
-  const { data: cached } = await getSupabaseServer()
-    .from("match_timelines")
-    .select("timeline_data")
-    .eq("match_id", matchId)
-    .single();
+  // Check Neon cache
+  try {
+    const sql = getSql();
+    const rows = await sql`
+      SELECT timeline_data FROM match_timelines WHERE match_id = ${matchId}
+    `;
+    const cached = (rows as [{ timeline_data: MatchTimelineDto }])[0];
 
-  if (cached) {
-    return cached.timeline_data as MatchTimelineDto;
+    if (cached) {
+      return cached.timeline_data;
+    }
+  } catch (error) {
+    console.error("match_timelines cache lookup failed:", error);
   }
 
   // Fetch from Riot API
@@ -355,12 +373,17 @@ export async function getMatchTimeline(
 
   const timelineDto: MatchTimelineDto = await res.json();
 
-  // Cache in Supabase — must await on Vercel serverless
-  const { error: timelineCacheError } = await getSupabaseServer()
-    .from("match_timelines")
-    .upsert({ match_id: matchId, timeline_data: timelineDto });
-  if (timelineCacheError) {
-    console.error("match_timelines cache upsert failed:", timelineCacheError.message);
+  // Cache in Neon — must await on Vercel serverless
+  try {
+    const sql = getSql();
+    await sql`
+      INSERT INTO match_timelines (match_id, timeline_data)
+      VALUES (${matchId}, ${JSON.stringify(timelineDto)}::jsonb)
+      ON CONFLICT (match_id) DO UPDATE SET
+        timeline_data = EXCLUDED.timeline_data
+    `;
+  } catch (error) {
+    console.error("match_timelines cache upsert failed:", error);
   }
 
   return timelineDto;
@@ -402,4 +425,3 @@ export async function getCurrentRankEntries(
   const data = (await res.json()) as LeagueEntryDto[];
   return Array.isArray(data) ? data : [];
 }
-
