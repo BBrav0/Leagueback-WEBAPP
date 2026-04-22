@@ -1,45 +1,34 @@
 # Leagueback
 
-Leagueback is a web-only Next.js app for League of Legends ranked match analysis.
-Players search by Riot ID, open shareable player routes, and review match history,
-impact score summaries, and supporting charts sourced through the existing
-Supabase cache and Riot proxy workflow.
+**League of Legends ranked match analysis tool.** Players look up their Riot ID and see their match history with an "impact score" that measures their contribution relative to the team average.
 
-## Current product summary
+## Features
 
-Leagueback currently ships a browser-first experience built around:
+- **Riot ID lookup** — Search for any ranked player by game name and tag line
+- **Match history** — Browse stored ranked match history with infinite scroll pagination
+- **Impact scoring** — Per-match impact score measuring individual contribution relative to team average, with category breakdowns
+- **Analytics charts** — Lifetime impact category statistics and trend visualizations
+- **Sync gating** — Automatic and manual data sync with age-based refresh controls and countdown timer
+- **Shareable player routes** — Deep-linkable URLs at `/[gameName]#tagLine`
 
-- Riot ID account lookup
-- Deep-linkable player routes at `/player/{gameName}#{tagLine}`
-- Stored ranked match history loading with older-history expansion
-- Match summary cards plus impact/lifetime analytics charts
-- Supabase-backed caching and API orchestration for Riot data
+## Tech Stack
 
-## Shipped today
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 16 (App Router) + React 18 + TypeScript |
+| Database | Neon (PostgreSQL) |
+| Styling | Tailwind CSS + Radix UI (shadcn/ui) |
+| Charts | Recharts |
+| Testing | Vitest |
+| Hosting | Vercel (primary) / Cloudflare Pages (via OpenNext) |
+| Package Manager | pnpm |
 
-The current repository state supports these user-visible behaviors:
+## Prerequisites
 
-- Search for a player by Riot ID from the home page
-- Load the same player directly from a player route without re-submitting the form
-- View stored match history and load additional history as available
-- See impact category statistics, lifetime analytics, and related dashboard charts
-- Use the existing web API routes backed by Supabase and the Riot API
+- **Node.js** 20+
+- **pnpm** (committed lockfile: `pnpm-lock.yaml`)
 
-## Backlog / not shipped yet
-
-The roadmap backlog is still focused on web-only improvements, including:
-
-- richer match-card metadata and truthful rank fallback states
-- deeper match-details views
-- saved lookups, filters, and persisted history preferences
-- loaded-history export and broader copy/fallback polish
-
-These are planned web UX improvements only. This repo does **not** currently ship
-desktop, Electron, mobile-native, or algorithm-change work.
-
-## Local setup
-
-Leagueback uses `pnpm` as the committed package manager and local workflow.
+## Getting Started
 
 ### 1. Install dependencies
 
@@ -47,58 +36,127 @@ Leagueback uses `pnpm` as the committed package manager and local workflow.
 pnpm install --frozen-lockfile
 ```
 
-### 2. Create local environment variables
+### 2. Configure environment variables
 
-Copy `.env.example` to `.env.local` and replace the placeholder values with your
-local/project secrets:
+Copy `.env.example` to `.env.local` and fill in the values:
 
 ```bash
 cp .env.example .env.local
 ```
 
-Required variables are:
+Required variables:
 
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `BACKFILL_SECRET`
-- `RIOT_API_KEY`
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | Neon PostgreSQL connection string (`lib/neon.ts`) |
+| `RIOT_API_KEY` | Riot Games API key for server-side API calls |
+| `BACKFILL_SECRET` | Secret header value for the `/api/backfill` endpoint |
 
-### 3. Start the web app
-
-The committed local dev command uses the mission port `3005`:
+### 3. Run the development server
 
 ```bash
-pnpm run dev
+pnpm dev
 ```
 
-Then open `http://localhost:3005`.
+Open [http://localhost:3005](http://localhost:3005).
 
-## Validation workflow
+### 4. Available scripts
 
-The committed validation commands for this repo are:
+| Command | Description |
+|---|---|
+| `pnpm dev` | Start dev server on port 3005 |
+| `pnpm build` | Production build |
+| `pnpm start` | Start production server |
+| `pnpm test` | Run tests (Vitest) |
+| `pnpm test:watch` | Run tests in watch mode |
+| `pnpm lint` | ESLint with zero-warning policy |
+| `pnpm typecheck` | TypeScript type checking |
+| `pnpm static-check` | Run lint + typecheck together |
+
+## Project Structure
+
+```
+├── app/                          # Next.js App Router
+│   ├── api/                      #   API route handlers
+│   │   ├── account/              #     Riot account lookup
+│   │   ├── backfill/             #     Data backfill (secret-protected)
+│   │   ├── impact-categories/    #     Impact stats endpoint
+│   │   ├── match-history/        #     Fresh match history from Riot API
+│   │   ├── match-performance/    #     Per-match performance data
+│   │   ├── player-matches/       #     Player match data & existing IDs
+│   │   ├── player-sync-status/   #     Sync status & age info
+│   │   └── stored-matches/       #     Paginated DB match results
+│   ├── [gameName]/               #   Player page route
+│   ├── player/                   #   Player views
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx                  #   Home / search page
+├── components/
+│   ├── dashboard/                #   Main dashboard (lol-stats-dashboard.tsx)
+│   └── ui/                       #   shadcn/ui primitives (Radix-based)
+├── hooks/                        #   Custom React hooks
+├── lib/                          #   Core business logic & data access
+│   ├── bridge.ts                 #     API↔DB synchronization bridge
+│   ├── database-queries.ts       #     Parameterized SQL queries (Neon)
+│   ├── match-reconstruction.ts   #     Timeline reconstruction
+│   ├── neon.ts                   #     Database client (server-only guarded)
+│   ├── performance-calculation.ts#     Impact score math
+│   ├── riot-api-service.ts       #     Riot API client + caching
+│   ├── sync-age.ts               #     Sync freshness / age tracking
+│   ├── sync-gate.ts              #     Sync gate logic
+│   ├── types.ts                  #     Shared TypeScript types
+│   └── ...                       #     Other modules (rate-limiter, history, etc.)
+├── scripts/                      #   One-off utility scripts
+├── public/                       #   Static assets
+└── vitest.config.ts
+```
+
+## Data Flow
+
+1. **Account lookup** — User submits Riot ID → `/api/account` → cached in `accounts` table or fetched from Riot API
+2. **Match history** — `/api/match-history` fetches fresh data directly from Riot API
+3. **Match performance** — For each match, `/api/match-performance` checks `match_cache`; on cache miss, fetches from Riot API and stores in `match_cache` + `player_matches`
+4. **Stored matches** — Paginated results served from `player_matches` via `/api/stored-matches`
+5. **Impact categories** — Aggregated stats served from `/api/impact-categories`
+
+All database access is server-side only (`lib/neon.ts` uses the `server-only` package). No API keys are exposed to the client.
+
+### Database Tables
+
+| Table | Purpose |
+|---|---|
+| `accounts` | Riot account cache (puuid, game_name, tag_line) |
+| `match_cache` | Combined match + timeline JSON cache |
+| `player_matches` | Precomputed summaries (champion, KDA, impact scores) |
+
+## Testing
+
+Tests use [Vitest](https://vitest.dev/) with jsdom. Core library modules have test coverage:
 
 ```bash
-pnpm run lint
-pnpm run static-check
-pnpm run typecheck
-pnpm test
-pnpm run build
+pnpm test          # Single run
+pnpm test:watch    # Watch mode
 ```
 
-CI runs the same validation flow from `.github/workflows/ci.yml`.
+Test files are co-located with their modules in `lib/` (e.g., `bridge.test.ts`, `sync-age.test.ts`, `riot-api-service.test.ts`).
 
-## Architecture notes
+CI runs the full validation pipeline on every PR via `.github/workflows/ci.yml`.
 
-- Framework: Next.js 16 App Router + React + TypeScript
-- Styling/UI: Tailwind CSS + Radix UI / shadcn components
-- Data/cache: Supabase
-- Riot access: Direct Riot API calls via RIOT_API_KEY
-- Hosting target: Vercel
+## Deployment
+
+### Vercel (primary)
+
+Push to `main` — Vercel auto-deploys. Set `DATABASE_URL`, `RIOT_API_KEY`, and `BACKFILL_SECRET` in the Vercel project settings.
+
+### Cloudflare Pages
+
+```bash
+pnpm preview       # Build and preview locally
+pnpm deploy        # Build and deploy to Cloudflare
+```
+
+Uses `@opennextjs/cloudflare` adapter (see `open-next.config.ts` and `wrangler.jsonc`).
 
 ## Disclaimer
 
-Leagueback isn't endorsed by Riot Games. All in-game names and imagery belong to
-Riot Games.
+Leagueback is not endorsed by Riot Games. All in-game names and imagery are trademarks of Riot Games, Inc.
