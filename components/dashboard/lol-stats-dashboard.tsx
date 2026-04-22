@@ -53,6 +53,7 @@ import {
 } from "@/lib/validation-fixture"
 import { cn } from "@/lib/utils"
 import { rateLimiter } from "@/lib/rate-limiter"
+import { computeSyncAge, formatSyncAge, type SyncAge } from "@/lib/sync-age"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -122,32 +123,6 @@ function parsePlayerFromUrl(pathname: string, hash: string): { gameName: string;
     gameName: routeGameName ? safeDecodeURIComponent(routeGameName) : "",
     tagLine: rawHash ? safeDecodeURIComponent(rawHash) : "",
   };
-}
-
-type SyncAge = "fresh" | "stale" | "expired";
-
-function computeSyncAge(lastSyncAt: string | Date | null | undefined): SyncAge {
-  if (!lastSyncAt) return "expired";
-  const ts = lastSyncAt instanceof Date ? lastSyncAt.getTime() : new Date(lastSyncAt).getTime();
-  if (isNaN(ts)) return "expired";
-  const ageMs = Date.now() - ts;
-  const THIRTY_MINUTES = 30 * 60 * 1000;
-  const ONE_DAY = 24 * 60 * 60 * 1000;
-  if (ageMs < THIRTY_MINUTES) return "fresh";
-  if (ageMs < ONE_DAY) return "stale";
-  return "expired";
-}
-
-function formatSyncAge(lastSyncAt: string): string {
-  const ageMs = Date.now() - new Date(lastSyncAt).getTime();
-  const seconds = Math.floor(ageMs / 1000);
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-  const days = Math.floor(hours / 24);
-  return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
 /**
@@ -897,7 +872,12 @@ export default function Component() {
 
         const syncStatus = await BackendBridge.getSyncStatus(account.puuid);
         setLastSyncAt(syncStatus.lastSyncAt);
-        const age = computeSyncAge(syncStatus.lastSyncAt);
+        let age = computeSyncAge(syncStatus.lastSyncAt);
+        // Pre-existing players without a metadata row should be treated as stale
+        // (not expired) to avoid mass auto-syncs on first visit after migration.
+        if (age === "expired" && storedResult.totalCount > 0 && !syncStatus.lastSyncAt) {
+          age = "stale";
+        }
         setSyncAge(age);
 
         if (age === "expired") {
@@ -914,8 +894,9 @@ export default function Component() {
           const syncRate = rateLimiter.checkRateLimit();
           if (syncRate.allowed) {
             setFetchingMatchesFromApi(true);
+            let syncResult: Awaited<ReturnType<typeof BackendBridge.syncNewHeadMatchesFromRiot>> | null = null;
             try {
-              const syncResult = await BackendBridge.syncNewHeadMatchesFromRiot(
+              syncResult = await BackendBridge.syncNewHeadMatchesFromRiot(
                 account.puuid,
                 storedResult.totalCount,
                 {
@@ -925,12 +906,6 @@ export default function Component() {
                   maxSyncRounds: 12,
                 }
               );
-              // Record the sync attempt regardless of outcome
-              const tsResult = await BackendBridge.updateSyncTimestamp(account.puuid);
-              if (tsResult.lastSyncAt) {
-                setLastSyncAt(tsResult.lastSyncAt);
-                setSyncAge(computeSyncAge(tsResult.lastSyncAt));
-              }
 
               if (syncResult.syncMetadata?.recentMatchWindow) {
                 setRecentSyncWindowSize(syncResult.syncMetadata.recentMatchWindow);
@@ -971,6 +946,12 @@ export default function Component() {
                 }
               }
             } finally {
+              // Always record the sync attempt, even on partial/total failure
+              const tsResult = await BackendBridge.updateSyncTimestamp(account.puuid);
+              if (tsResult.lastSyncAt) {
+                setLastSyncAt(tsResult.lastSyncAt);
+                setSyncAge(computeSyncAge(tsResult.lastSyncAt));
+              }
               setFetchingMatchesFromApi(false);
             }
           } else {
@@ -1039,11 +1020,10 @@ export default function Component() {
         resetAt: rateLimiter.getStatus().resetAt,
       });
 
+      // For new players where Riot reported no matches and batch didn't produce results,
+      // show a message (no redundant API call — getPlayerMatchDataBatch already checked).
       if (storedResult.totalCount === 0 && !apiHasMore) {
-        const apiCheck = await BackendBridge.checkApiHasMore(account.puuid, 0);
-        if (!apiCheck) {
-          setError("No ranked match history is available for this Riot ID yet.");
-        }
+        setError("No ranked match history is available for this Riot ID yet.");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Leagueback could not load this player's match history.");
@@ -1088,13 +1068,6 @@ export default function Component() {
         }
       );
 
-      // Record the sync attempt regardless of outcome
-      const tsResult = await BackendBridge.updateSyncTimestamp(currentPuuid);
-      if (tsResult.lastSyncAt) {
-        setLastSyncAt(tsResult.lastSyncAt);
-        setSyncAge(computeSyncAge(tsResult.lastSyncAt));
-      }
-
       if (syncResult.syncMetadata?.recentMatchWindow) {
         setRecentSyncWindowSize(syncResult.syncMetadata.recentMatchWindow);
       }
@@ -1135,6 +1108,16 @@ export default function Component() {
       console.error("Manual update failed:", err);
       setError("Leagueback could not complete the update. Please try again in a moment.");
     } finally {
+      // Always record the sync attempt, even on partial/total failure
+      try {
+        const tsResult = await BackendBridge.updateSyncTimestamp(currentPuuid);
+        if (tsResult.lastSyncAt) {
+          setLastSyncAt(tsResult.lastSyncAt);
+          setSyncAge(computeSyncAge(tsResult.lastSyncAt));
+        }
+      } catch (tsErr) {
+        console.error("Failed to update sync timestamp:", tsErr);
+      }
       setFetchingMatchesFromApi(false);
     }
   }, [currentPuuid, fetchingMatchesFromApi, syncAge, totalDbMatches, recentSyncWindowSize, syncImpactStats]);
@@ -1295,8 +1278,13 @@ export default function Component() {
 
       if (!result.hasMore) {
         setAllDbMatchesLoaded(true);
-        const apiHasMore = await BackendBridge.checkApiHasMore(currentPuuid, result.totalCount);
-        setHasMoreMatches(apiHasMore);
+        // Gate checkApiHasMore behind syncAge: skip Riot API call when fresh
+        if (syncAge === "fresh") {
+          setHasMoreMatches(false);
+        } else {
+          const apiHasMore = await BackendBridge.checkApiHasMore(currentPuuid, result.totalCount);
+          setHasMoreMatches(apiHasMore);
+        }
         setMatchesStart(result.totalCount);
       }
     } catch (error) {
@@ -1304,7 +1292,7 @@ export default function Component() {
     } finally {
       setLoadingDbMatches(false);
     }
-  }, [currentPuuid, loadingDbMatches, hasMoreDbMatches, allDbMatchesLoaded]);
+  }, [currentPuuid, loadingDbMatches, hasMoreDbMatches, allDbMatchesLoaded, syncAge]);
 
   useEffect(() => {
     if (!hasSearched || allDbMatchesLoaded || !hasMoreDbMatches) return;

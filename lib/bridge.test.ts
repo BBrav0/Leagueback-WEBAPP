@@ -275,4 +275,61 @@ describe("BackendBridge", () => {
     expect(analyze).toHaveBeenNthCalledWith(1, "stale-a", "p1");
     expect(analyze).toHaveBeenNthCalledWith(2, "stale-b", "p1");
   });
+
+  describe("server 429 sync gate handling", () => {
+    beforeEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("getMatchHistory returns null on 429 (sync gate active)", async () => {
+      const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+      const fetchMock = vi.fn().mockResolvedValue({
+        status: 429,
+        ok: false,
+        json: async () => ({ success: false, error: "Sync gate active", gatedUntil: "2026-04-22T12:30:00Z" }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await BackendBridge.getMatchHistory("p1", 5, 0);
+      expect(result).toBeNull();
+      expect(infoSpy).toHaveBeenCalledWith(
+        "[sync-gate] Server rejected match-history request (sync gate active)."
+      );
+      infoSpy.mockRestore();
+    });
+
+    it("analyzeMatchPerformance returns gate response on 429", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        status: 429,
+        ok: false,
+        json: async () => ({ success: false, error: "Sync gate active", gatedUntil: "2026-04-22T12:30:00Z" }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await BackendBridge.analyzeMatchPerformance("match1", "p1");
+      expect(result).toEqual({
+        success: false,
+        error: expect.stringContaining("Sync gate active"),
+      });
+    });
+
+    it("analyzeMatchPerformance still returns generic error for other non-ok status", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        status: 500,
+        ok: false,
+        json: async () => ({ success: false, error: "Internal server error" }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await BackendBridge.analyzeMatchPerformance("match1", "p1");
+      expect(result).toEqual({
+        success: false,
+        error: "HTTP 500",
+      });
+    });
+  });
 });

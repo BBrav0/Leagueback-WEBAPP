@@ -55,6 +55,11 @@ export class BackendBridge {
       const res = await fetch(
         `/api/match-history?puuid=${encodeURIComponent(puuid)}&count=${count}&start=${start}`
       );
+      if (res.status === 429) {
+        // Server-side sync gate active — not an error, just gated.
+        console.info("[sync-gate] Server rejected match-history request (sync gate active).");
+        return null;
+      }
       if (!res.ok) return null;
       const data = await res.json();
       if (!Array.isArray(data)) {
@@ -91,6 +96,10 @@ export class BackendBridge {
       const res = await fetch(
         `/api/match-performance?matchId=${encodeURIComponent(matchId)}&userPuuid=${encodeURIComponent(userPuuid)}`
       );
+      if (res.status === 429) {
+        // Server-side sync gate active — surface as a gate response.
+        return { success: false, error: "Sync gate active — Riot API is temporarily unavailable for this player." };
+      }
       if (!res.ok) {
         return { success: false, error: `HTTP ${res.status}` };
       }
