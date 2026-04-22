@@ -866,6 +866,7 @@ export default function Component() {
 
       // Fetch first page of stored matches from DB
       const storedResult = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
+      console.log("[SYNC] storedResult.totalCount:", storedResult.totalCount, "matchesCount:", storedResult.matches.length);
 
       setMatchesData(storedResult.matches);
       setTotalDbMatches(storedResult.totalCount);
