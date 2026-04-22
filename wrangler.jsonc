@@ -10,8 +10,6 @@
   }
 }
 // Required environment variables (set in Cloudflare dashboard):
-// - SUPABASE_URL / NEXT_PUBLIC_SUPABASE_URL
-// - SUPABASE_ANON_KEY / NEXT_PUBLIC_SUPABASE_ANON_KEY
-// - SUPABASE_SERVICE_ROLE_KEY
+// - DATABASE_URL (Neon PostgreSQL connection string)
 // - BACKFILL_SECRET
 // - RIOT_API_KEY (calls Riot API directly from server-side routes)

@@ -9,6 +9,7 @@ const config = [
       "node_modules/**",
       "out/**",
       "coverage/**",
+      ".open-next/**",
       "next-env.d.ts",
     ],
   },
