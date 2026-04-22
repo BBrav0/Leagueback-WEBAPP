@@ -1481,159 +1481,6 @@ export default function Component() {
           </Card>
         )}
 
-        {hasSearched && (
-          <Card className="bg-slate-800/50 border-slate-600/50">
-            <CardHeader>
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <CardTitle className="text-white">History filters & display</CardTitle>
-                  <CardDescription className="text-slate-300">
-                    Filter the matches currently loaded on this device and keep these preferences across refreshes.
-                  </CardDescription>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary" className="bg-slate-700/70 text-slate-100 hover:bg-slate-700/70">
-                    Showing {filteredMatches.length} of {matchesData.length} loaded matches
-                  </Badge>
-                  <Badge variant="outline" className="border-emerald-400/40 text-emerald-100">
-                    Export scope: {exportRows.length} filtered loaded match{exportRows.length === 1 ? "" : "es"}
-                  </Badge>
-                  {isValidationFixtureActive && allDbMatchesLoaded && hasMoreMatches && (
-                    <Badge variant="outline" className="border-sky-400/40 text-sky-100">
-                      Validation fixture older-history append ready
-                    </Badge>
-                  )}
-                  {activeHistoryFilterCount > 0 && (
-                    <Badge variant="outline" className="border-sky-400/40 text-sky-100">
-                      {activeHistoryFilterCount} active filter{activeHistoryFilterCount === 1 ? "" : "s"}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="grid gap-4 lg:grid-cols-3">
-                <div className="space-y-2">
-                  <Label className="text-white">Result</Label>
-                  <Select
-                    value={historyPreferences.result}
-                    onValueChange={(value) =>
-                      updateHistoryPreferences({
-                        result: value as HistoryPreferences["result"],
-                      })
-                    }
-                  >
-                    <SelectTrigger className="border-slate-600 bg-slate-900/60 text-slate-100">
-                      <SelectValue placeholder="All results" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All results</SelectItem>
-                      <SelectItem value="Victory">Victories</SelectItem>
-                      <SelectItem value="Defeat">Defeats</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-white">Impact category</Label>
-                  <Select
-                    value={historyPreferences.impactCategory}
-                    onValueChange={(value) =>
-                      updateHistoryPreferences({
-                        impactCategory: value as HistoryPreferences["impactCategory"],
-                      })
-                    }
-                  >
-                    <SelectTrigger className="border-slate-600 bg-slate-900/60 text-slate-100">
-                      <SelectValue placeholder="All categories" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All categories</SelectItem>
-                      <SelectItem value="impactWins">Impact wins</SelectItem>
-                      <SelectItem value="impactLosses">Impact losses</SelectItem>
-                      <SelectItem value="guaranteedWins">Guaranteed wins</SelectItem>
-                      <SelectItem value="guaranteedLosses">Guaranteed losses</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-white">Champion</Label>
-                  <Select
-                    value={historyPreferences.champion || "__all__"}
-                    onValueChange={(value) =>
-                      updateHistoryPreferences({
-                        champion: value === "__all__" ? "" : value,
-                      })
-                    }
-                  >
-                    <SelectTrigger className="border-slate-600 bg-slate-900/60 text-slate-100">
-                      <SelectValue placeholder="All champions" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__all__">All champions</SelectItem>
-                      {championFilterOptions.map((champion) => (
-                        <SelectItem key={champion} value={champion}>
-                          {champion}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto] lg:items-end">
-                <div className="space-y-2">
-                  <Label className="text-white">Sort order</Label>
-                  <Select
-                    value={historyPreferences.sort}
-                    onValueChange={(value) =>
-                      updateHistoryPreferences({
-                        sort: value as HistoryPreferences["sort"],
-                      })
-                    }
-                  >
-                    <SelectTrigger className="border-slate-600 bg-slate-900/60 text-slate-100">
-                      <SelectValue placeholder="Newest first" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="newest">Loaded order</SelectItem>
-                      <SelectItem value="highestImpact">Highest impact first</SelectItem>
-                      <SelectItem value="oldest">Oldest loaded first</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-900/50 px-4 py-3">
-                  <div>
-                    <div className="text-sm font-medium text-white">Compact cards</div>
-                    <div className="text-xs text-slate-400">Persisted per device.</div>
-                  </div>
-                  <Switch
-                    checked={historyPreferences.compactCards}
-                    onCheckedChange={(checked) =>
-                      updateHistoryPreferences({ compactCards: checked })
-                    }
-                    aria-label="Toggle compact cards"
-                  />
-                </div>
-                <Button
-                  type="button"
-                  onClick={handleExportLoadedHistory}
-                  disabled={!canExportLoadedHistory}
-                  className="bg-emerald-600 text-white hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-400"
-                >
-                  Export filtered loaded history
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleResetHistoryPreferences}
-                  className="border-slate-600 bg-slate-900/60 text-slate-100 hover:bg-slate-700 hover:text-white"
-                >
-                  Reset saved filters
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Error Display */}
         {error && (
           <Alert className="bg-red-900/50 border-red-600">
@@ -1693,23 +1540,20 @@ export default function Component() {
           <div className="flex flex-col md:flex-row gap-6">
             {/* Match cards */}
             <div className="md:w-3/5 space-y-6">
-              {filteredMatches.map((match) => (
+              {matchesData.filter((m) => !m.isRemake).map((match) => (
                 <MatchCard
                   key={match.id}
                   match={match}
                   currentPuuid={currentPuuid}
-                  compactCards={historyPreferences.compactCards}
+                  compactCards={false}
                   fixtureDetailsByMatchId={isValidationFixtureActive ? VALIDATION_FIXTURE_DETAILS : undefined}
                 />
               ))}
 
-              {filteredMatches.length === 0 && (
+              {matchesData.filter((m) => !m.isRemake).length === 0 && matchesData.length > 0 && (
                 <Card className="bg-slate-800/50 border-slate-600/50">
                   <CardContent className="p-8 text-center">
-                    <div className="text-slate-200 text-lg">No loaded matches match these filters</div>
-                    <div className="mt-2 text-sm text-slate-400">
-                      Change the current result, impact category, or champion filters, or reset saved filters to show the full loaded history again.
-                    </div>
+                    <div className="text-slate-200 text-lg">All loaded matches are remakes</div>
                   </CardContent>
                 </Card>
               )}
