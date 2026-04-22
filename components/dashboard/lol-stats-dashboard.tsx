@@ -1014,16 +1014,17 @@ export default function Component() {
             const retryStored = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
             if (isSearchStale()) return;
             if (retryStored.totalCount > 0) {
-              // Second visit: data exists in DB, first query missed it. Use the retry data.
+              // Second visit: data exists in DB, first query missed it. Use the retry data
+              // and restore a coherent stored-pagination state before continuing.
+              const retryLoadedCount = retryStored.matches.length;
               setMatchesData(retryStored.matches);
               setTotalDbMatches(retryStored.totalCount);
-              setLoadedDbMatches(retryStored.matches.length);
+              setLoadedDbMatches(retryLoadedCount);
               setHasMoreDbMatches(retryStored.hasMore);
+              setAllDbMatchesLoaded(!retryStored.hasMore);
+              setMatchesStart(retryLoadedCount);
+              setHasMoreMatches(retryStored.hasMore);
               matchesForStats = retryStored.matches;
-              if (!retryStored.hasMore) {
-                setAllDbMatchesLoaded(true);
-                setMatchesStart(retryStored.totalCount);
-              }
               // Fetch sync status for this returning player
               const syncStatus = await BackendBridge.getSyncStatus(account.puuid);
               if (isSearchStale()) return;
@@ -1032,6 +1033,7 @@ export default function Component() {
               setSyncAge(retryAge);
               // Mark storedResult as found so the "no matches" error path is skipped
               storedResult = retryStored;
+              apiHasMore = retryStored.hasMore;
             } else {
               // Sync gate blocked AND no stored matches found on retry —
               // show a temporary unavailability message instead of "no ranked match history".
@@ -1042,8 +1044,10 @@ export default function Component() {
           } else {
             apiHasMore = gateResult;
           }
-          setHasMoreMatches(apiHasMore);
-          setMatchesStart(storedResult.totalCount);
+          if (gateResult !== null) {
+            setHasMoreMatches(apiHasMore);
+            setMatchesStart(storedResult.totalCount);
+          }
         }
 
         // Dismiss full-screen "Analyzing" for new players too.

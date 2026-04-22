@@ -103,6 +103,7 @@ type SearchStepResult = {
   retryStoredResult?: { totalCount: number; matchIds: string[]; hasMore: boolean };
   batchResult?: { matchIds: string[]; hasMore: boolean; nextStart: number };
   timestampResult?: { lastSyncAt: string | null };
+  retryPaginationState?: { matchesStart: number; hasMoreMatches: boolean };
 };
 
 type SimulatedDashboardState = {
@@ -112,6 +113,7 @@ type SimulatedDashboardState = {
   lastSyncAt: string | null | undefined;
   syncAge: "fresh" | "stale" | "expired" | null;
   hasMoreMatches: boolean;
+  matchesStart: number;
   totalDbMatches: number;
   loadedDbMatches: number;
   hasMoreDbMatches: boolean;
@@ -126,6 +128,7 @@ function createDashboardState(): SimulatedDashboardState {
     lastSyncAt: undefined,
     syncAge: null,
     hasMoreMatches: false,
+    matchesStart: 0,
     totalDbMatches: 0,
     loadedDbMatches: 0,
     hasMoreDbMatches: false,
@@ -175,6 +178,11 @@ function applyRunSearchStepWithGuard(
     state.error = step.retryStoredResult.totalCount === 0
       ? "Data is temporarily unavailable. Please try again in a few minutes."
       : null;
+  }
+
+  if (step.retryPaginationState) {
+    state.matchesStart = step.retryPaginationState.matchesStart;
+    state.hasMoreMatches = step.retryPaginationState.hasMoreMatches;
   }
 
   if (step.batchResult) {
@@ -949,6 +957,68 @@ describe("Second-visit regression: new-player path with sync gate block", () => 
     const hasNoRetryData = retryStoredResult.totalCount === 0;
     expect(isSyncGateBlock && hasNoRetryData).toBe(true);
     // The error message should be "temporarily unavailable" not "no ranked match history"
+  });
+
+  it("retry recovery with more stored pages restores matchesStart to recovered page length", () => {
+    const state = createDashboardState();
+    const requestId = 30;
+
+    expect(
+      applyRunSearchStepWithGuard(state, {
+        requestId,
+        currentRequestId: requestId,
+        accountPuuid: "puuid-retry",
+        storedResult: { totalCount: 0, matchIds: [], hasMore: false },
+      })
+    ).toBe(true);
+
+    expect(
+      applyRunSearchStepWithGuard(state, {
+        requestId,
+        currentRequestId: requestId,
+        gateResult: null,
+        retryStoredResult: {
+          totalCount: 45,
+          matchIds: Array.from({ length: 20 }, (_, index) => `retry-match-${index + 1}`),
+          hasMore: true,
+        },
+        retryPaginationState: {
+          matchesStart: 20,
+          hasMoreMatches: true,
+        },
+      })
+    ).toBe(true);
+
+    expect(state.matchesData).toHaveLength(20);
+    expect(state.loadedDbMatches).toBe(20);
+    expect(state.totalDbMatches).toBe(45);
+    expect(state.hasMoreDbMatches).toBe(true);
+    expect(state.allDbMatchesLoaded).toBe(false);
+    expect(state.matchesStart).toBe(20);
+    expect(state.hasMoreMatches).toBe(true);
+  });
+
+  it("next DB pagination request after retry recovery starts from recovered page length without duplicating page one", () => {
+    const recoveredMatches = Array.from({ length: 20 }, (_, index) => `retry-match-${index + 1}`);
+    const state = createDashboardState();
+    state.matchesData = recoveredMatches;
+    state.loadedDbMatches = recoveredMatches.length;
+    state.totalDbMatches = 45;
+    state.hasMoreDbMatches = true;
+    state.allDbMatchesLoaded = false;
+    state.matchesStart = recoveredMatches.length;
+    state.hasMoreMatches = true;
+
+    const nextOffset = state.loadedDbMatches;
+    const fetchedPageTwo = Array.from({ length: 20 }, (_, index) => `retry-match-${index + 21}`);
+    const dedupedMerged = [...state.matchesData, ...fetchedPageTwo.filter((id) => !state.matchesData.includes(id))];
+
+    expect(nextOffset).toBe(20);
+    expect(nextOffset).not.toBe(0);
+    expect(dedupedMerged).toHaveLength(40);
+    expect(new Set(dedupedMerged).size).toBe(40);
+    expect(dedupedMerged.slice(0, 3)).toEqual(["retry-match-1", "retry-match-2", "retry-match-3"]);
+    expect(dedupedMerged.slice(-3)).toEqual(["retry-match-38", "retry-match-39", "retry-match-40"]);
   });
 });
 
