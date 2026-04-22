@@ -89,6 +89,7 @@ function rowToMatchSummary(row: PlayerMatchRow): MatchSummary {
 
 /**
  * Get paginated precomputed matches for a player, ordered by game time (newest first).
+ * Uses COUNT(*) OVER() window function to get total count in a single query.
  */
 export async function getPlayerMatchesPaginated(
   puuid: string,
@@ -98,21 +99,16 @@ export async function getPlayerMatchesPaginated(
   try {
     const sql = getSql();
 
-    const [rows, countResult] = await Promise.all([
-      sql`
-        SELECT * FROM player_matches
-        WHERE puuid = ${puuid} AND is_remake = false
-        ORDER BY game_creation DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `,
-      sql`
-        SELECT COUNT(*)::int AS count FROM player_matches
-        WHERE puuid = ${puuid} AND is_remake = false
-      `,
-    ]);
+    const rows = await sql`
+      SELECT *, COUNT(*) OVER()::int AS total_count FROM player_matches
+      WHERE puuid = ${puuid} AND is_remake = false
+      ORDER BY game_creation DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
 
-    const matches = (rows as PlayerMatchRow[]).map(rowToMatchSummary);
-    const totalCount = (countResult as [{ count: number }])[0]?.count ?? 0;
+    const typedRows = rows as (PlayerMatchRow & { total_count: number })[];
+    const totalCount = typedRows[0]?.total_count ?? 0;
+    const matches = typedRows.map(rowToMatchSummary);
     const hasMore = offset + matches.length < totalCount;
 
     return { matches, totalCount, hasMore };
