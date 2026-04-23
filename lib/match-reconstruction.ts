@@ -23,12 +23,17 @@ function formatPlayedAt(gameCreation: number | undefined): string {
     return "Played time unavailable";
   }
 
+  const playedDate = new Date(gameCreation);
+  if (Number.isNaN(playedDate.getTime())) {
+    return "Played time unavailable";
+  }
+
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  }).format(new Date(gameCreation));
+  }).format(playedDate);
 }
 
 function formatRole(teamPosition: string | undefined): string {
