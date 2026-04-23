@@ -1,0 +1,90 @@
+{
+  "milestone": "sync-gate-followup",
+  "surface": "browser",
+  "status": "blocked",
+  "assertionsTested": [],
+  "passedAssertions": [],
+  "failedAssertions": [],
+  "blockedAssertions": [
+    {
+      "id": "VAL-SYNC-001",
+      "blockedBy": "Live sync-gate validation requires DB-backed player_sync_metadata/player_matches state, but the current environment cannot resolve the configured Neon/Supabase host."
+    },
+    {
+      "id": "VAL-SYNC-002",
+      "blockedBy": "Live sync-gate validation requires DB-backed player_sync_metadata/player_matches state, but the current environment cannot resolve the configured Neon/Supabase host."
+    },
+    {
+      "id": "VAL-SYNC-003",
+      "blockedBy": "Live sync-gate validation requires DB-backed player_sync_metadata/player_matches state, but the current environment cannot resolve the configured Neon/Supabase host."
+    },
+    {
+      "id": "VAL-SYNC-004",
+      "blockedBy": "Direct fresh-window HTTP validation needs real sync metadata. The validation fixture bypasses the gate, and DB-backed metadata reads are failing."
+    },
+    {
+      "id": "VAL-SYNC-005",
+      "blockedBy": "Allow-path validation for stale/expired players needs real sync metadata and Riot-bound routes backed by working DB state."
+    },
+    {
+      "id": "VAL-SYNC-006",
+      "blockedBy": "Missing-metadata-vs-stored-matches classification requires real player_matches/player_sync_metadata reads, which are unavailable due to DB host resolution failure."
+    },
+    {
+      "id": "VAL-SYNC-007",
+      "blockedBy": "New-player expired-state validation requires real stored-match absence plus sync metadata absence, which cannot be confirmed in the broken DB environment."
+    },
+    {
+      "id": "VAL-SYNC-008",
+      "blockedBy": "Fresh-window infinite-scroll proof requires trustworthy fresh sync metadata. The fixture bypasses the sync gate and cannot prove this assertion."
+    },
+    {
+      "id": "VAL-SYNC-009",
+      "blockedBy": "Stale/expired pagination proof requires real sync metadata and DB-backed exhaustion state."
+    },
+    {
+      "id": "VAL-SYNC-010",
+      "blockedBy": "POST /api/player-sync-status returns 500 because player_sync_metadata upserts cannot reach the configured database host."
+    },
+    {
+      "id": "VAL-SYNC-011",
+      "blockedBy": "Migration backfill validation requires direct database access, but the configured database host is not resolvable in this environment."
+    },
+    {
+      "id": "VAL-SYNC-012",
+      "blockedBy": "The fixture path demonstrates match-history behavior but does not exercise the real new-player DB-backed flow required for full user-testing validation."
+    },
+    {
+      "id": "VAL-SYNC-013",
+      "blockedBy": "Direct fresh-window match-performance rejection needs real sync metadata; the fixture path cannot prove it and DB-backed metadata reads are failing."
+    },
+    {
+      "id": "VAL-SYNC-014",
+      "blockedBy": "Fresh-window Load More gating requires trustworthy syncAge state from the real backend, which is unavailable with broken DB connectivity."
+    }
+  ],
+  "evidence": {
+    "environment": [
+      "C:\\Users\\bendc\\Documents\\GitHub\\Leagueback-WEBAPP\\dev-server.log",
+      "C:\\Users\\bendc\\Documents\\GitHub\\Leagueback-WEBAPP\\.factory\\library\\user-testing.md",
+      "C:\\Users\\bendc\\Documents\\GitHub\\Leagueback-WEBAPP\\lib\\validation-fixture.ts"
+    ],
+    "keyObservations": [
+      "dev-server.log shows repeated `getaddrinfo ENOTFOUND api.pooler.supabase.com` failures while `/api/player-sync-status` and `/api/player-matches/existing-ids` attempt DB access.",
+      "The validation fixture account resolves locally and serves deterministic stored matches, but `app/api/match-history/route.ts` explicitly bypasses the sync gate for the fixture puuid.",
+      "Because sync-gate-followup implementation features do not declare `fulfills`, there were no milestone-specific pending assertions to claim as newly passed from this run; the validation contract assertions most relevant to the milestone remain blocked for live user testing in this environment."
+    ]
+  },
+  "toolsUsed": [
+    "Read",
+    "Execute",
+    "Task"
+  ],
+  "frictions": [
+    "The local dev server is up on port 3005, but DB-backed sync status reads and writes fail due to host resolution errors."
+  ],
+  "blockers": [
+    "Configured database host `api.pooler.supabase.com` is not resolvable from the current environment, preventing live validation of sync-gate behavior that depends on player_sync_metadata/player_matches."
+  ],
+  "summary": "Set up and inspected the live validation environment for sync-gate-followup, confirmed the dev server is running, and verified that the deterministic Validation Fixture is available. Live user validation of sync-gate assertions is blocked because the current environment cannot resolve the configured DB host, and the fixture explicitly bypasses the server-side sync gate, so it cannot prove the required fresh/stale/expired behaviors."
+}

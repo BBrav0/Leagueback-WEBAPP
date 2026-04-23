@@ -35,3 +35,11 @@ Testing surface, required testing skills/tools, and resource cost classification
 - The dev server must be running on port 3005 before testing
 - The Validation Fixture ("Validation Fixture#LOCAL") bypasses sync gate entirely — use it for UI-only testing
 - For sync gate behavior testing, need actual player data in the DB or mock the sync status API responses
+
+## Flow Validator Guidance: browser
+
+- Use `agent-browser` with a non-default session and semantic locators only.
+- Stay on `http://localhost:3005`; do not open alternate ports.
+- The Validation Fixture (`Validation Fixture#LOCAL`) is safe for deterministic UI/runtime checks, but it bypasses server-side sync gate enforcement and does not prove DB-backed freshness behavior.
+- Current environment blocker: Neon/Supabase host resolution is failing (`api.pooler.supabase.com` ENOTFOUND in `dev-server.log`), so any flow that depends on `player_sync_metadata`, `player_matches`, or sync timestamp persistence against the real DB is not isolated enough for live validation right now.
+- If using the fixture, confine testing to route hydration, deterministic stored-match rendering, and fixture-backed match-history behavior. Do not claim fresh/stale/expired sync-gate assertions as passed from fixture-only evidence.

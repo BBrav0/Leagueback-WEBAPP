@@ -1,0 +1,79 @@
+{
+  "milestone": "sync-gate-followup",
+  "round": 1,
+  "status": "fail",
+  "assertionsSummary": {
+    "total": 14,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 14
+  },
+  "passedAssertions": [],
+  "failedAssertions": [],
+  "blockedAssertions": [
+    {
+      "id": "VAL-SYNC-001",
+      "blockedBy": "Live sync-gate validation requires DB-backed player_sync_metadata/player_matches state, but the current environment cannot resolve the configured Neon/Supabase host."
+    },
+    {
+      "id": "VAL-SYNC-002",
+      "blockedBy": "Live sync-gate validation requires DB-backed player_sync_metadata/player_matches state, but the current environment cannot resolve the configured Neon/Supabase host."
+    },
+    {
+      "id": "VAL-SYNC-003",
+      "blockedBy": "Live sync-gate validation requires DB-backed player_sync_metadata/player_matches state, but the current environment cannot resolve the configured Neon/Supabase host."
+    },
+    {
+      "id": "VAL-SYNC-004",
+      "blockedBy": "Direct fresh-window HTTP validation needs real sync metadata. The validation fixture bypasses the gate, and DB-backed metadata reads are failing."
+    },
+    {
+      "id": "VAL-SYNC-005",
+      "blockedBy": "Allow-path validation for stale/expired players needs real sync metadata and Riot-bound routes backed by working DB state."
+    },
+    {
+      "id": "VAL-SYNC-006",
+      "blockedBy": "Missing-metadata-vs-stored-matches classification requires real player_matches/player_sync_metadata reads, which are unavailable due to DB host resolution failure."
+    },
+    {
+      "id": "VAL-SYNC-007",
+      "blockedBy": "New-player expired-state validation requires real stored-match absence plus sync metadata absence, which cannot be confirmed in the broken DB environment."
+    },
+    {
+      "id": "VAL-SYNC-008",
+      "blockedBy": "Fresh-window infinite-scroll proof requires trustworthy fresh sync metadata. The fixture bypasses the sync gate and cannot prove this assertion."
+    },
+    {
+      "id": "VAL-SYNC-009",
+      "blockedBy": "Stale/expired pagination proof requires real sync metadata and DB-backed exhaustion state."
+    },
+    {
+      "id": "VAL-SYNC-010",
+      "blockedBy": "POST /api/player-sync-status returns 500 because player_sync_metadata upserts cannot reach the configured database host."
+    },
+    {
+      "id": "VAL-SYNC-011",
+      "blockedBy": "Migration backfill validation requires direct database access, but the configured database host is not resolvable in this environment."
+    },
+    {
+      "id": "VAL-SYNC-012",
+      "blockedBy": "The fixture path demonstrates match-history behavior but does not exercise the real new-player DB-backed flow required for full user-testing validation."
+    },
+    {
+      "id": "VAL-SYNC-013",
+      "blockedBy": "Direct fresh-window match-performance rejection needs real sync metadata; the fixture path cannot prove it and DB-backed metadata reads are failing."
+    },
+    {
+      "id": "VAL-SYNC-014",
+      "blockedBy": "Fresh-window Load More gating requires trustworthy syncAge state from the real backend, which is unavailable with broken DB connectivity."
+    }
+  ],
+  "appliedUpdates": [
+    {
+      "target": "user-testing.md",
+      "description": "Added browser flow-validator guidance documenting that the validation fixture bypasses the sync gate and that the current environment has a DB host-resolution blocker.",
+      "source": "setup"
+    }
+  ],
+  "previousRound": null
+}
