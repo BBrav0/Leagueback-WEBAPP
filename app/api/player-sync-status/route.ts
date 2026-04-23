@@ -69,11 +69,11 @@ export async function POST(request: NextRequest) {
       last_known_account_tag_line: existing?.last_known_account_tag_line ?? null,
       derivation_version: existing?.derivation_version ?? null,
       last_stale_derived_refresh_at: existing?.last_stale_derived_refresh_at instanceof Date
-        ? existing.last_stale_derived_refresh_at.toISOString()
-        : (existing?.last_stale_derived_refresh_at ?? null),
+        ? serializeLastSyncAt(existing.last_stale_derived_refresh_at)
+        : serializeLastSyncAt(existing?.last_stale_derived_refresh_at),
       last_full_refresh_at: existing?.last_full_refresh_at instanceof Date
-        ? existing.last_full_refresh_at.toISOString()
-        : (existing?.last_full_refresh_at ?? null),
+        ? serializeLastSyncAt(existing.last_full_refresh_at)
+        : serializeLastSyncAt(existing?.last_full_refresh_at),
       last_riot_sync_at: now,
       notes: existing?.notes ?? {},
     });
