@@ -70,6 +70,8 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 
+const MAX_STORED_MATCHES_PER_PLAYER = 25;
+
 
 const chartConfig = {
   yourImpact: {
@@ -1358,6 +1360,10 @@ export default function Component() {
   const handleLoadMore = async () => {
     if (!currentPuuid || loadingMore || !allDbMatchesLoaded) return;
     if (syncAge === "fresh") return;
+    if (matchesDataRef.current.length >= MAX_STORED_MATCHES_PER_PLAYER) {
+      setHasMoreMatches(false);
+      return;
+    }
 
     // Check rate limit and COUNT this request (hits Riot API)
     const rateLimitCheck = rateLimiter.checkRateLimit();
@@ -1383,13 +1389,16 @@ export default function Component() {
         return;
       }
 
-      const merged = mergeMatchesInLoadedOrder(matchesDataRef.current, result.matches);
+      const merged = mergeMatchesInLoadedOrder(matchesDataRef.current, result.matches).slice(
+        0,
+        MAX_STORED_MATCHES_PER_PLAYER
+      );
       setMatchesData(merged);
 
       // Newly fetched matches are stored in DB by match-performance route
-      setTotalDbMatches(prev => prev + result.matches.filter((match) =>
+      setTotalDbMatches(prev => Math.min(MAX_STORED_MATCHES_PER_PLAYER, prev + result.matches.filter((match) =>
         !matchesDataRef.current.some((existing) => existing.id === match.id)
-      ).length);
+      ).length));
 
       if (currentPuuid === VALIDATION_FIXTURE_ACCOUNT.puuid) {
         setImpactCounts(deriveImpactCountsFromMatches(merged).pie);
@@ -1398,9 +1407,13 @@ export default function Component() {
         await syncImpactStats(currentPuuid, merged);
       }
 
-      // Check if API has more
-      const apiHasMore = await BackendBridge.checkApiHasMore(currentPuuid, result.nextStart);
-      setHasMoreMatches(apiHasMore);
+      // Respect hard retention cap in UI as well as DB.
+      if (merged.length >= MAX_STORED_MATCHES_PER_PLAYER) {
+        setHasMoreMatches(false);
+      } else {
+        const apiHasMore = await BackendBridge.checkApiHasMore(currentPuuid, result.nextStart);
+        setHasMoreMatches(apiHasMore);
+      }
       setMatchesStart(result.nextStart);
 
       setRateLimitStatus({
