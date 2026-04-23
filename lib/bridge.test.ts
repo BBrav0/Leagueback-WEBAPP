@@ -207,6 +207,8 @@ describe("BackendBridge", () => {
       failedAnalyzeAttempts: 0,
       refreshedStaleCount: 0,
       failedStaleRefreshAttempts: 0,
+      hasMoreToSync: false,
+      exhaustedSyncBudget: false,
     });
   });
 
@@ -260,6 +262,8 @@ describe("BackendBridge", () => {
       failedAnalyzeAttempts: 0,
       refreshedStaleCount: 0,
       failedStaleRefreshAttempts: 0,
+      hasMoreToSync: false,
+      exhaustedSyncBudget: false,
     });
     expect(analyze).toHaveBeenCalledTimes(1);
     expect(analyze).toHaveBeenCalledWith("missing-recent", "p1");
@@ -319,6 +323,8 @@ describe("BackendBridge", () => {
       failedAnalyzeAttempts: 0,
       refreshedStaleCount: 1,
       failedStaleRefreshAttempts: 0,
+      hasMoreToSync: false,
+      exhaustedSyncBudget: false,
     });
     expect(staleLookup).toHaveBeenCalledWith(
       "http://127.0.0.1/api/player-matches/stale-ids",
@@ -354,6 +360,27 @@ describe("BackendBridge", () => {
     expect(analyze).toHaveBeenCalledTimes(2);
     expect(analyze).toHaveBeenNthCalledWith(1, "stale-a", "p1");
     expect(analyze).toHaveBeenNthCalledWith(2, "stale-b", "p1");
+  });
+
+  it("syncNewHeadMatchesFromRiot returns continuation flags when analyze budget is exhausted", async () => {
+    vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue(["new1", "new2", "new3", "new4"]);
+    vi.spyOn(BackendBridge, "fetchExistingMatchIdsForPlayer").mockResolvedValue(new Set());
+    const analyze = vi
+      .spyOn(BackendBridge, "analyzeMatchPerformance")
+      .mockResolvedValue({ success: true, matchSummary: sampleMatch });
+
+    const result = await BackendBridge.syncNewHeadMatchesFromRiot("p1", 10, {
+      recentWindowSize: 4,
+      analyzeDelayMs: 0,
+      maxAnalyzePerInvocation: 2,
+      maxSyncRounds: 1,
+      maxWindowFetches: 1,
+    });
+
+    expect(result.analyzedCount).toBe(2);
+    expect(result.hasMoreToSync).toBe(true);
+    expect(result.exhaustedSyncBudget).toBe(true);
+    expect(analyze).toHaveBeenCalledTimes(2);
   });
 
   describe("server 429 sync gate handling", () => {

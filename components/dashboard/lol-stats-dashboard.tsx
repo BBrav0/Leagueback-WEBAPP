@@ -1172,8 +1172,10 @@ export default function Component() {
         {
           recentWindowSize: recentSyncWindowSize,
           windowSize: recentSyncWindowSize,
-          analyzeDelayMs: 1500,
-          maxSyncRounds: 12,
+          analyzeDelayMs: 0,
+          maxSyncRounds: 2,
+          maxAnalyzePerInvocation: 4,
+          maxWindowFetches: 2,
         }
       );
 
@@ -1204,11 +1206,16 @@ export default function Component() {
 
         if (!refreshed.hasMore) {
           setAllDbMatchesLoaded(true);
-          const more = await BackendBridge.checkApiHasMore(
-            currentPuuid,
-            refreshed.totalCount
-          );
-          setHasMoreMatches(more);
+          if (syncResult.hasMoreToSync) {
+            // We still have known sync work remaining, so avoid additional Riot probe calls.
+            setHasMoreMatches(true);
+          } else {
+            const more = await BackendBridge.checkApiHasMore(
+              currentPuuid,
+              refreshed.totalCount
+            );
+            setHasMoreMatches(more);
+          }
           setMatchesStart(refreshed.totalCount);
         } else {
           setAllDbMatchesLoaded(false);
@@ -1217,6 +1224,12 @@ export default function Component() {
         if (currentPuuid !== VALIDATION_FIXTURE_ACCOUNT.puuid) {
           await syncImpactStats(currentPuuid, refreshed.matches);
         }
+      }
+
+      if (syncResult.hasMoreToSync) {
+        setUpdateError(
+          "Partial update complete. Click Update now again to continue syncing recent matches."
+        );
       }
     } catch (err) {
       console.error("Manual update failed:", err);

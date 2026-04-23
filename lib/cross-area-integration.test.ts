@@ -390,6 +390,27 @@ describe("VAL-CROSS-002: Stale manual update — full flow from click to fresh s
 
     vi.unstubAllGlobals();
   });
+
+  it("chunked manual update exposes continuation state for one-click partial UX", async () => {
+    vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue(["new1", "new2", "new3"]);
+    vi.spyOn(BackendBridge, "fetchExistingMatchIdsForPlayer").mockResolvedValue(new Set());
+    vi.spyOn(BackendBridge, "analyzeMatchPerformance").mockResolvedValue({
+      success: true,
+      matchSummary: sampleMatch,
+    });
+
+    const syncResult = await BackendBridge.syncNewHeadMatchesFromRiot("p1", 12, {
+      recentWindowSize: 3,
+      analyzeDelayMs: 0,
+      maxAnalyzePerInvocation: 1,
+      maxSyncRounds: 1,
+      maxWindowFetches: 1,
+    });
+
+    expect(syncResult.analyzedCount).toBe(1);
+    expect(syncResult.hasMoreToSync).toBe(true);
+    expect(syncResult.exhaustedSyncBudget).toBe(true);
+  });
 });
 
 // ─── VAL-CROSS-003: Expired auto-sync then scroll — no double API calls ───

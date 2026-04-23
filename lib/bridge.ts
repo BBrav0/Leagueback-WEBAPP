@@ -276,6 +276,10 @@ export class BackendBridge {
       /** Delay between each match-performance call (rate limiting). */
       analyzeDelayMs?: number;
       maxSyncRounds?: number;
+      /** Max match-performance calls in this invocation. */
+      maxAnalyzePerInvocation?: number;
+      /** Max additional Riot windows fetched after recent-window reconciliation. */
+      maxWindowFetches?: number;
     }
   ): Promise<{
     analyzedCount: number;
@@ -288,11 +292,21 @@ export class BackendBridge {
     failedAnalyzeAttempts: number;
     refreshedStaleCount: number;
     failedStaleRefreshAttempts: number;
+    hasMoreToSync: boolean;
+    exhaustedSyncBudget: boolean;
   }> {
     const recentWindowSize = Math.max(options.recentWindowSize, 1);
     const windowSize = Math.max(options.windowSize ?? recentWindowSize, recentWindowSize);
     const analyzeDelayMs = options.analyzeDelayMs ?? 1500;
     const maxSyncRounds = options.maxSyncRounds ?? 12;
+    const maxAnalyzePerInvocation = Math.max(
+      1,
+      Math.floor(options.maxAnalyzePerInvocation ?? Number.MAX_SAFE_INTEGER)
+    );
+    const maxWindowFetches = Math.max(
+      1,
+      Math.floor(options.maxWindowFetches ?? maxSyncRounds)
+    );
 
     if (storedTotalCount === 0) {
       return {
@@ -303,6 +317,8 @@ export class BackendBridge {
         failedAnalyzeAttempts: 0,
         refreshedStaleCount: 0,
         failedStaleRefreshAttempts: 0,
+        hasMoreToSync: false,
+        exhaustedSyncBudget: false,
       };
     }
 
@@ -316,6 +332,8 @@ export class BackendBridge {
         failedAnalyzeAttempts: 0,
         refreshedStaleCount: 0,
         failedStaleRefreshAttempts: 0,
+        hasMoreToSync: false,
+        exhaustedSyncBudget: false,
       };
     }
 
@@ -338,15 +356,26 @@ export class BackendBridge {
         failedAnalyzeAttempts: 0,
         refreshedStaleCount: 0,
         failedStaleRefreshAttempts: 0,
+        hasMoreToSync: false,
+        exhaustedSyncBudget: false,
       };
     }
 
     let analyzedCount = 0;
     let failedAnalyzeAttempts = 0;
+    let remainingAnalyzeBudget = maxAnalyzePerInvocation;
+    let remainingWindowFetches = maxWindowFetches;
+    let hasMoreToSync = false;
+    let exhaustedSyncBudget = false;
     let listOffset = recentRiotMatchIds.length;
     let syncMetadata: { recentMatchWindow: number } | undefined;
 
     for (let i = 0; i < missingRecentMatchIds.length; i++) {
+      if (remainingAnalyzeBudget <= 0) {
+        exhaustedSyncBudget = true;
+        hasMoreToSync = true;
+        break;
+      }
       const matchId = missingRecentMatchIds[i];
       const analysis = await this.analyzeMatchPerformance(matchId, puuid);
       if (analysis?.success && analysis.matchSummary) {
@@ -355,12 +384,20 @@ export class BackendBridge {
       } else {
         failedAnalyzeAttempts++;
       }
+      remainingAnalyzeBudget--;
       if (i < missingRecentMatchIds.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, analyzeDelayMs));
+        if (analyzeDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, analyzeDelayMs));
+        }
       }
     }
 
     for (let i = 0; i < staleRecentMatchIds.length; i++) {
+      if (remainingAnalyzeBudget <= 0) {
+        exhaustedSyncBudget = true;
+        hasMoreToSync = true;
+        break;
+      }
       const matchId = staleRecentMatchIds[i];
       const analysis = await this.analyzeMatchPerformance(matchId, puuid);
       if (analysis?.success && analysis.matchSummary) {
@@ -369,12 +406,27 @@ export class BackendBridge {
       } else {
         failedStaleRefreshAttempts++;
       }
+      remainingAnalyzeBudget--;
       if (i < staleRecentMatchIds.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, analyzeDelayMs));
+        if (analyzeDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, analyzeDelayMs));
+        }
       }
     }
 
-    for (let round = 0; round < maxSyncRounds; round++) {
+    if (missingRecentMatchIds.length > 0 && analyzedCount < missingRecentMatchIds.length) {
+      hasMoreToSync = true;
+    }
+    if (staleRecentMatchIds.length > 0 && refreshedStaleCount < staleRecentMatchIds.length) {
+      hasMoreToSync = true;
+    }
+
+    for (
+      let round = 0;
+      round < maxSyncRounds && remainingWindowFetches > 0 && remainingAnalyzeBudget > 0;
+      round++
+    ) {
+      remainingWindowFetches--;
       const windowIds = await this.getMatchHistory(puuid, windowSize, listOffset);
       if (!windowIds || windowIds.length === 0) {
         break;
@@ -385,7 +437,16 @@ export class BackendBridge {
       const toAnalyze =
         anchorIdx === -1 ? windowIds : windowIds.slice(0, anchorIdx);
 
+      if (toAnalyze.length > remainingAnalyzeBudget) {
+        hasMoreToSync = true;
+      }
+
       for (let i = 0; i < toAnalyze.length; i++) {
+        if (remainingAnalyzeBudget <= 0) {
+          exhaustedSyncBudget = true;
+          hasMoreToSync = true;
+          break;
+        }
         const matchId = toAnalyze[i];
         const analysis = await this.analyzeMatchPerformance(matchId, puuid);
         if (analysis?.success && analysis.matchSummary) {
@@ -394,9 +455,17 @@ export class BackendBridge {
         } else {
           failedAnalyzeAttempts++;
         }
+        remainingAnalyzeBudget--;
         if (i < toAnalyze.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, analyzeDelayMs));
+          if (analyzeDelayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, analyzeDelayMs));
+          }
         }
+      }
+
+      if (remainingAnalyzeBudget <= 0) {
+        exhaustedSyncBudget = true;
+        break;
       }
 
       if (anchorIdx !== -1) {
@@ -408,6 +477,14 @@ export class BackendBridge {
       listOffset += windowIds.length;
     }
 
+    if (remainingAnalyzeBudget <= 0) {
+      exhaustedSyncBudget = true;
+      hasMoreToSync = true;
+    } else if (remainingWindowFetches <= 0) {
+      exhaustedSyncBudget = true;
+      hasMoreToSync = true;
+    }
+
     return {
       analyzedCount,
       skippedAlreadyFresh: false,
@@ -416,6 +493,8 @@ export class BackendBridge {
       failedAnalyzeAttempts,
       refreshedStaleCount,
       failedStaleRefreshAttempts,
+      hasMoreToSync,
+      exhaustedSyncBudget,
     };
   }
 
