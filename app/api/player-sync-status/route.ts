@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPlayerSyncMetadata, upsertPlayerSyncMetadata } from "@/lib/database-queries";
 
+function serializeLastSyncAt(lastSyncAt: string | Date | null | undefined): string | null {
+  if (!lastSyncAt) return null;
+  const parsed = lastSyncAt instanceof Date ? lastSyncAt : new Date(lastSyncAt);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const puuid = searchParams.get("puuid");
@@ -14,9 +20,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const metadata = await getPlayerSyncMetadata(puuid);
-    const lastSyncAt = metadata?.last_riot_sync_at;
-    const serialized = lastSyncAt instanceof Date ? lastSyncAt.toISOString() : (lastSyncAt ?? null);
-    return NextResponse.json({ lastSyncAt: serialized });
+    return NextResponse.json({ lastSyncAt: serializeLastSyncAt(metadata?.last_riot_sync_at) });
   } catch (error) {
     console.error("Error fetching player sync status:", error);
     return NextResponse.json(

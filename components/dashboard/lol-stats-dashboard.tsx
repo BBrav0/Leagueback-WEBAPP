@@ -132,6 +132,11 @@ function parsePlayerFromUrl(pathname: string, hash: string): { gameName: string;
   };
 }
 
+function getRenderableLastSyncAt(lastSyncAt: string | null | undefined): string | null {
+  if (!lastSyncAt) return null;
+  return Number.isNaN(new Date(lastSyncAt).getTime()) ? null : lastSyncAt;
+}
+
 /**
  * Single module-level element so Recharts `content` prop keeps a stable reference.
  * Safe only while ChartTooltipContent stays stateless; if it later needs context
@@ -1384,16 +1389,17 @@ export default function Component() {
     if (!hasSearched || lastSyncAt === undefined) return;
 
     const tick = () => {
+      const renderableLastSyncAt = getRenderableLastSyncAt(lastSyncAt);
       // Update the "Last updated X ago" text
-      if (lastSyncAt) {
-        setSyncAgeText(`Last updated ${formatSyncAge(lastSyncAt)}`);
+      if (renderableLastSyncAt) {
+        setSyncAgeText(`Last updated ${formatSyncAge(renderableLastSyncAt)}`);
       } else {
         setSyncAgeText("Never updated");
       }
 
       // Update countdown when fresh
-      if (syncAge === "fresh" && lastSyncAt) {
-        const remaining = computeCountdownRemaining(lastSyncAt);
+      if (syncAge === "fresh" && renderableLastSyncAt) {
+        const remaining = computeCountdownRemaining(renderableLastSyncAt);
         setCountdownRemaining(remaining);
 
         // Auto-transition: if countdown expired, switch to stale
@@ -1661,7 +1667,7 @@ export default function Component() {
         {hasSearched && !loading && lastSyncAt !== undefined && (
           <div className="flex items-center justify-between rounded-lg border border-slate-700/60 bg-slate-800/50 px-4 py-3 text-sm text-slate-400">
             <span>
-              {syncAgeText ?? (lastSyncAt ? `Last updated ${formatSyncAge(lastSyncAt)}` : "Never updated")}
+              {syncAgeText ?? (getRenderableLastSyncAt(lastSyncAt) ? `Last updated ${formatSyncAge(getRenderableLastSyncAt(lastSyncAt))}` : "Never updated")}
             </span>
             <div className="flex items-center gap-3">
               {/* Expired + auto-updating: show "Updating..." with no button */}

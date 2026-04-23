@@ -137,6 +137,22 @@ describe("formatSyncAge", () => {
     const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
     expect(formatSyncAge(threeDaysAgo)).toBe("3 days ago");
   });
+
+  it("returns 'Never updated' for null", () => {
+    expect(formatSyncAge(null)).toBe("Never updated");
+  });
+
+  it("returns 'Never updated' for undefined", () => {
+    expect(formatSyncAge(undefined)).toBe("Never updated");
+  });
+
+  it("returns 'Never updated' for an invalid date string", () => {
+    expect(formatSyncAge("not-a-date")).toBe("Never updated");
+  });
+
+  it("returns 'Never updated' for an invalid Date object", () => {
+    expect(formatSyncAge(new Date("invalid"))).toBe("Never updated");
+  });
 });
 
 /**

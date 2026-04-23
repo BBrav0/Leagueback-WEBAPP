@@ -12,18 +12,25 @@ export type SyncAge = "fresh" | "stale" | "expired";
 const THIRTY_MINUTES = 30 * 60 * 1000;
 const ONE_DAY = 24 * 60 * 60 * 1000;
 
-export function computeSyncAge(lastSyncAt: string | Date | null | undefined): SyncAge {
-  if (!lastSyncAt) return "expired";
+function getSyncTimestamp(lastSyncAt: string | Date | null | undefined): number | null {
+  if (!lastSyncAt) return null;
   const ts = lastSyncAt instanceof Date ? lastSyncAt.getTime() : new Date(lastSyncAt).getTime();
-  if (isNaN(ts)) return "expired";
+  return Number.isNaN(ts) ? null : ts;
+}
+
+export function computeSyncAge(lastSyncAt: string | Date | null | undefined): SyncAge {
+  const ts = getSyncTimestamp(lastSyncAt);
+  if (ts === null) return "expired";
   const ageMs = Date.now() - ts;
   if (ageMs < THIRTY_MINUTES) return "fresh";
   if (ageMs < ONE_DAY) return "stale";
   return "expired";
 }
 
-export function formatSyncAge(lastSyncAt: string): string {
-  const ageMs = Date.now() - new Date(lastSyncAt).getTime();
+export function formatSyncAge(lastSyncAt: string | Date | null | undefined): string {
+  const ts = getSyncTimestamp(lastSyncAt);
+  if (ts === null) return "Never updated";
+  const ageMs = Date.now() - ts;
   const seconds = Math.floor(ageMs / 1000);
   if (seconds < 60) return "just now";
   const minutes = Math.floor(seconds / 60);
@@ -39,9 +46,8 @@ export function formatSyncAge(lastSyncAt: string): string {
  * Returns 0 if the fresh window has already elapsed (or lastSyncAt is null/invalid).
  */
 export function computeCountdownRemaining(lastSyncAt: string | Date | null | undefined): number {
-  if (!lastSyncAt) return 0;
-  const ts = lastSyncAt instanceof Date ? lastSyncAt.getTime() : new Date(lastSyncAt).getTime();
-  if (isNaN(ts)) return 0;
+  const ts = getSyncTimestamp(lastSyncAt);
+  if (ts === null) return 0;
   const elapsed = Date.now() - ts;
   const remaining = THIRTY_MINUTES - elapsed;
   return Math.max(0, remaining);

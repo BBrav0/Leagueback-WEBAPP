@@ -483,6 +483,38 @@ describe("saved lookup Riot ID normalization regressions", () => {
   });
 });
 
+describe("invalid sync timestamp regression", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-22T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("invalid sync status timestamps degrade to a safe fallback instead of crashing profile rendering", () => {
+    const invalidLastSyncAt = "definitely-not-a-date";
+
+    expect(() => formatSyncAge(invalidLastSyncAt)).not.toThrow();
+    expect(formatSyncAge(invalidLastSyncAt)).toBe("Never updated");
+    expect(computeSyncAge(invalidLastSyncAt)).toBe("expired");
+    expect(computeCountdownRemaining(invalidLastSyncAt)).toBe(0);
+
+    const syncStatusLabel = invalidLastSyncAt
+      ? `Last updated ${formatSyncAge(invalidLastSyncAt)}`
+      : "Never updated";
+
+    expect(syncStatusLabel).toBe("Last updated Never updated");
+
+    const dashboardFallbackLabel = Number.isNaN(new Date(invalidLastSyncAt).getTime())
+      ? "Never updated"
+      : syncStatusLabel;
+
+    expect(dashboardFallbackLabel).toBe("Never updated");
+  });
+});
+
 // ─── VAL-CROSS-004: Sync timestamp persists across page refresh ────────────
 
 describe("VAL-CROSS-004: Sync timestamp persists across page refresh", () => {
