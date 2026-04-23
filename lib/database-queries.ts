@@ -98,35 +98,24 @@ export async function getPlayerMatchesPaginated(
   limit: number = 20,
   offset: number = 0
 ): Promise<{ matches: MatchSummary[]; totalCount: number; hasMore: boolean }> {
-  try {
-    const sql = getSql();
+  const sql = getSql();
 
-    // Use .query() with explicit $N parameters to avoid LIMIT/OFFSET
-    // type-inference issues on the Neon HTTP driver (Cloudflare Workers).
-    const rows = await sql.query(
-      `SELECT *, COUNT(*) OVER()::int AS total_count FROM player_matches
-       WHERE puuid = $1 AND is_remake = false
-       ORDER BY game_creation DESC
-       LIMIT $2 OFFSET $3`,
-      [puuid, limit, offset]
-    );
+  // Use .query() with explicit $N parameters to avoid LIMIT/OFFSET
+  // type-inference issues on the Neon HTTP driver (Cloudflare Workers).
+  const rows = await sql.query(
+    `SELECT *, COUNT(*) OVER()::int AS total_count FROM player_matches
+     WHERE puuid = $1 AND is_remake = false
+     ORDER BY game_creation DESC
+     LIMIT $2 OFFSET $3`,
+    [puuid, limit, offset]
+  );
 
-    const typedRows = rows as (PlayerMatchRow & { total_count: number })[];
-    const totalCount = typedRows[0]?.total_count ?? 0;
-    const matches = typedRows.map(rowToMatchSummary);
-    const hasMore = offset + matches.length < totalCount;
+  const typedRows = rows as (PlayerMatchRow & { total_count: number })[];
+  const totalCount = typedRows[0]?.total_count ?? 0;
+  const matches = typedRows.map(rowToMatchSummary);
+  const hasMore = offset + matches.length < totalCount;
 
-    return { matches, totalCount, hasMore };
-  } catch (error) {
-    console.error("Error fetching player matches:", error, {
-      puuid,
-      limit,
-      offset,
-      errorMessage: error instanceof Error ? error.message : String(error),
-      errorStack: error instanceof Error ? error.stack : undefined,
-    });
-    return { matches: [], totalCount: 0, hasMore: false };
-  }
+  return { matches, totalCount, hasMore };
 }
 
 /**

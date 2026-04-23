@@ -99,6 +99,28 @@ describe("BackendBridge", () => {
     errorSpy.mockRestore();
   });
 
+  it("getStoredMatches preserves a real empty-history success response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        matches: [],
+        totalCount: 0,
+        hasMore: false,
+        readFailed: false,
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await BackendBridge.getStoredMatches("p1", 20, 0);
+    expect(result).toEqual({
+      matches: [],
+      totalCount: 0,
+      hasMore: false,
+      readFailed: false,
+      error: undefined,
+    });
+  });
+
   it("checkApiHasMore returns true when one id exists", async () => {
     vi.spyOn(BackendBridge, "getMatchHistory").mockResolvedValue(["m1"]);
     const hasMore = await BackendBridge.checkApiHasMore("p1", 0);

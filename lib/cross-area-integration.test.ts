@@ -1020,6 +1020,23 @@ describe("Second-visit regression: new-player path with sync gate block", () => 
     expect(classification).toBe("stored-read-failure");
   });
 
+  it("classifies explicit stored read failures separately from genuine empty history", () => {
+    const readFailureClassification = classifyFreshSyncEmptyStoredRead({
+      syncAge: "stale",
+      initialStoredTotalCount: 0,
+      storedReadFailed: true,
+    });
+    const emptyHistoryClassification = classifyFreshSyncEmptyStoredRead({
+      syncAge: "expired",
+      initialStoredTotalCount: 0,
+      storedReadFailed: false,
+      gateResult: false,
+    });
+
+    expect(readFailureClassification).toBe("stored-read-failure");
+    expect(emptyHistoryClassification).toBe("no-ranked-history");
+  });
+
   it("retry recovery with more stored pages restores matchesStart to recovered page length", () => {
     const state = createDashboardState();
     const requestId = 30;

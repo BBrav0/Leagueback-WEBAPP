@@ -88,4 +88,12 @@ describe("getPlayerMatchesPaginated", () => {
     expect(result.matches[0]?.rank).toBeNull();
     expect(result.matches[0]?.rankLabel).toBe("Current rank snapshot unavailable");
   });
+
+  it("surfaces database query failures instead of masking them as empty history", async () => {
+    mockQuery.mockRejectedValueOnce(new Error("db exploded"));
+
+    const { getPlayerMatchesPaginated } = await import("./database-queries");
+
+    await expect(getPlayerMatchesPaginated("puuid-1", 20, 0)).rejects.toThrow("db exploded");
+  });
 });
