@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlayerMatchRow } from "./database-queries";
 
 // Mock the Neon module to control what sql template/query calls return
@@ -10,6 +10,10 @@ vi.mock("./neon", () => ({
 }));
 
 describe("getPlayerMatchesPaginated", () => {
+  beforeEach(() => {
+    mockQuery.mockReset();
+    mockSql.mockReset();
+  });
   it("preserves stored role and damage metadata from player_matches rows", async () => {
     // getPlayerMatchesPaginated uses .query() with COUNT(*) OVER()
     // total_count is embedded in each row via the window function
@@ -95,5 +99,33 @@ describe("getPlayerMatchesPaginated", () => {
     const { getPlayerMatchesPaginated } = await import("./database-queries");
 
     await expect(getPlayerMatchesPaginated("puuid-1", 20, 0)).rejects.toThrow("db exploded");
+  });
+});
+
+describe("player_matches retention pruning", () => {
+  beforeEach(() => {
+    mockQuery.mockReset();
+    mockSql.mockReset();
+  });
+
+  it("prunePlayerMatchesToLimit issues deterministic delete query with requested retain count", async () => {
+    mockQuery.mockResolvedValueOnce([]);
+    const { prunePlayerMatchesToLimit } = await import("./database-queries");
+
+    const result = await prunePlayerMatchesToLimit("puuid-prune", 25);
+
+    expect(result).toBeNull();
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+    expect(String(mockQuery.mock.calls[0]?.[0])).toContain("DELETE FROM player_matches");
+    expect(mockQuery.mock.calls[0]?.[1]).toEqual(["puuid-prune", 25]);
+  });
+
+  it("prunePlayerMatchesToLimit returns an error when query fails", async () => {
+    mockQuery.mockRejectedValueOnce(new Error("prune failed"));
+    const { prunePlayerMatchesToLimit } = await import("./database-queries");
+
+    const result = await prunePlayerMatchesToLimit("puuid-prune", 25);
+
+    expect(result).toBe("prune failed");
   });
 });

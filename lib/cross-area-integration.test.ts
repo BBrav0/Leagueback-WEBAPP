@@ -403,13 +403,14 @@ describe("VAL-CROSS-002: Stale manual update — full flow from click to fresh s
       recentWindowSize: 3,
       analyzeDelayMs: 0,
       maxAnalyzePerInvocation: 1,
-      maxSyncRounds: 1,
       maxWindowFetches: 1,
     });
 
     expect(syncResult.analyzedCount).toBe(1);
     expect(syncResult.hasMoreToSync).toBe(true);
-    expect(syncResult.exhaustedSyncBudget).toBe(true);
+    expect(syncResult.reachedAnalyzeLimit).toBe(true);
+    expect(syncResult.anchorFound).toBe(false);
+    expect(syncResult.nextHistoryStart).toBe(0);
   });
 });
 

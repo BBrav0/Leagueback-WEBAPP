@@ -207,8 +207,10 @@ describe("BackendBridge", () => {
       failedAnalyzeAttempts: 0,
       refreshedStaleCount: 0,
       failedStaleRefreshAttempts: 0,
+      anchorFound: false,
+      nextHistoryStart: null,
       hasMoreToSync: false,
-      exhaustedSyncBudget: false,
+      reachedAnalyzeLimit: false,
     });
   });
 
@@ -238,7 +240,7 @@ describe("BackendBridge", () => {
     expect(analyze).not.toHaveBeenCalled();
   });
 
-  it("syncNewHeadMatchesFromRiot reconciles missing recent matches even when the latest Riot head already exists in DB", async () => {
+  it("syncNewHeadMatchesFromRiot stops immediately when the latest Riot head is already anchored in DB", async () => {
     vi.spyOn(BackendBridge, "getMatchHistory")
       .mockResolvedValueOnce(["head", "missing-recent", "anchor"])
       .mockResolvedValueOnce(["older-anchor"]);
@@ -256,17 +258,19 @@ describe("BackendBridge", () => {
     });
 
     expect(result).toEqual({
-      analyzedCount: 1,
-      skippedAlreadyFresh: false,
+      analyzedCount: 0,
+      skippedAlreadyFresh: true,
       skippedNoHistory: false,
+      syncMetadata: undefined,
       failedAnalyzeAttempts: 0,
       refreshedStaleCount: 0,
       failedStaleRefreshAttempts: 0,
+      anchorFound: true,
+      nextHistoryStart: null,
       hasMoreToSync: false,
-      exhaustedSyncBudget: false,
+      reachedAnalyzeLimit: false,
     });
-    expect(analyze).toHaveBeenCalledTimes(1);
-    expect(analyze).toHaveBeenCalledWith("missing-recent", "p1");
+    expect(analyze).not.toHaveBeenCalled();
   });
 
   it("syncNewHeadMatchesFromRiot analyzes only IDs before first anchor in window", async () => {
@@ -323,8 +327,10 @@ describe("BackendBridge", () => {
       failedAnalyzeAttempts: 0,
       refreshedStaleCount: 1,
       failedStaleRefreshAttempts: 0,
+      anchorFound: true,
+      nextHistoryStart: null,
       hasMoreToSync: false,
-      exhaustedSyncBudget: false,
+      reachedAnalyzeLimit: false,
     });
     expect(staleLookup).toHaveBeenCalledWith(
       "http://127.0.0.1/api/player-matches/stale-ids",
@@ -373,13 +379,13 @@ describe("BackendBridge", () => {
       recentWindowSize: 4,
       analyzeDelayMs: 0,
       maxAnalyzePerInvocation: 2,
-      maxSyncRounds: 1,
       maxWindowFetches: 1,
     });
 
     expect(result.analyzedCount).toBe(2);
     expect(result.hasMoreToSync).toBe(true);
-    expect(result.exhaustedSyncBudget).toBe(true);
+    expect(result.reachedAnalyzeLimit).toBe(true);
+    expect(result.nextHistoryStart).toBe(0);
     expect(analyze).toHaveBeenCalledTimes(2);
   });
 

@@ -9,6 +9,8 @@ import type {
 import { buildMatchMetadata } from "./match-reconstruction";
 import { buildMatchDetailsData, buildUnavailableMatchDetailsData } from "./match-details";
 
+const MAX_STORED_MATCHES_PER_PLAYER = 25;
+
 export interface PlayerMatchRow {
   match_id: string;
   puuid: string;
@@ -159,6 +161,8 @@ export async function upsertPlayerMatch(row: PlayerMatchRow): Promise<string | n
         damage_to_champions = EXCLUDED.damage_to_champions,
         is_remake = EXCLUDED.is_remake
     `;
+    const pruneError = await prunePlayerMatchesToLimit(row.puuid, MAX_STORED_MATCHES_PER_PLAYER);
+    if (pruneError) return pruneError;
     return null;
   } catch (error) {
     console.error("player_matches upsert failed:", error);
@@ -226,9 +230,40 @@ export async function upsertPlayerMatchBatch(
     `;
 
     await sql.query(query, params);
+    const puuids = Array.from(new Set(rows.map((row) => row.puuid)));
+    for (const puuid of puuids) {
+      const pruneError = await prunePlayerMatchesToLimit(puuid, MAX_STORED_MATCHES_PER_PLAYER);
+      if (pruneError) return pruneError;
+    }
     return null;
   } catch (error) {
     console.error("player_matches batch upsert failed:", error);
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+export async function prunePlayerMatchesToLimit(
+  puuid: string,
+  retainCount: number = MAX_STORED_MATCHES_PER_PLAYER
+): Promise<string | null> {
+  try {
+    const sql = getSql();
+    const safeRetainCount = Math.max(1, Math.floor(retainCount));
+    await sql.query(
+      `DELETE FROM player_matches
+       WHERE puuid = $1
+         AND match_id IN (
+           SELECT match_id
+           FROM player_matches
+           WHERE puuid = $1
+           ORDER BY game_creation DESC, match_id DESC
+           OFFSET $2
+         )`,
+      [puuid, safeRetainCount]
+    );
+    return null;
+  } catch (error) {
+    console.error("player_matches prune failed:", error);
     return error instanceof Error ? error.message : String(error);
   }
 }

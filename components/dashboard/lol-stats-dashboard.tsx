@@ -569,9 +569,11 @@ const MatchCard = memo(function MatchCard({
                 Your Average Score: {match.yourImpact.toFixed(2)} <br />
                 Average Teammate Score: { match.teamImpact.toFixed(2) }
               </div>
-              <div className="text-slate-400 text-xs">
-                {match.rankLabel}
-              </div>
+              {match.rank ? (
+                <div className="text-slate-400 text-xs">
+                  {match.rankLabel}
+                </div>
+              ) : null}
             </div>
           </div>
         </CardHeader>
@@ -652,6 +654,8 @@ export default function Component() {
   const [countdownRemaining, setCountdownRemaining] = useState(0);
   const [syncAgeText, setSyncAgeText] = useState<string | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [showSyncGapCta, setShowSyncGapCta] = useState(false);
+  const [gapNextHistoryStart, setGapNextHistoryStart] = useState<number | null>(null);
   const didHydrateHistoryPreferencesRef = useRef(false);
   const scrollSentinelRef = useRef<HTMLDivElement>(null);
   const autoSearchKeyRef = useRef<string | null>(null);
@@ -849,6 +853,8 @@ export default function Component() {
     setCountdownRemaining(0);
     setSyncAgeText(null);
     setUpdateError(null);
+    setShowSyncGapCta(false);
+    setGapNextHistoryStart(null);
 
     let loadingDismissedEarly = false;
     let errorAlreadySet = false;
@@ -940,7 +946,8 @@ export default function Component() {
                   recentWindowSize: recentSyncWindowSize,
                   windowSize: recentSyncWindowSize,
                   analyzeDelayMs: 1500,
-                  maxSyncRounds: 12,
+                  maxAnalyzePerInvocation: 10,
+                  maxWindowFetches: 2,
                 }
               );
               if (isSearchStale()) return;
@@ -1165,6 +1172,8 @@ export default function Component() {
     setFetchingMatchesFromApi(true);
     setError(null);
     setUpdateError(null);
+    setShowSyncGapCta(false);
+    setGapNextHistoryStart(null);
     try {
       const syncResult = await BackendBridge.syncNewHeadMatchesFromRiot(
         currentPuuid,
@@ -1172,9 +1181,9 @@ export default function Component() {
         {
           recentWindowSize: recentSyncWindowSize,
           windowSize: recentSyncWindowSize,
+          startOffset: 0,
           analyzeDelayMs: 0,
-          maxSyncRounds: 2,
-          maxAnalyzePerInvocation: 4,
+          maxAnalyzePerInvocation: 10,
           maxWindowFetches: 2,
         }
       );
@@ -1226,10 +1235,15 @@ export default function Component() {
         }
       }
 
-      if (syncResult.hasMoreToSync) {
+      if (syncResult.hasMoreToSync && syncResult.nextHistoryStart !== null) {
+        setShowSyncGapCta(true);
+        setGapNextHistoryStart(syncResult.nextHistoryStart);
         setUpdateError(
-          "Partial update complete. Click Update now again to continue syncing recent matches."
+          "Recent updates loaded. There may be a gap to older unseen matches."
         );
+      } else {
+        setShowSyncGapCta(false);
+        setGapNextHistoryStart(null);
       }
     } catch (err) {
       console.error("Manual update failed:", err);
@@ -1283,6 +1297,63 @@ export default function Component() {
     anchor.click();
     window.URL.revokeObjectURL(objectUrl);
   }, [canExportLoadedHistory, exportRows, gameName, tagLine]);
+
+  const handleLoadGapMatches = useCallback(async () => {
+    if (
+      !currentPuuid ||
+      fetchingMatchesFromApi ||
+      syncAge === "fresh" ||
+      gapNextHistoryStart === null
+    ) {
+      return;
+    }
+
+    const syncRate = rateLimiter.checkRateLimit();
+    if (!syncRate.allowed) {
+      setUpdateError(`Rate limit exceeded. Please wait ${syncRate.retryAfter} seconds.`);
+      return;
+    }
+
+    setFetchingMatchesFromApi(true);
+    setError(null);
+    setUpdateError(null);
+    try {
+      const syncResult = await BackendBridge.syncNewHeadMatchesFromRiot(
+        currentPuuid,
+        totalDbMatches,
+        {
+          recentWindowSize: recentSyncWindowSize,
+          windowSize: recentSyncWindowSize,
+          startOffset: gapNextHistoryStart,
+          analyzeDelayMs: 0,
+          maxAnalyzePerInvocation: 10,
+          maxWindowFetches: 2,
+        }
+      );
+
+      if (syncResult.analyzedCount > 0 || syncResult.refreshedStaleCount > 0 || syncResult.anchorFound) {
+        const refreshed = await BackendBridge.getStoredMatches(currentPuuid, 20, 0);
+        setMatchesData(refreshed.matches);
+        setTotalDbMatches(refreshed.totalCount);
+        setLoadedDbMatches(refreshed.matches.length);
+        setHasMoreDbMatches(refreshed.hasMore);
+      }
+
+      if (syncResult.hasMoreToSync && syncResult.nextHistoryStart !== null) {
+        setShowSyncGapCta(true);
+        setGapNextHistoryStart(syncResult.nextHistoryStart);
+        setUpdateError("Still searching for the stored anchor. Click to load the next gap segment.");
+      } else {
+        setShowSyncGapCta(false);
+        setGapNextHistoryStart(null);
+      }
+    } catch (err) {
+      console.error("Gap continuation failed:", err);
+      setError("Leagueback could not load the next match gap segment right now.");
+    } finally {
+      setFetchingMatchesFromApi(false);
+    }
+  }, [currentPuuid, fetchingMatchesFromApi, syncAge, gapNextHistoryStart, totalDbMatches, recentSyncWindowSize]);
 
   const handleLoadMore = async () => {
     if (!currentPuuid || loadingMore || !allDbMatchesLoaded) return;
@@ -1767,6 +1838,25 @@ export default function Component() {
                     <div className="text-slate-200 text-lg">All loaded matches are remakes</div>
                   </CardContent>
                 </Card>
+              )}
+
+              {showSyncGapCta && (
+                <div className="rounded-lg border border-dashed border-slate-600/70 bg-slate-900/40 p-4">
+                  <div className="flex flex-col items-center gap-3 text-center">
+                    <div className="text-sm text-slate-300">
+                      More matches may exist between newly loaded and stored history.
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void handleLoadGapMatches()}
+                      disabled={fetchingMatchesFromApi}
+                      className="border-slate-600 bg-slate-900/60 text-slate-100 hover:bg-slate-700 hover:text-white"
+                    >
+                      {fetchingMatchesFromApi ? "Loading gap matches..." : "More matches... click to load more"}
+                    </Button>
+                  </div>
+                </div>
               )}
               
               {/* Infinite scroll sentinel for DB matches */}

@@ -273,12 +273,12 @@ export class BackendBridge {
     options: {
       windowSize?: number;
       recentWindowSize: number;
+      startOffset?: number;
       /** Delay between each match-performance call (rate limiting). */
       analyzeDelayMs?: number;
-      maxSyncRounds?: number;
       /** Max match-performance calls in this invocation. */
       maxAnalyzePerInvocation?: number;
-      /** Max additional Riot windows fetched after recent-window reconciliation. */
+      /** Max Riot windows fetched in this invocation. */
       maxWindowFetches?: number;
     }
   ): Promise<{
@@ -292,20 +292,22 @@ export class BackendBridge {
     failedAnalyzeAttempts: number;
     refreshedStaleCount: number;
     failedStaleRefreshAttempts: number;
+    anchorFound: boolean;
+    nextHistoryStart: number | null;
     hasMoreToSync: boolean;
-    exhaustedSyncBudget: boolean;
+    reachedAnalyzeLimit: boolean;
   }> {
     const recentWindowSize = Math.max(options.recentWindowSize, 1);
     const windowSize = Math.max(options.windowSize ?? recentWindowSize, recentWindowSize);
+    const startOffset = Math.max(0, options.startOffset ?? 0);
     const analyzeDelayMs = options.analyzeDelayMs ?? 1500;
-    const maxSyncRounds = options.maxSyncRounds ?? 12;
     const maxAnalyzePerInvocation = Math.max(
       1,
-      Math.floor(options.maxAnalyzePerInvocation ?? Number.MAX_SAFE_INTEGER)
+      Math.floor(options.maxAnalyzePerInvocation ?? 10)
     );
     const maxWindowFetches = Math.max(
       1,
-      Math.floor(options.maxWindowFetches ?? maxSyncRounds)
+      Math.floor(options.maxWindowFetches ?? 2)
     );
 
     if (storedTotalCount === 0) {
@@ -317,13 +319,19 @@ export class BackendBridge {
         failedAnalyzeAttempts: 0,
         refreshedStaleCount: 0,
         failedStaleRefreshAttempts: 0,
+        anchorFound: false,
+        nextHistoryStart: null,
         hasMoreToSync: false,
-        exhaustedSyncBudget: false,
+        reachedAnalyzeLimit: false,
       };
     }
 
-    const recentRiotMatchIds = await this.getMatchHistory(puuid, recentWindowSize, 0);
-    if (!recentRiotMatchIds || recentRiotMatchIds.length === 0) {
+    const firstWindowIds = await this.getMatchHistory(
+      puuid,
+      startOffset === 0 ? recentWindowSize : windowSize,
+      startOffset
+    );
+    if (!firstWindowIds || firstWindowIds.length === 0) {
       return {
         analyzedCount: 0,
         skippedAlreadyFresh: false,
@@ -332,102 +340,33 @@ export class BackendBridge {
         failedAnalyzeAttempts: 0,
         refreshedStaleCount: 0,
         failedStaleRefreshAttempts: 0,
+        anchorFound: false,
+        nextHistoryStart: null,
         hasMoreToSync: false,
-        exhaustedSyncBudget: false,
+        reachedAnalyzeLimit: false,
       };
     }
-
-    const recentExisting = await this.fetchExistingMatchIdsForPlayer(puuid, recentRiotMatchIds);
-    const missingRecentMatchIds = recentRiotMatchIds.filter((matchId) => !recentExisting.has(matchId));
-    const staleRecentMatchIds =
-      missingRecentMatchIds.length === 0
-        ? await this.findStaleRecentMatchIds(puuid, recentRiotMatchIds)
-        : [];
 
     let refreshedStaleCount = 0;
     let failedStaleRefreshAttempts = 0;
-
-    if (missingRecentMatchIds.length === 0 && staleRecentMatchIds.length === 0) {
-      return {
-        analyzedCount: 0,
-        skippedAlreadyFresh: true,
-        skippedNoHistory: false,
-        syncMetadata: undefined,
-        failedAnalyzeAttempts: 0,
-        refreshedStaleCount: 0,
-        failedStaleRefreshAttempts: 0,
-        hasMoreToSync: false,
-        exhaustedSyncBudget: false,
-      };
-    }
-
     let analyzedCount = 0;
     let failedAnalyzeAttempts = 0;
     let remainingAnalyzeBudget = maxAnalyzePerInvocation;
     let remainingWindowFetches = maxWindowFetches;
+    let anchorFound = false;
+    let nextHistoryStart: number | null = null;
     let hasMoreToSync = false;
-    let exhaustedSyncBudget = false;
-    let listOffset = recentRiotMatchIds.length;
+    let reachedAnalyzeLimit = false;
+    let listOffset = startOffset;
     let syncMetadata: { recentMatchWindow: number } | undefined;
 
-    for (let i = 0; i < missingRecentMatchIds.length; i++) {
-      if (remainingAnalyzeBudget <= 0) {
-        exhaustedSyncBudget = true;
-        hasMoreToSync = true;
-        break;
-      }
-      const matchId = missingRecentMatchIds[i];
-      const analysis = await this.analyzeMatchPerformance(matchId, puuid);
-      if (analysis?.success && analysis.matchSummary) {
-        syncMetadata = analysis.syncMetadata ?? syncMetadata;
-        analyzedCount++;
-      } else {
-        failedAnalyzeAttempts++;
-      }
-      remainingAnalyzeBudget--;
-      if (i < missingRecentMatchIds.length - 1) {
-        if (analyzeDelayMs > 0) {
-          await new Promise((resolve) => setTimeout(resolve, analyzeDelayMs));
-        }
-      }
-    }
-
-    for (let i = 0; i < staleRecentMatchIds.length; i++) {
-      if (remainingAnalyzeBudget <= 0) {
-        exhaustedSyncBudget = true;
-        hasMoreToSync = true;
-        break;
-      }
-      const matchId = staleRecentMatchIds[i];
-      const analysis = await this.analyzeMatchPerformance(matchId, puuid);
-      if (analysis?.success && analysis.matchSummary) {
-        syncMetadata = analysis.syncMetadata ?? syncMetadata;
-        refreshedStaleCount++;
-      } else {
-        failedStaleRefreshAttempts++;
-      }
-      remainingAnalyzeBudget--;
-      if (i < staleRecentMatchIds.length - 1) {
-        if (analyzeDelayMs > 0) {
-          await new Promise((resolve) => setTimeout(resolve, analyzeDelayMs));
-        }
-      }
-    }
-
-    if (missingRecentMatchIds.length > 0 && analyzedCount < missingRecentMatchIds.length) {
-      hasMoreToSync = true;
-    }
-    if (staleRecentMatchIds.length > 0 && refreshedStaleCount < staleRecentMatchIds.length) {
-      hasMoreToSync = true;
-    }
-
-    for (
-      let round = 0;
-      round < maxSyncRounds && remainingWindowFetches > 0 && remainingAnalyzeBudget > 0;
-      round++
-    ) {
+    while (remainingWindowFetches > 0 && remainingAnalyzeBudget > 0) {
       remainingWindowFetches--;
-      const windowIds = await this.getMatchHistory(puuid, windowSize, listOffset);
+      const windowCount = listOffset === startOffset ? (startOffset === 0 ? recentWindowSize : windowSize) : windowSize;
+      const windowIds =
+        listOffset === startOffset
+          ? firstWindowIds
+          : await this.getMatchHistory(puuid, windowCount, listOffset);
       if (!windowIds || windowIds.length === 0) {
         break;
       }
@@ -437,14 +376,50 @@ export class BackendBridge {
       const toAnalyze =
         anchorIdx === -1 ? windowIds : windowIds.slice(0, anchorIdx);
 
-      if (toAnalyze.length > remainingAnalyzeBudget) {
-        hasMoreToSync = true;
+      if (listOffset === 0 && toAnalyze.length === 0) {
+        const staleRecentMatchIds = await this.findStaleRecentMatchIds(puuid, windowIds);
+        for (let i = 0; i < staleRecentMatchIds.length; i++) {
+          if (remainingAnalyzeBudget <= 0) {
+            reachedAnalyzeLimit = true;
+            hasMoreToSync = true;
+            nextHistoryStart = listOffset;
+            break;
+          }
+          const staleMatchId = staleRecentMatchIds[i];
+          const analysis = await this.analyzeMatchPerformance(staleMatchId, puuid);
+          if (analysis?.success && analysis.matchSummary) {
+            syncMetadata = analysis.syncMetadata ?? syncMetadata;
+            refreshedStaleCount++;
+          } else {
+            failedStaleRefreshAttempts++;
+          }
+          remainingAnalyzeBudget--;
+          if (i < staleRecentMatchIds.length - 1 && analyzeDelayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, analyzeDelayMs));
+          }
+        }
+        if (staleRecentMatchIds.length === 0) {
+          return {
+            analyzedCount: 0,
+            skippedAlreadyFresh: true,
+            skippedNoHistory: false,
+            syncMetadata,
+            failedAnalyzeAttempts: 0,
+            refreshedStaleCount: 0,
+            failedStaleRefreshAttempts: 0,
+            anchorFound: true,
+            nextHistoryStart: null,
+            hasMoreToSync: false,
+            reachedAnalyzeLimit: false,
+          };
+        }
       }
 
       for (let i = 0; i < toAnalyze.length; i++) {
         if (remainingAnalyzeBudget <= 0) {
-          exhaustedSyncBudget = true;
+          reachedAnalyzeLimit = true;
           hasMoreToSync = true;
+          nextHistoryStart = listOffset;
           break;
         }
         const matchId = toAnalyze[i];
@@ -464,24 +439,31 @@ export class BackendBridge {
       }
 
       if (remainingAnalyzeBudget <= 0) {
-        exhaustedSyncBudget = true;
+        reachedAnalyzeLimit = true;
         break;
       }
 
       if (anchorIdx !== -1) {
+        anchorFound = true;
+        nextHistoryStart = null;
         break;
       }
-      if (windowIds.length < windowSize) {
+      if (windowIds.length < windowCount) {
+        nextHistoryStart = null;
         break;
       }
       listOffset += windowIds.length;
+      nextHistoryStart = listOffset;
+      hasMoreToSync = true;
     }
 
     if (remainingAnalyzeBudget <= 0) {
-      exhaustedSyncBudget = true;
+      reachedAnalyzeLimit = true;
       hasMoreToSync = true;
-    } else if (remainingWindowFetches <= 0) {
-      exhaustedSyncBudget = true;
+      if (nextHistoryStart === null) {
+        nextHistoryStart = listOffset;
+      }
+    } else if (!anchorFound && remainingWindowFetches <= 0 && nextHistoryStart !== null) {
       hasMoreToSync = true;
     }
 
@@ -493,8 +475,10 @@ export class BackendBridge {
       failedAnalyzeAttempts,
       refreshedStaleCount,
       failedStaleRefreshAttempts,
+      anchorFound,
+      nextHistoryStart,
       hasMoreToSync,
-      exhaustedSyncBudget,
+      reachedAnalyzeLimit,
     };
   }
 
