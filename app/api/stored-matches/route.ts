@@ -25,7 +25,10 @@ export async function GET(request: NextRequest) {
 
   try {
     if (puuid === VALIDATION_FIXTURE_ACCOUNT.puuid) {
-      return NextResponse.json(getValidationFixtureStoredMatches(limit, offset));
+      return NextResponse.json({
+        ...getValidationFixtureStoredMatches(limit, offset),
+        readFailed: false,
+      });
     }
 
     const { matches, totalCount, hasMore } = await getPlayerMatchesPaginated(
@@ -34,11 +37,15 @@ export async function GET(request: NextRequest) {
       offset
     );
 
-    return NextResponse.json({ matches, totalCount, hasMore });
+    return NextResponse.json({ matches, totalCount, hasMore, readFailed: false });
   } catch (error) {
     console.error("Error fetching stored matches:", error);
     return NextResponse.json(
       {
+        matches: [],
+        totalCount: 0,
+        hasMore: false,
+        readFailed: true,
         error: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 }

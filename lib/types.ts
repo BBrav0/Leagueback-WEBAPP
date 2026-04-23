@@ -153,6 +153,14 @@ export interface MatchDetailsResponse {
   details: MatchDetailsData;
 }
 
+export interface StoredMatchesResult {
+  matches: MatchSummary[];
+  totalCount: number;
+  hasMore: boolean;
+  readFailed?: boolean;
+  error?: string;
+}
+
 export interface PerformanceAnalysisResult {
   success: boolean;
   matchSummary?: MatchSummary;

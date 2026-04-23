@@ -3,6 +3,7 @@ import type {
   MatchDetailsResponse,
   MatchSummary,
   PerformanceAnalysisResult,
+  StoredMatchesResult,
 } from "./types";
 import { getValidationFixtureMatchSummary, VALIDATION_FIXTURE_ACCOUNT } from "./validation-fixture";
 
@@ -157,28 +158,50 @@ export class BackendBridge {
     puuid: string,
     limit: number = 20,
     offset: number = 0
-  ): Promise<{ matches: MatchSummary[]; totalCount: number; hasMore: boolean }> {
+  ): Promise<StoredMatchesResult> {
     try {
       const res = await fetch(
         `/api/stored-matches?puuid=${encodeURIComponent(puuid)}&limit=${limit}&offset=${offset}`
       );
       if (!res.ok) {
         console.error("Failed to get stored matches");
-        return { matches: [], totalCount: 0, hasMore: false };
+        const errorBody = await res.json().catch(() => ({}));
+        return {
+          matches: [],
+          totalCount: 0,
+          hasMore: false,
+          readFailed: true,
+          error:
+            (errorBody as { error?: string }).error || `Failed to get stored matches (${res.status})`,
+        };
       }
-      const data = await res.json();
+      const data = (await res.json()) as StoredMatchesResult;
       if (data.error) {
         console.error("Backend error:", data.error);
-        return { matches: [], totalCount: 0, hasMore: false };
+        return {
+          matches: data.matches || [],
+          totalCount: data.totalCount || 0,
+          hasMore: data.hasMore || false,
+          readFailed: data.readFailed ?? true,
+          error: data.error,
+        };
       }
       return {
         matches: data.matches || [],
         totalCount: data.totalCount || 0,
         hasMore: data.hasMore || false,
+        readFailed: data.readFailed ?? false,
+        error: data.error,
       };
     } catch (error) {
       console.error("Error calling getStoredMatches:", error);
-      return { matches: [], totalCount: 0, hasMore: false };
+      return {
+        matches: [],
+        totalCount: 0,
+        hasMore: false,
+        readFailed: true,
+        error: error instanceof Error ? error.message : "Failed to read stored matches",
+      };
     }
   }
 

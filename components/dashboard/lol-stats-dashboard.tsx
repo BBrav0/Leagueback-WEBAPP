@@ -859,10 +859,20 @@ export default function Component() {
       setCurrentPuuid(account.puuid);
       setIsValidationFixtureActive(account.puuid === VALIDATION_FIXTURE_ACCOUNT.puuid);
 
+      const syncStatus = await BackendBridge.getSyncStatus(account.puuid);
+      if (isSearchStale()) return;
+      setLastSyncAt(syncStatus.lastSyncAt);
+      let initialSyncAge = computeSyncAge(syncStatus.lastSyncAt);
+
       // Fetch first page of stored matches from DB
       let storedResult = await BackendBridge.getStoredMatches(account.puuid, 20, 0);
       if (isSearchStale()) return;
       console.log("[SYNC] storedResult.totalCount:", storedResult.totalCount, "matchesCount:", storedResult.matches.length);
+
+      if (initialSyncAge === "expired" && storedResult.totalCount > 0 && !syncStatus.lastSyncAt) {
+        initialSyncAge = "stale";
+      }
+      setSyncAge(initialSyncAge);
 
       setMatchesData(storedResult.matches);
       setTotalDbMatches(storedResult.totalCount);
@@ -891,15 +901,7 @@ export default function Component() {
         setLoading(false);
         loadingDismissedEarly = true;
 
-        const syncStatus = await BackendBridge.getSyncStatus(account.puuid);
-        if (isSearchStale()) return;
-        setLastSyncAt(syncStatus.lastSyncAt);
-        let age = computeSyncAge(syncStatus.lastSyncAt);
-        // Pre-existing players without a metadata row should be treated as stale
-        // (not expired) to avoid mass auto-syncs on first visit after migration.
-        if (age === "expired" && storedResult.totalCount > 0 && !syncStatus.lastSyncAt) {
-          age = "stale";
-        }
+        let age = initialSyncAge;
         setSyncAge(age);
 
         if (age === "expired") {
@@ -999,6 +1001,13 @@ export default function Component() {
         }
         // If 'fresh': skip Riot API calls entirely, just show stored data.
       } else {
+        if (storedResult.readFailed) {
+          setError(storedResult.error || "Leagueback could not read stored match history.");
+          errorAlreadySet = true;
+        } else if (initialSyncAge === "fresh") {
+          setError("Leagueback could not read this player's recently synced stored data. Please try again in a few minutes.");
+          errorAlreadySet = true;
+        } else {
         // New player (storedResult.totalCount === 0) — need to check Riot API
         // Use the gate-aware variant to distinguish sync-gate-blocked from genuinely no matches.
         if (!storedResult.hasMore) {
@@ -1025,10 +1034,6 @@ export default function Component() {
               setMatchesStart(retryLoadedCount);
               setHasMoreMatches(retryStored.hasMore);
               matchesForStats = retryStored.matches;
-              // Fetch sync status for this returning player
-              const syncStatus = await BackendBridge.getSyncStatus(account.puuid);
-              if (isSearchStale()) return;
-              setLastSyncAt(syncStatus.lastSyncAt);
               const retryAge = computeSyncAge(syncStatus.lastSyncAt);
               setSyncAge(retryAge);
               // Mark storedResult as found so the "no matches" error path is skipped
@@ -1036,8 +1041,8 @@ export default function Component() {
               apiHasMore = retryStored.hasMore;
             } else {
               // Sync gate blocked AND no stored matches found on retry —
-              // show a temporary unavailability message instead of "no ranked match history".
-              setError("Data is temporarily unavailable. Please try again in a few minutes.");
+              // show a truthful stored-data read failure instead of treating the player as new.
+              setError("Leagueback could not read this player's recently synced stored data. Please try again in a few minutes.");
               errorAlreadySet = true;
             }
             apiHasMore = false;
@@ -1053,6 +1058,7 @@ export default function Component() {
         // Dismiss full-screen "Analyzing" for new players too.
         setLoading(false);
         loadingDismissedEarly = true;
+        }
       }
 
       // If user exists but DB has no categorized matches, auto-fetch first 10 from API

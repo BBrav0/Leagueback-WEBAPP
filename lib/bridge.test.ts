@@ -69,7 +69,33 @@ describe("BackendBridge", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await BackendBridge.getStoredMatches("p1", 20, 0);
-    expect(result).toEqual({ matches: [], totalCount: 0, hasMore: false });
+    expect(result).toEqual({
+      matches: [],
+      totalCount: 0,
+      hasMore: false,
+      readFailed: true,
+      error: "boom",
+    });
+    errorSpy.mockRestore();
+  });
+
+  it("getStoredMatches preserves backend failure classification on non-ok response", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: "db unavailable" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await BackendBridge.getStoredMatches("p1", 20, 0);
+    expect(result).toEqual({
+      matches: [],
+      totalCount: 0,
+      hasMore: false,
+      readFailed: true,
+      error: "db unavailable",
+    });
     errorSpy.mockRestore();
   });
 

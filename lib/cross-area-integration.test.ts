@@ -136,6 +136,36 @@ function createDashboardState(): SimulatedDashboardState {
   };
 }
 
+function classifyFreshSyncEmptyStoredRead(params: {
+  syncAge: "fresh" | "stale" | "expired";
+  storedReadFailed?: boolean;
+  initialStoredTotalCount: number;
+  retryStoredTotalCount?: number;
+  gateResult?: boolean | null;
+}): "stored-read-failure" | "new-player" | "no-ranked-history" | "riot-probe" {
+  if (params.initialStoredTotalCount > 0) {
+    return "riot-probe";
+  }
+
+  if (params.storedReadFailed) {
+    return "stored-read-failure";
+  }
+
+  if (params.syncAge === "fresh") {
+    return "stored-read-failure";
+  }
+
+  if (params.gateResult === null) {
+    return (params.retryStoredTotalCount ?? 0) > 0 ? "riot-probe" : "stored-read-failure";
+  }
+
+  if (params.gateResult === true) {
+    return "riot-probe";
+  }
+
+  return "no-ranked-history";
+}
+
 function applyRunSearchStepWithGuard(
   state: SimulatedDashboardState,
   step: SearchStepResult
@@ -957,6 +987,37 @@ describe("Second-visit regression: new-player path with sync gate block", () => 
     const hasNoRetryData = retryStoredResult.totalCount === 0;
     expect(isSyncGateBlock && hasNoRetryData).toBe(true);
     // The error message should be "temporarily unavailable" not "no ranked match history"
+  });
+
+  it("classifies fresh sync + empty stored read as stored-data failure, not new-player path", () => {
+    const classification = classifyFreshSyncEmptyStoredRead({
+      syncAge: "fresh",
+      initialStoredTotalCount: 0,
+      gateResult: undefined,
+    });
+
+    expect(classification).toBe("stored-read-failure");
+  });
+
+  it("classifies genuine new player as no-ranked-history when no sync freshness exists and Riot is empty", () => {
+    const classification = classifyFreshSyncEmptyStoredRead({
+      syncAge: "expired",
+      initialStoredTotalCount: 0,
+      gateResult: false,
+    });
+
+    expect(classification).toBe("no-ranked-history");
+  });
+
+  it("classifies fresh sync + empty retry after gate block as stored-data failure instead of temporary new-player messaging", () => {
+    const classification = classifyFreshSyncEmptyStoredRead({
+      syncAge: "fresh",
+      initialStoredTotalCount: 0,
+      gateResult: null,
+      retryStoredTotalCount: 0,
+    });
+
+    expect(classification).toBe("stored-read-failure");
   });
 
   it("retry recovery with more stored pages restores matchesStart to recovered page length", () => {
