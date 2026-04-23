@@ -20,7 +20,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const metadata = await getPlayerSyncMetadata(puuid);
-    return NextResponse.json({ lastSyncAt: serializeLastSyncAt(metadata?.last_riot_sync_at) });
+    return NextResponse.json({
+      lastSyncAt: serializeLastSyncAt(metadata?.last_riot_sync_at),
+    });
   } catch (error) {
     console.error("Error fetching player sync status:", error);
     return NextResponse.json(

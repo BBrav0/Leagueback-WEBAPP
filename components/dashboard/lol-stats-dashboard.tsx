@@ -137,6 +137,10 @@ function getRenderableLastSyncAt(lastSyncAt: string | null | undefined): string 
   return Number.isNaN(new Date(lastSyncAt).getTime()) ? null : lastSyncAt;
 }
 
+function sanitizeSyncStatusLastSyncAt(lastSyncAt: string | null | undefined): string | null {
+  return getRenderableLastSyncAt(lastSyncAt);
+}
+
 /**
  * Single module-level element so Recharts `content` prop keeps a stable reference.
  * Safe only while ChartTooltipContent stays stateless; if it later needs context
@@ -864,8 +868,11 @@ export default function Component() {
       setCurrentPuuid(account.puuid);
       setIsValidationFixtureActive(account.puuid === VALIDATION_FIXTURE_ACCOUNT.puuid);
 
-      const syncStatus = await BackendBridge.getSyncStatus(account.puuid);
+      const syncStatusResponse = await BackendBridge.getSyncStatus(account.puuid);
       if (isSearchStale()) return;
+      const syncStatus = {
+        lastSyncAt: sanitizeSyncStatusLastSyncAt(syncStatusResponse.lastSyncAt),
+      };
       setLastSyncAt(syncStatus.lastSyncAt);
       let initialSyncAge = computeSyncAge(syncStatus.lastSyncAt);
 
