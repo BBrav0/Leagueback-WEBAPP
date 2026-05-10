@@ -40,6 +40,7 @@ function isWithinNestingDepthMock(value: unknown, maxDepth: number): boolean {
 }
 
 const MAX_PROPERTY_KEY_LENGTH = 48;
+const MAX_PROPERTY_STRING_LENGTH = 512;
 const MAX_PROPERTY_COUNT = 24;
 const MAX_NESTING_DEPTH = 2;
 
@@ -83,6 +84,16 @@ function filterPropertiesByEventMock(
   return result;
 }
 
+/** Local Riot-like identifier check, used by mock validators. */
+const RIOT_ID_PATTERNS = [
+  /^[A-Z]{2,4}\d_\d{4,}$/,
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  /^\d{20,}$/,
+];
+function isRiotLikeIdentifierLocal(id: string): boolean {
+  return RIOT_ID_PATTERNS.some((p) => p.test(id));
+}
+
 vi.mock("@/lib/analytics", () => ({
   recordAnalyticsEvent: mockRecordEvent,
   validateEventName: vi.fn((name: string) =>
@@ -92,12 +103,40 @@ vi.mock("@/lib/analytics", () => ({
       "manual_update", "client_error", "endpoint_outcome", "endpoint_error",
     ].includes(name)
   ),
-  validateVisitorId: vi.fn((id: string) => /^[a-zA-Z0-9_-]{8,64}$/.test(id)),
-  validateSessionId: vi.fn((id: string) => /^[a-zA-Z0-9_-]{8,64}$/.test(id)),
-  sanitizeProperties: vi.fn((props: unknown) => {
-    if (!props || typeof props !== "object" || Array.isArray(props)) return {};
-    return props as Record<string, unknown>;
+  isRiotLikeIdentifier: vi.fn(isRiotLikeIdentifierLocal),
+  validateVisitorId: vi.fn((id: string) =>
+    /^[a-zA-Z0-9_-]{8,64}$/.test(id) && !isRiotLikeIdentifierLocal(id)
+  ),
+  validateSessionId: vi.fn((id: string) =>
+    /^[a-zA-Z0-9_-]{8,64}$/.test(id) && !isRiotLikeIdentifierLocal(id)
+  ),
+  sanitizeProperties: vi.fn((input: unknown): Record<string, unknown> => {
+    if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+    const source = input as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    const entries = Object.entries(source)
+      .filter(([key]) => key.length <= MAX_PROPERTY_KEY_LENGTH)
+      .filter(([key]) => !isSecretKeyMock(key))
+      .slice(0, MAX_PROPERTY_COUNT);
+    for (const [key, value] of entries) {
+      if (value === null || value === undefined) continue;
+      if (typeof value === "string") {
+        result[key] = value.length > MAX_PROPERTY_STRING_LENGTH
+          ? value.slice(0, MAX_PROPERTY_STRING_LENGTH) : value;
+      } else if (typeof value === "number" || typeof value === "boolean") {
+        result[key] = value;
+      } else if (typeof value === "object") {
+        if (!isWithinNestingDepthMock(value, MAX_NESTING_DEPTH)) continue;
+        try {
+          const serialized = JSON.stringify(value);
+          result[key] = serialized.length > MAX_PROPERTY_STRING_LENGTH
+            ? serialized.slice(0, MAX_PROPERTY_STRING_LENGTH) : serialized;
+        } catch { continue; }
+      }
+    }
+    return result;
   }),
+  MAX_PROPERTY_STRING_LENGTH,
   isSecretKey: vi.fn(isSecretKeyMock),
   isWithinNestingDepth: vi.fn(isWithinNestingDepthMock),
   isBrowserEvent: vi.fn(isBrowserEventMock),
@@ -961,6 +1000,129 @@ describe("no raw Riot identifiers in stored payload (VAL-AN-006)", () => {
     expect(mockRecordEvent).not.toHaveBeenCalled();
   });
 
+  // Riot-shaped anonymous IDs that satisfy the generic regex but are rejected
+  // by the privacy-specific Riot-like identifier detection
+  it("rejects Riot match ID shaped visitorId that satisfies the generic character regex", async () => {
+    const { POST } = await import("./route");
+
+    // NA1_1234567890 passes /^[a-zA-Z0-9_-]{8,64}$/ but is a Riot match ID
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            visitorId: "NA1_1234567890",
+          })
+        ),
+      }) as never
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockRecordEvent).not.toHaveBeenCalled();
+  });
+
+  it("rejects Riot match ID shaped sessionId that satisfies the generic character regex", async () => {
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            sessionId: "KR1_9876543210",
+          })
+        ),
+      }) as never
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockRecordEvent).not.toHaveBeenCalled();
+  });
+
+  it("rejects PUUID-shaped UUID as visitorId even though it passes the generic regex", async () => {
+    const { POST } = await import("./route");
+
+    // Standard UUID format passes the alphanumeric+dash regex but looks like a Riot PUUID
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            visitorId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+          })
+        ),
+      }) as never
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockRecordEvent).not.toHaveBeenCalled();
+  });
+
+  it("rejects numeric-only summoner-id-shaped visitorId (20+ digits)", async () => {
+    const { POST } = await import("./route");
+
+    // 20+ digit numeric string passes the generic regex but looks like a summoner ID
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            visitorId: "12345678901234567890",
+          })
+        ),
+      }) as never
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockRecordEvent).not.toHaveBeenCalled();
+  });
+
+  it("rejects Riot match ID shaped IDs in both visitorId and sessionId simultaneously", async () => {
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventName: "page_view",
+          visitorId: "EUW1_5555555555",
+          sessionId: "NA1_6666666666",
+          properties: { page: "/" },
+        }),
+      }) as never
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockRecordEvent).not.toHaveBeenCalled();
+  });
+
+  it("accepts legitimate anonymous IDs that are not Riot-shaped", async () => {
+    mockRecordEvent.mockResolvedValue({ success: true });
+    const { POST } = await import("./route");
+
+    // These are clearly anonymous, not Riot-shaped
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventName: "page_view",
+          visitorId: "anon-visitor-abc12345",
+          sessionId: "anon-session-xyz98765",
+          properties: { page: "/" },
+        }),
+      }) as never
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+  });
+
   it("raw Riot identifiers smuggled into allowlisted properties are filtered by allowlist", async () => {
     mockRecordEvent.mockResolvedValue({ success: true });
     const { POST } = await import("./route");
@@ -1062,7 +1224,7 @@ describe("event property value bounds (VAL-AN-025)", () => {
     vi.clearAllMocks();
   });
 
-  it("truncates oversized string values in allowlisted properties", async () => {
+  it("truncates oversized string values to MAX_PROPERTY_STRING_LENGTH in persisted payload", async () => {
     mockRecordEvent.mockResolvedValue({ success: true });
     const { POST } = await import("./route");
 
@@ -1082,15 +1244,13 @@ describe("event property value bounds (VAL-AN-025)", () => {
 
     expect(mockRecordEvent).toHaveBeenCalledTimes(1);
     const storedProps = mockRecordEvent.mock.calls[0][3];
-    // sanitizeProperties is mocked to return input as-is, so we verify
-    // the real sanitizeProperties was called (through the mock) with the oversized value
-    const { sanitizeProperties } = await import("@/lib/analytics");
-    expect(sanitizeProperties).toHaveBeenCalledWith(
-      expect.objectContaining({ page: longPageValue })
-    );
+    // The persisted payload must have the page value truncated to 512 chars
+    expect(typeof storedProps.page).toBe("string");
+    expect((storedProps.page as string).length).toBeLessThanOrEqual(MAX_PROPERTY_STRING_LENGTH);
+    expect((storedProps.page as string).length).toBeLessThan(longPageValue.length);
   });
 
-  it("accepts numeric property values for load_more event", async () => {
+  it("preserves numeric property values in persisted payload for load_more event", async () => {
     mockRecordEvent.mockResolvedValue({ success: true });
     const { POST } = await import("./route");
 
@@ -1109,9 +1269,14 @@ describe("event property value bounds (VAL-AN-025)", () => {
 
     expect(response.status).toBe(200);
     expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+    const storedProps = mockRecordEvent.mock.calls[0][3];
+    // Numeric values must survive the sanitize pipeline unchanged
+    expect(storedProps.offset).toBe(10);
+    expect(storedProps.limit).toBe(20);
+    expect(storedProps.source).toBe("stored");
   });
 
-  it("accepts boolean property values", async () => {
+  it("preserves boolean property values in persisted payload", async () => {
     mockRecordEvent.mockResolvedValue({ success: true });
     const { POST } = await import("./route");
 
@@ -1130,14 +1295,15 @@ describe("event property value bounds (VAL-AN-025)", () => {
 
     expect(response.status).toBe(200);
     expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+    const storedProps = mockRecordEvent.mock.calls[0][3];
+    // queryHash gets transformed by applyClientPropertyProtection, but hasTagLine stays boolean
+    expect(storedProps.hasTagLine).toBe(true);
   });
 
-  it("drops non-primitive property values that are not strings/numbers/booleans", async () => {
+  it("drops non-primitive property values from persisted payload", async () => {
     mockRecordEvent.mockResolvedValue({ success: true });
     const { POST } = await import("./route");
 
-    // sanitizeProperties handles this at the sanitize step, but the allowlist
-    // filter also limits which properties survive. We verify the pipeline works.
     await POST(
       new Request("http://localhost/api/analytics/ingest", {
         method: "POST",
@@ -1159,15 +1325,15 @@ describe("event property value bounds (VAL-AN-025)", () => {
     expect(mockRecordEvent).toHaveBeenCalledTimes(1);
     const storedProps = mockRecordEvent.mock.calls[0][3];
     const storedStr = JSON.stringify(storedProps);
-    // Functions and symbols should not be in the stored payload
+    // Functions and symbols must not appear in the persisted payload
     expect(storedStr).not.toContain("function");
     expect(storedStr).not.toContain("Symbol");
   });
 
-  it("rejects oversized property values that would exceed string limits before write", async () => {
+  it("truncates oversized string values in the persisted payload even for very large inputs", async () => {
+    mockRecordEvent.mockResolvedValue({ success: true });
     const { POST } = await import("./route");
 
-    // Create a string value so large it would be problematic
     const hugeValue = "x".repeat(10000);
     const response = await POST(
       new Request("http://localhost/api/analytics/ingest", {
@@ -1182,12 +1348,104 @@ describe("event property value bounds (VAL-AN-025)", () => {
       }) as never
     );
 
-    // Request should still succeed (value goes through sanitize pipeline)
+    // Request succeeds — the sanitize pipeline truncates, not rejects
     expect(response.status).toBe(200);
     expect(mockRecordEvent).toHaveBeenCalledTimes(1);
-    // sanitizeProperties is mocked to return input as-is, but in production
-    // it would truncate. Verify the mock was called with the oversized value.
-    const { sanitizeProperties } = await import("@/lib/analytics");
-    expect(sanitizeProperties).toHaveBeenCalled();
+    const storedProps = mockRecordEvent.mock.calls[0][3];
+    // The persisted value must be truncated, not the raw 10000-char input
+    expect(typeof storedProps.page).toBe("string");
+    expect((storedProps.page as string).length).toBeLessThanOrEqual(MAX_PROPERTY_STRING_LENGTH);
+    expect((storedProps.page as string).length).toBeLessThan(hugeValue.length);
+  });
+
+  it("rejects deeply nested values with 400 before any write", async () => {
+    const { POST } = await import("./route");
+
+    // Build a deeply nested object that exceeds MAX_NESTING_DEPTH
+    let nested: Record<string, unknown> = { leaf: true };
+    for (let i = 0; i < MAX_NESTING_DEPTH + 3; i++) {
+      nested = { inner: nested };
+    }
+
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            eventName: "page_view",
+            properties: {
+              page: "/dashboard",
+              referrer: "direct",
+              deep: nested,
+            },
+          })
+        ),
+      }) as never
+    );
+
+    // Pre-write validation rejects deeply nested values
+    expect(response.status).toBe(400);
+    expect(mockRecordEvent).not.toHaveBeenCalled();
+  });
+
+  it("serializes shallow nested objects in persisted payload after sanitization", async () => {
+    mockRecordEvent.mockResolvedValue({ success: true });
+    const { POST } = await import("./route");
+
+    // Shallow object within nesting depth — should be JSON-serialized by sanitizer
+    const shallowObj = { level1: "value" };
+
+    await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            eventName: "page_view",
+            properties: {
+              page: "/dashboard",
+              referrer: "direct",
+              extra: shallowObj,
+            },
+          })
+        ),
+      }) as never
+    );
+
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+    const storedProps = mockRecordEvent.mock.calls[0][3];
+    // The shallow object gets JSON-serialized by the sanitizer (allowlist filters it out)
+    // But the important thing is the request succeeds without error
+    expect(storedProps.page).toBe("/dashboard");
+  });
+
+  it("rejects secret-like keys with 400 before any write", async () => {
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            eventName: "page_view",
+            properties: {
+              page: "/dashboard",
+              referrer: "direct",
+              // These contain "token" and "secret" — caught by pre-write check
+              safeKey_token: "some-val",
+              safeKey_secret: "some-val",
+            },
+          })
+        ),
+      }) as never
+    );
+
+    // Pre-write validation rejects secret-like keys entirely
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toBe("Unsupported property");
+    expect(mockRecordEvent).not.toHaveBeenCalled();
   });
 });

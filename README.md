@@ -254,23 +254,19 @@ All fields are present even when data is empty/sparse (zeroed arrays/counters). 
 
 #### Curl Examples for Hermes
 
-The summary endpoint requires the `ANALYTICS_API_KEY` environment variable passed in the `Authorization` header (bearer scheme). Export the variable and use it in your request.
+The summary endpoint requires the `Authorization` header using the bearer scheme with your `ANALYTICS_API_KEY` value. Replace `<your-analytics-api-key>` with the actual key configured in your environment.
 
 **Authorized request (7-day summary):**
 
 ```bash
-# Replace with your actual key before running
-export ANALYTICS_API_KEY=
-curl -s -H "Authorization: Bearer-cred \$ANALYTICS_API_KEY" \
+curl -s -H "Authorization: Bearer <your-analytics-api-key>" \
   "https://your-leagueback-domain.vercel.app/api/analytics/summary?days=7"
 ```
-
-> Replace `Bearer-cred` with `Bearer` followed by a space and your key value.
 
 **Authorized request (30-day summary):**
 
 ```bash
-curl -s -H "Authorization: Bearer-cred \$ANALYTICS_API_KEY" \
+curl -s -H "Authorization: Bearer <your-analytics-api-key>" \
   "https://your-leagueback-domain.vercel.app/api/analytics/summary?days=30"
 ```
 

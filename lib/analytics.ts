@@ -64,6 +64,25 @@ const SECRET_PATTERNS = [
   /sk_test/i,
 ];
 
+/** Patterns that look like Riot game identifiers — must not be used as anonymous IDs. */
+const RIOT_ID_PATTERNS = [
+  // Match IDs: region prefix + underscore + digits (e.g., NA1_1234567890)
+  /^[A-Z]{2,4}\d_\d{4,}$/,
+  // PUUID-like hex strings (long hex with dashes)
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  // Summoner ID-like: purely numeric strings 20+ digits
+  /^\d{20,}$/,
+];
+
+/**
+ * Returns true if the given ID matches a known Riot game identifier pattern.
+ * This catches IDs that satisfy the generic character regex but are actually
+ * Riot match IDs, PUUIDs, or summoner IDs being used as visitor/session IDs.
+ */
+export function isRiotLikeIdentifier(id: string): boolean {
+  return RIOT_ID_PATTERNS.some((pattern) => pattern.test(id));
+}
+
 // ---------------------------------------------------------------------------
 // Browser / server event separation
 // ---------------------------------------------------------------------------
@@ -281,16 +300,20 @@ export function boundTimestamp(clientTs?: string): Date {
 
 /**
  * Validates visitor ID format (alphanumeric, dash, underscore, 8-64 chars).
+ * Also rejects IDs that match Riot game identifier patterns (match IDs,
+ * PUUIDs, summoner IDs) even if they satisfy the generic character regex.
  */
 export function validateVisitorId(id: string): boolean {
-  return ID_REGEX.test(id);
+  return ID_REGEX.test(id) && !isRiotLikeIdentifier(id);
 }
 
 /**
  * Validates session ID format (alphanumeric, dash, underscore, 8-64 chars).
+ * Also rejects IDs that match Riot game identifier patterns (match IDs,
+ * PUUIDs, summoner IDs) even if they satisfy the generic character regex.
  */
 export function validateSessionId(id: string): boolean {
-  return ID_REGEX.test(id);
+  return ID_REGEX.test(id) && !isRiotLikeIdentifier(id);
 }
 
 // ---------------------------------------------------------------------------
