@@ -65,6 +65,74 @@ const SECRET_PATTERNS = [
 ];
 
 // ---------------------------------------------------------------------------
+// Browser / server event separation
+// ---------------------------------------------------------------------------
+
+/** Browser-only event names — server instrumentation events are excluded. */
+export const BROWSER_EVENT_NAMES: ReadonlySet<string> = new Set([
+  "page_view",
+  "visitor_activity",
+  "search_attempt",
+  "lookup_success",
+  "lookup_failure",
+  "player_page_view",
+  "match_detail_view",
+  "load_more",
+  "manual_update",
+  "client_error",
+]);
+
+/**
+ * Returns true if the event name is a browser-safe event.
+ * Server-only events (endpoint_outcome, endpoint_error) return false.
+ */
+export function isBrowserEvent(name: string): boolean {
+  return BROWSER_EVENT_NAMES.has(name);
+}
+
+// ---------------------------------------------------------------------------
+// Event-specific property allowlists
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-event property allowlists. Only the listed keys are retained for
+ * each event type; all other property keys are silently dropped.
+ */
+export const EVENT_PROPERTY_ALLOWLIST: Readonly<Record<string, readonly string[]>> = {
+  page_view: ["page", "referrer"],
+  visitor_activity: [],
+  search_attempt: ["queryHash", "hasTagLine"],
+  lookup_success: ["matchCount"],
+  lookup_failure: ["failureCategory"],
+  player_page_view: ["page", "referrer"],
+  match_detail_view: ["matchRef"],
+  load_more: ["offset", "limit", "source"],
+  manual_update: ["outcome"],
+  client_error: ["category", "route"],
+  // Server-only events (endpoint_outcome, endpoint_error) are not listed
+  // because public ingest rejects them before reaching this filter.
+};
+
+/**
+ * Filters properties down to the allowlisted keys for the given event.
+ * If the event has no allowlist entry, returns an empty object (unknown event).
+ */
+export function filterPropertiesByEvent(
+  eventName: string,
+  properties: Record<string, unknown>
+): Record<string, unknown> {
+  const allowed = EVENT_PROPERTY_ALLOWLIST[eventName];
+  if (!allowed) return {};
+  const result: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (key in properties) {
+      result[key] = properties[key];
+    }
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Event name validation
 // ---------------------------------------------------------------------------
 

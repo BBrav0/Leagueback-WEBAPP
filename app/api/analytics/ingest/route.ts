@@ -7,6 +7,8 @@ import {
   sanitizeProperties,
   isSecretKey,
   isWithinNestingDepth,
+  isBrowserEvent,
+  filterPropertiesByEvent,
   MAX_PROPERTY_KEY_LENGTH,
   MAX_PROPERTY_COUNT,
   MAX_NESTING_DEPTH,
@@ -76,6 +78,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Reject server-only events from public ingest (VAL-API-005)
+  if (!isBrowserEvent(eventName)) {
+    return NextResponse.json(
+      { error: "Server-only event" },
+      { status: 400 }
+    );
+  }
+
   // Validate properties shape before any write:
   // Reject secret-like keys, oversized keys, too many properties, and deeply nested values.
   // This prevents bad payloads from reaching recordAnalyticsEvent.
@@ -127,6 +137,9 @@ export async function POST(request: NextRequest) {
   // Sanitize properties (final safety pass — never write raw/secret-like properties)
   const sanitizedProps = sanitizeProperties(rawProps);
 
+  // Filter to event-specific property allowlist (VAL-API-004)
+  const filteredProps = filterPropertiesByEvent(eventName, sanitizedProps);
+
   // Record event (fail-open — storage failure does not affect response)
   try {
     const sql = getSql();
@@ -134,7 +147,7 @@ export async function POST(request: NextRequest) {
       eventName,
       visitorId,
       sessionId,
-      sanitizedProps,
+      filteredProps,
       { sql }
     );
   } catch {

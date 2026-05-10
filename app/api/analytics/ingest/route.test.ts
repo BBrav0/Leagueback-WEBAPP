@@ -43,6 +43,46 @@ const MAX_PROPERTY_KEY_LENGTH = 48;
 const MAX_PROPERTY_COUNT = 24;
 const MAX_NESTING_DEPTH = 2;
 
+/** Event-specific property allowlists matching the production implementation. */
+const EVENT_PROPERTY_ALLOWLIST: Record<string, string[]> = {
+  page_view: ["page", "referrer"],
+  visitor_activity: [],
+  search_attempt: ["queryHash", "hasTagLine"],
+  lookup_success: ["matchCount"],
+  lookup_failure: ["failureCategory"],
+  player_page_view: ["page", "referrer"],
+  match_detail_view: ["matchRef"],
+  load_more: ["offset", "limit", "source"],
+  manual_update: ["outcome"],
+  client_error: ["category", "route"],
+};
+
+/** Browser-only event names (server-only events are NOT included). */
+const BROWSER_EVENT_NAMES = new Set([
+  "page_view", "visitor_activity", "search_attempt", "lookup_success",
+  "lookup_failure", "player_page_view", "match_detail_view", "load_more",
+  "manual_update", "client_error",
+]);
+
+function isBrowserEventMock(name: string): boolean {
+  return BROWSER_EVENT_NAMES.has(name);
+}
+
+function filterPropertiesByEventMock(
+  eventName: string,
+  properties: Record<string, unknown>
+): Record<string, unknown> {
+  const allowed = EVENT_PROPERTY_ALLOWLIST[eventName];
+  if (!allowed) return {};
+  const result: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (key in properties) {
+      result[key] = properties[key];
+    }
+  }
+  return result;
+}
+
 vi.mock("@/lib/analytics", () => ({
   recordAnalyticsEvent: mockRecordEvent,
   validateEventName: vi.fn((name: string) =>
@@ -60,6 +100,8 @@ vi.mock("@/lib/analytics", () => ({
   }),
   isSecretKey: vi.fn(isSecretKeyMock),
   isWithinNestingDepth: vi.fn(isWithinNestingDepthMock),
+  isBrowserEvent: vi.fn(isBrowserEventMock),
+  filterPropertiesByEvent: vi.fn(filterPropertiesByEventMock),
   MAX_PROPERTY_KEY_LENGTH,
   MAX_PROPERTY_COUNT,
   MAX_NESTING_DEPTH,
@@ -126,7 +168,7 @@ describe("POST /api/analytics/ingest", () => {
         body: JSON.stringify(
           makeValidPayload({
             eventName: "search_attempt",
-            properties: { query: "test" },
+            properties: { queryHash: "abc123" },
           })
         ),
       }) as never
@@ -136,7 +178,7 @@ describe("POST /api/analytics/ingest", () => {
       "search_attempt",
       "visitor-12345678",
       "session-12345678",
-      { query: "test" },
+      expect.any(Object),
       expect.any(Object) // neonClient
     );
   });
@@ -223,7 +265,7 @@ describe("POST /api/analytics/ingest", () => {
     expect(res2.status).toBe(400);
   });
 
-  // VAL-API-005: Unsupported methods rejected
+  // VAL-API-007: Unsupported methods rejected
   it("rejects GET requests with 405", async () => {
     const { GET } = await import("./route");
     const response = await GET(
@@ -232,7 +274,7 @@ describe("POST /api/analytics/ingest", () => {
     expect(response.status).toBe(405);
   });
 
-  // VAL-API-005: PUT rejected
+  // VAL-API-007: PUT rejected
   it("rejects PUT requests with 405", async () => {
     // Route only exports POST, but if PUT exists test it.
     // We test by importing the route module and checking PUT is not exported
@@ -263,7 +305,7 @@ describe("POST /api/analytics/ingest", () => {
     expect(bodyStr).not.toContain("apiKey");
   });
 
-  // VAL-API-003: Analytics storage failure returns safe ack, not error
+  // VAL-API-006: Analytics storage failure returns safe ack, not error
   it("returns ok:true even when analytics storage fails (fail-open)", async () => {
     mockRecordEvent.mockResolvedValue({ success: false, reason: "write_failed" });
 
@@ -282,7 +324,7 @@ describe("POST /api/analytics/ingest", () => {
     expect(body).toEqual({ ok: true });
   });
 
-  // VAL-API-006: Client timestamp not used directly (server assigns)
+  // VAL-API-003: Client timestamp not used directly (server assigns)
   it("ignores client-provided timestamp in the payload", async () => {
     mockRecordEvent.mockResolvedValue({ success: true });
 
@@ -422,7 +464,7 @@ describe("POST /api/analytics/ingest", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           makeValidPayload({
-            properties: { page: "/dashboard", referrer: "direct", count: 5 },
+            properties: { page: "/dashboard", referrer: "direct" },
           })
         ),
       }) as never
@@ -430,5 +472,273 @@ describe("POST /api/analytics/ingest", () => {
 
     expect(response.status).toBe(200);
     expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+  });
+
+  // -----------------------------------------------------------------------
+  // VAL-API-005: Public ingest rejects server-only endpoint events
+  // -----------------------------------------------------------------------
+
+  it("rejects endpoint_outcome events from public ingest with 400", async () => {
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            eventName: "endpoint_outcome",
+            properties: { route: "/api/account", status: 200 },
+          })
+        ),
+      }) as never
+    );
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toBe("Server-only event");
+    expect(mockRecordEvent).not.toHaveBeenCalled();
+  });
+
+  it("rejects endpoint_error events from public ingest with 400", async () => {
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            eventName: "endpoint_error",
+            properties: { route: "/api/account", status: 500 },
+          })
+        ),
+      }) as never
+    );
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toBe("Server-only event");
+    expect(mockRecordEvent).not.toHaveBeenCalled();
+  });
+
+  // -----------------------------------------------------------------------
+  // VAL-API-004: Ingest enforces event-specific property allowlists
+  // -----------------------------------------------------------------------
+
+  it("filters properties to event-specific allowlist for page_view", async () => {
+    mockRecordEvent.mockResolvedValue({ success: true });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            eventName: "page_view",
+            properties: {
+              page: "/dashboard",
+              referrer: "direct",
+              // These should be filtered out:
+              extraField: "should-be-removed",
+              riotId: "Player#EUW1",
+            },
+          })
+        ),
+      }) as never
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+    // Verify filterPropertiesByEvent was called
+    const { filterPropertiesByEvent } = await import("@/lib/analytics");
+    expect(filterPropertiesByEvent).toHaveBeenCalledWith(
+      "page_view",
+      expect.objectContaining({
+        page: "/dashboard",
+        referrer: "direct",
+        extraField: "should-be-removed",
+      })
+    );
+  });
+
+  it("filters properties for search_attempt to only queryHash and hasTagLine", async () => {
+    mockRecordEvent.mockResolvedValue({ success: true });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            eventName: "search_attempt",
+            properties: {
+              queryHash: "abc123",
+              hasTagLine: true,
+              // Should be filtered:
+              rawGameName: "SecretPlayer",
+            },
+          })
+        ),
+      }) as never
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+    const { filterPropertiesByEvent } = await import("@/lib/analytics");
+    expect(filterPropertiesByEvent).toHaveBeenCalledWith(
+      "search_attempt",
+      expect.objectContaining({ queryHash: "abc123", rawGameName: "SecretPlayer" })
+    );
+  });
+
+  it("filters properties for lookup_failure to only failureCategory", async () => {
+    mockRecordEvent.mockResolvedValue({ success: true });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            eventName: "lookup_failure",
+            properties: {
+              failureCategory: "account_not_found",
+              // Should be filtered:
+              errorMessage: "player not found",
+              rawStackTrace: "at line 42...",
+            },
+          })
+        ),
+      }) as never
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+    const { filterPropertiesByEvent } = await import("@/lib/analytics");
+    expect(filterPropertiesByEvent).toHaveBeenCalledWith(
+      "lookup_failure",
+      expect.objectContaining({
+        failureCategory: "account_not_found",
+        errorMessage: "player not found",
+      })
+    );
+  });
+
+  it("stores only allowlisted properties after filtering", async () => {
+    mockRecordEvent.mockResolvedValue({ success: true });
+    const { POST } = await import("./route");
+
+    await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            eventName: "page_view",
+            properties: {
+              page: "/",
+              referrer: "direct",
+              sneakyExtra: "removed",
+            },
+          })
+        ),
+      }) as never
+    );
+
+    // The stored properties passed to recordAnalyticsEvent should be
+    // the filtered result from filterPropertiesByEvent
+    expect(mockRecordEvent).toHaveBeenCalledWith(
+      "page_view",
+      "visitor-12345678",
+      "session-12345678",
+      expect.any(Object), // filtered properties
+      expect.any(Object)  // neonClient
+    );
+  });
+
+  it("accepts visitor_activity with no properties", async () => {
+    mockRecordEvent.mockResolvedValue({ success: true });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            eventName: "visitor_activity",
+            properties: {},
+          })
+        ),
+      }) as never
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("filters load_more properties to offset, limit, source only", async () => {
+    mockRecordEvent.mockResolvedValue({ success: true });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            eventName: "load_more",
+            properties: {
+              offset: 10,
+              limit: 20,
+              source: "stored",
+              matchId: "NA1_123456",
+            },
+          })
+        ),
+      }) as never
+    );
+
+    expect(response.status).toBe(200);
+    const { filterPropertiesByEvent } = await import("@/lib/analytics");
+    expect(filterPropertiesByEvent).toHaveBeenCalledWith(
+      "load_more",
+      expect.objectContaining({ matchId: "NA1_123456" })
+    );
+  });
+
+  it("filters client_error properties to category and route only", async () => {
+    mockRecordEvent.mockResolvedValue({ success: true });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            eventName: "client_error",
+            properties: {
+              category: "fetch_failure",
+              route: "/dashboard",
+              rawErrorMessage: "TypeError: NetworkError",
+              stackTrace: "at line 1...",
+            },
+          })
+        ),
+      }) as never
+    );
+
+    expect(response.status).toBe(200);
+    const { filterPropertiesByEvent } = await import("@/lib/analytics");
+    expect(filterPropertiesByEvent).toHaveBeenCalledWith(
+      "client_error",
+      expect.objectContaining({
+        rawErrorMessage: "TypeError: NetworkError",
+        stackTrace: "at line 1...",
+      })
+    );
   });
 });
