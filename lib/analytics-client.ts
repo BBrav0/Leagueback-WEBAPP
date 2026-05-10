@@ -63,8 +63,8 @@ const SECRET_KEY_PATTERNS = [
   /puuid/i,
   /summoner/i,
   /riot/i,
-  /game[_-]?name/i,
-  /tag[_-]?line/i,
+  /^game[_-]?name/i,
+  /^tag[_-]?line/i,
 ];
 
 /** Maximum string length for property values sent from client. */

@@ -95,6 +95,7 @@ import {
   getSessionId,
   trackEvent,
   trackPageView,
+  trackPlayerPageView,
   trackSearchAttempt,
   trackLookupSuccess,
   trackLookupFailure,
@@ -493,5 +494,655 @@ describe("session context consistency", () => {
       expect(body.visitorId).toBe(visitorId);
       expect(body.sessionId).toBe(sessionId);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// VAL-SEC-004: Client-facing code exposes no server-only secrets
+// ---------------------------------------------------------------------------
+
+describe("VAL-SEC-004: client module exports no server secrets", () => {
+  it("does not export any secret-like values or server-only identifiers", async () => {
+    // Import the module namespace and verify no secret exports
+    const mod = await import("./analytics-client");
+    const exportKeys = Object.keys(mod);
+
+    // Should not contain server-only values
+    for (const key of exportKeys) {
+      expect(key.toLowerCase()).not.toContain("secret");
+      expect(key.toLowerCase()).not.toContain("apikey");
+      expect(key.toLowerCase()).not.toContain("hmac");
+      expect(key.toLowerCase()).not.toContain("database");
+      expect(key.toLowerCase()).not.toContain("connection");
+    }
+
+    // Verify no secret-like string values in exports
+    for (const [key, value] of Object.entries(mod)) {
+      if (typeof value === "string") {
+        expect(value).not.toMatch(/postgres(ql)?:\/\//i);
+        expect(value).not.toMatch(/sk_live|sk_test/i);
+        expect(value).not.toMatch(/eyJ[A-Za-z0-9_-]{20,}/);
+        expect(value).not.toMatch(/Bearer\s+/i);
+      }
+    }
+  });
+
+  it("INGEST_ENDPOINT is a relative first-party path, not an external URL", async () => {
+    const mod = await import("./analytics-client");
+    // INGEST_ENDPOINT is not exported, but trackEvent only uses /api/analytics/ingest
+    initAnalyticsSession();
+    await trackEvent("page_view", { page: "/" });
+    const call = getCallArgs(mockFetch.mock.calls.length - 1);
+    expect(call.url).toBe("/api/analytics/ingest");
+    expect(call.url).not.toMatch(/^https?:\/\//);
+    expect(call.url).not.toMatch(/google-analytics|segment|mixpanel|amplitude|datadog/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// VAL-CLIENT-001: Browser analytics posts only to first-party ingest
+// ---------------------------------------------------------------------------
+
+describe("VAL-CLIENT-001: all convenience functions post to first-party ingest", () => {
+  it("every track* function targets /api/analytics/ingest via POST with JSON", async () => {
+    initAnalyticsSession();
+    mockReferrer = "";
+
+    // Fire all convenience functions
+    await trackPageView("/");
+    await trackSearchAttempt("Player", "EUW1");
+    await trackLookupSuccess({ matchCount: 5 });
+    await trackLookupFailure("account_not_found");
+    await trackMatchDetailView("NA1_1234567890");
+    await trackLoadMore({ offset: 0, limit: 20, source: "stored-history" });
+    await trackManualUpdate({ outcome: "success" });
+    await trackClientError("fetch_failure", { route: "/api/test" });
+
+    // Every call must target the same first-party endpoint
+    expect(mockFetch).toHaveBeenCalledTimes(8);
+    for (let i = 0; i < mockFetch.mock.calls.length; i++) {
+      const call = getCallArgs(i);
+      expect(call.url).toBe("/api/analytics/ingest");
+      expect(call.method).toBe("POST");
+      expect(call.headers["Content-Type"]).toBe("application/json");
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// VAL-CLIENT-002: Client payload shape is minimal
+// ---------------------------------------------------------------------------
+
+describe("VAL-CLIENT-002: payload contains only the four required top-level fields", () => {
+  it("every event has exactly eventName, visitorId, sessionId, and properties at top level", async () => {
+    initAnalyticsSession();
+    await trackEvent("page_view", { page: "/" });
+
+    const body = JSON.parse(getCallArgs(0).body);
+    const topKeys = Object.keys(body).sort();
+    expect(topKeys).toEqual(["eventName", "properties", "sessionId", "visitorId"]);
+  });
+
+  it("does not add extra top-level fields like timestamp, userAgent, or screen", async () => {
+    initAnalyticsSession();
+    await trackSearchAttempt("Player", "EUW1");
+
+    const body = JSON.parse(getCallArgs(0).body);
+    const topKeys = Object.keys(body);
+    expect(topKeys).toHaveLength(4);
+    expect(topKeys).not.toContain("timestamp");
+    expect(topKeys).not.toContain("userAgent");
+    expect(topKeys).not.toContain("screen");
+    expect(topKeys).not.toContain("ip");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// VAL-CLIENT-003: Search and lookup events are privacy-safe
+// ---------------------------------------------------------------------------
+
+describe("VAL-CLIENT-003: search and lookup events never expose raw identifiers", () => {
+  it("search_attempt payload has no raw game name or tag line anywhere in body", async () => {
+    initAnalyticsSession();
+    await trackSearchAttempt("VerySecretPlayer", "EUW1");
+
+    const bodyStr = getCallArgs(0).body;
+    // Parse to check structure
+    const body = JSON.parse(bodyStr);
+    expect(body.eventName).toBe("search_attempt");
+
+    // Raw identifiers must not appear anywhere in the serialized body
+    expect(bodyStr).not.toContain("VerySecretPlayer");
+    expect(bodyStr).not.toContain("EUW1");
+    // Must have the hashed query identifier
+    expect(body.properties).toHaveProperty("queryHash");
+    expect(typeof body.properties.queryHash).toBe("string");
+    expect(body.properties.queryHash.length).toBeGreaterThan(0);
+  });
+
+  it("search_attempt preserves hasTagLine boolean indicator", async () => {
+    initAnalyticsSession();
+    await trackSearchAttempt("Player", "EUW1");
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.properties.hasTagLine).toBe(true);
+
+    mockFetch.mockClear();
+    await trackSearchAttempt("Player", "");
+    const body2 = JSON.parse(getCallArgs(0).body);
+    expect(body2.properties.hasTagLine).toBe(false);
+  });
+
+  it("lookup_success contains only matchCount, no identifiers", async () => {
+    initAnalyticsSession();
+    await trackLookupSuccess({ matchCount: 42 });
+
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.eventName).toBe("lookup_success");
+    expect(body.properties.matchCount).toBe(42);
+    const propKeys = Object.keys(body.properties);
+    expect(propKeys).toEqual(["matchCount"]);
+  });
+
+  it("lookup_failure contains only bounded failureCategory", async () => {
+    initAnalyticsSession();
+    await trackLookupFailure("account_not_found", "Detailed error with Riot API response for player X");
+
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.eventName).toBe("lookup_failure");
+    const bodyStr = JSON.stringify(body);
+    expect(body.properties.failureCategory).toBe("account_not_found");
+    // Raw error message must not appear
+    expect(bodyStr).not.toContain("Detailed error");
+    expect(bodyStr).not.toContain("Riot API response");
+    expect(bodyStr).not.toContain("player X");
+  });
+
+  it("lookup_failure maps unknown categories to 'unknown'", async () => {
+    initAnalyticsSession();
+    await trackLookupFailure("custom_category_with_details");
+
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.properties.failureCategory).toBe("unknown");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// VAL-CLIENT-004: Route and referrer tracking is sanitized
+// ---------------------------------------------------------------------------
+
+describe("VAL-CLIENT-004: route and referrer tracking sanitization", () => {
+  it("page_view strips query strings containing potential identifiers", async () => {
+    initAnalyticsSession();
+    await trackPageView("/?gameName=SecretPlayer&tagLine=EUW1");
+
+    const body = JSON.parse(getCallArgs(0).body);
+    const bodyStr = JSON.stringify(body);
+    expect(body.properties.page).toBe("/");
+    expect(bodyStr).not.toContain("SecretPlayer");
+    expect(bodyStr).not.toContain("tagLine");
+  });
+
+  it("player_page_view normalizes all player path variants", async () => {
+    initAnalyticsSession();
+
+    // Various player URL shapes
+    const playerPaths = [
+      "/player/SomeGameName",
+      "/player/SomeGameName/EUW1",
+      "/player/SomeGameName#EUW1",
+      "/player/SomeGameName?region=EUW",
+      "/player/SomeGameName/EUW1?tab=overview",
+      "/player/SomeGameName#tag?extra=data",
+    ];
+
+    for (const path of playerPaths) {
+      mockFetch.mockClear();
+      await trackPlayerPageView(path);
+      const body = JSON.parse(getCallArgs(0).body);
+      expect(body.properties.page).toBe("/player");
+    }
+  });
+
+  it("page_view referrer category is bounded to known values", async () => {
+    initAnalyticsSession();
+
+    const refCases = [
+      { referrer: "", expected: "direct" },
+      { referrer: "http://localhost:3005/", expected: "internal" },
+      { referrer: "https://google.com/", expected: "external" },
+    ];
+
+    for (const { referrer, expected } of refCases) {
+      mockReferrer = referrer;
+      mockFetch.mockClear();
+      await trackPageView("/");
+      const body = JSON.parse(getCallArgs(0).body);
+      expect(["direct", "internal", "external", "unknown"]).toContain(body.properties.referrer);
+    }
+  });
+
+  it("sanitizeClientPath handles hash fragments with tag line content", () => {
+    // VAL-CLIENT-009: Various tagline encoding patterns
+    expect(sanitizeClientPath("/player/GameName#EUW1")).toBe("/player");
+    expect(sanitizeClientPath("/player/GameName#1234")).toBe("/player");
+    expect(sanitizeClientPath("/player/GameName#tag")).toBe("/player");
+  });
+
+  it("sanitizeClientPath handles URL-encoded player names", () => {
+    expect(sanitizeClientPath("/player/Player%20Name")).toBe("/player");
+    expect(sanitizeClientPath("/player/Player%23Name/EUW1")).toBe("/player");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// VAL-CLIENT-005: Match, load-more, and manual update events are privacy-safe
+// ---------------------------------------------------------------------------
+
+describe("VAL-CLIENT-005: match/load-more/manual-update events never expose raw identifiers", () => {
+  it("match_detail_view hashes match ID, never sends raw match ID", async () => {
+    initAnalyticsSession();
+    await trackMatchDetailView("NA1_9999999999");
+
+    const body = JSON.parse(getCallArgs(0).body);
+    const bodyStr = JSON.stringify(body);
+    expect(body.eventName).toBe("match_detail_view");
+    // Raw match ID must not appear
+    expect(bodyStr).not.toContain("NA1_9999999999");
+    // Should have a hashed reference
+    expect(body.properties.matchRef).toBeTruthy();
+    expect(typeof body.properties.matchRef).toBe("string");
+    expect(body.properties.matchRef).not.toBe("NA1_9999999999");
+  });
+
+  it("match_detail_view matchRef is a one-way transformation", async () => {
+    initAnalyticsSession();
+    await trackMatchDetailView("NA1_12345");
+    const ref1 = JSON.parse(getCallArgs(0).body).properties.matchRef;
+
+    // Same input produces same hash (deterministic)
+    mockFetch.mockClear();
+    await trackMatchDetailView("NA1_12345");
+    const ref2 = JSON.parse(getCallArgs(0).body).properties.matchRef;
+    expect(ref1).toBe(ref2);
+
+    // Different input produces different hash
+    mockFetch.mockClear();
+    await trackMatchDetailView("NA1_99999");
+    const ref3 = JSON.parse(getCallArgs(0).body).properties.matchRef;
+    expect(ref3).not.toBe(ref1);
+  });
+
+  it("load_more contains only offset, limit, source — no raw identifiers", async () => {
+    initAnalyticsSession();
+    await trackLoadMore({ offset: 40, limit: 20, source: "riot-api" });
+
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.eventName).toBe("load_more");
+    expect(body.properties).toEqual({
+      offset: 40,
+      limit: 20,
+      source: "riot-api",
+    });
+  });
+
+  it("manual_update contains only bounded outcome", async () => {
+    initAnalyticsSession();
+
+    const outcomes = ["success", "rate_limited", "error"];
+    for (const outcome of outcomes) {
+      mockFetch.mockClear();
+      await trackManualUpdate({ outcome });
+      const body = JSON.parse(getCallArgs(0).body);
+      expect(body.eventName).toBe("manual_update");
+      expect(body.properties.outcome).toBe(outcome);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// VAL-CLIENT-006: Client error analytics are bounded
+// ---------------------------------------------------------------------------
+
+describe("VAL-CLIENT-006: client errors contain no raw details", () => {
+  it("client_error drops raw error messages and stack traces from context", async () => {
+    initAnalyticsSession();
+    await trackClientError("fetch_failure", {
+      message: "TypeError: Cannot read property 'puuid' of undefined",
+      stack: "TypeError: Cannot read...\n    at dashboard.tsx:123\n    at React._render",
+    });
+
+    const body = JSON.parse(getCallArgs(0).body);
+    const bodyStr = JSON.stringify(body);
+    expect(body.eventName).toBe("client_error");
+    expect(body.properties.category).toBe("fetch_failure");
+    // Raw message and stack must not appear
+    expect(bodyStr).not.toContain("TypeError");
+    expect(bodyStr).not.toContain("stack");
+    expect(bodyStr).not.toContain("puuid");
+    expect(bodyStr).not.toContain("dashboard.tsx");
+  });
+
+  it("client_error bounds category to approved values", async () => {
+    initAnalyticsSession();
+    await trackClientError("custom_category");
+
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.properties.category).toBe("unknown");
+  });
+
+  it("client_error sanitizes route paths in context", async () => {
+    initAnalyticsSession();
+    await trackClientError("fetch_failure", {
+      route: "/player/SecretPlayer/EUW1",
+    });
+
+    const body = JSON.parse(getCallArgs(0).body);
+    const bodyStr = JSON.stringify(body);
+    expect(body.properties.route).toBe("/player");
+    expect(bodyStr).not.toContain("SecretPlayer");
+  });
+
+  it("client_error does not forward cookie or auth headers in context", async () => {
+    initAnalyticsSession();
+    await trackClientError("fetch_failure", {
+      cookie: "session=abc123",
+      authorization: "Bearer token123",
+      apiKey: "secret-key",
+    });
+
+    const body = JSON.parse(getCallArgs(0).body);
+    const bodyStr = JSON.stringify(body);
+    expect(bodyStr).not.toContain("session=abc123");
+    expect(bodyStr).not.toContain("Bearer");
+    expect(bodyStr).not.toContain("secret-key");
+    expect(body.properties).not.toHaveProperty("cookie");
+    expect(body.properties).not.toHaveProperty("authorization");
+    expect(body.properties).not.toHaveProperty("apiKey");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// VAL-CLIENT-007: Client analytics fails open
+// ---------------------------------------------------------------------------
+
+describe("VAL-CLIENT-007: analytics failures do not block UX", () => {
+  it("all convenience functions resolve without throwing when fetch rejects", async () => {
+    initAnalyticsSession();
+    mockFetch.mockRejectedValue(new Error("Network down"));
+
+    // None of these should throw
+    await expect(trackPageView("/")).resolves.toBeUndefined();
+    await expect(trackSearchAttempt("P", "T")).resolves.toBeUndefined();
+    await expect(trackLookupSuccess({ matchCount: 1 })).resolves.toBeUndefined();
+    await expect(trackLookupFailure("error")).resolves.toBeUndefined();
+    await expect(trackMatchDetailView("NA1_123")).resolves.toBeUndefined();
+    await expect(trackLoadMore({ offset: 0, limit: 20, source: "test" })).resolves.toBeUndefined();
+    await expect(trackManualUpdate({ outcome: "success" })).resolves.toBeUndefined();
+    await expect(trackClientError("fetch_failure")).resolves.toBeUndefined();
+  });
+
+  it("all convenience functions resolve when server returns 500", async () => {
+    initAnalyticsSession();
+    mockFetch.mockResolvedValue(new Response("Internal Server Error", { status: 500 }));
+
+    await expect(trackPageView("/")).resolves.toBeUndefined();
+    await expect(trackSearchAttempt("P", "T")).resolves.toBeUndefined();
+    await expect(trackLookupSuccess({ matchCount: 1 })).resolves.toBeUndefined();
+  });
+
+  it("all convenience functions resolve when server returns 429 (rate limited)", async () => {
+    initAnalyticsSession();
+    mockFetch.mockResolvedValue(new Response("Too Many Requests", { status: 429 }));
+
+    await expect(trackPageView("/")).resolves.toBeUndefined();
+    await expect(trackClientError("fetch_failure")).resolves.toBeUndefined();
+  });
+
+  it("trackEvent never creates unhandled promise rejections on fetch failure", async () => {
+    initAnalyticsSession();
+    mockFetch.mockRejectedValue(new Error("Network error"));
+
+    // Call without awaiting — should not create unhandled rejection
+    trackEvent("page_view", { page: "/" });
+
+    // Give microtask queue a chance
+    await new Promise((r) => setTimeout(r, 50));
+
+    // If we get here without unhandled rejection, the test passes
+    expect(true).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// VAL-CLIENT-008: Dashboard user interactions emit expected analytics
+// ---------------------------------------------------------------------------
+
+describe("VAL-CLIENT-008: each interaction type emits the correct sanitized event", () => {
+  it("search submit emits search_attempt with hashed query", async () => {
+    initAnalyticsSession();
+    // Simulates what onSearchAttempt does
+    const gameName = "TestPlayer";
+    const tagLine = "EUW1";
+
+    // Simulate the hook calling trackSearchAttempt
+    await trackSearchAttempt(gameName, tagLine);
+
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.eventName).toBe("search_attempt");
+    expect(body.properties).toHaveProperty("queryHash");
+    expect(body.properties).toHaveProperty("hasTagLine");
+  });
+
+  it("successful lookup emits lookup_success with matchCount", async () => {
+    initAnalyticsSession();
+    await trackLookupSuccess({ matchCount: 10 });
+
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.eventName).toBe("lookup_success");
+    expect(body.properties.matchCount).toBe(10);
+  });
+
+  it("failed lookup emits lookup_failure with bounded category", async () => {
+    initAnalyticsSession();
+    await trackLookupFailure("account_not_found");
+
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.eventName).toBe("lookup_failure");
+    expect(body.properties.failureCategory).toBe("account_not_found");
+  });
+
+  it("match card expansion emits match_detail_view with hashed matchRef", async () => {
+    initAnalyticsSession();
+    await trackMatchDetailView("NA1_1234567890");
+
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.eventName).toBe("match_detail_view");
+    expect(body.properties).toHaveProperty("matchRef");
+    expect(body.properties.matchRef).not.toBe("NA1_1234567890");
+  });
+
+  it("stored-history load-more emits load_more with source=stored-history", async () => {
+    initAnalyticsSession();
+    await trackLoadMore({ offset: 20, limit: 20, source: "stored-history" });
+
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.eventName).toBe("load_more");
+    expect(body.properties.source).toBe("stored-history");
+    expect(body.properties.offset).toBe(20);
+  });
+
+  it("riot-api load-more emits load_more with source=riot-api", async () => {
+    initAnalyticsSession();
+    await trackLoadMore({ offset: 0, limit: 5, source: "riot-api" });
+
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.eventName).toBe("load_more");
+    expect(body.properties.source).toBe("riot-api");
+  });
+
+  it("manual update success emits manual_update with outcome=success", async () => {
+    initAnalyticsSession();
+    await trackManualUpdate({ outcome: "success" });
+
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.eventName).toBe("manual_update");
+    expect(body.properties.outcome).toBe("success");
+  });
+
+  it("manual update rate-limited emits manual_update with outcome=rate_limited", async () => {
+    initAnalyticsSession();
+    await trackManualUpdate({ outcome: "rate_limited" });
+
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.eventName).toBe("manual_update");
+    expect(body.properties.outcome).toBe("rate_limited");
+  });
+
+  it("manual update error emits manual_update with outcome=error", async () => {
+    initAnalyticsSession();
+    await trackManualUpdate({ outcome: "error" });
+
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.eventName).toBe("manual_update");
+    expect(body.properties.outcome).toBe("error");
+  });
+
+  it("client error emits client_error with sanitized category and route", async () => {
+    initAnalyticsSession();
+    await trackClientError("fetch_failure", { route: "/api/match-performance" });
+
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.eventName).toBe("client_error");
+    expect(body.properties.category).toBe("fetch_failure");
+    expect(body.properties.route).toBe("/api/match-performance");
+  });
+
+  it("page view on player route emits player_page_view not page_view", async () => {
+    initAnalyticsSession();
+    mockReferrer = "";
+
+    // When sanitizeClientPath returns /player, trackPlayerPageView should fire
+    await trackPlayerPageView("/player/TestPlayer/EUW1");
+
+    const body = JSON.parse(getCallArgs(0).body);
+    expect(body.eventName).toBe("player_page_view");
+    expect(body.properties.page).toBe("/player");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// VAL-CLIENT-009: Real player route shape is sanitized
+// ---------------------------------------------------------------------------
+
+describe("VAL-CLIENT-009: player URL shapes are sanitized correctly", () => {
+  it("sanitizes /player/[gameName] (single segment)", () => {
+    expect(sanitizeClientPath("/player/TestGameName")).toBe("/player");
+  });
+
+  it("sanitizes /player/[gameName]/[tagLine] (two segments)", () => {
+    expect(sanitizeClientPath("/player/TestGameName/EUW1")).toBe("/player");
+  });
+
+  it("sanitizes /player/[gameName]#[tagLine] (hash variant)", () => {
+    expect(sanitizeClientPath("/player/TestGameName#EUW1")).toBe("/player");
+  });
+
+  it("sanitizes /player/[gameName]?queryParams (query variant)", () => {
+    expect(sanitizeClientPath("/player/TestGameName?tab=overview")).toBe("/player");
+  });
+
+  it("sanitizes /player/[gameName]/[tagLine]?queryParams (full variant)", () => {
+    expect(sanitizeClientPath("/player/TestGameName/EUW1?refresh=true")).toBe("/player");
+  });
+
+  it("sanitizes URL-encoded game names", () => {
+    expect(sanitizeClientPath("/player/Player%20Name")).toBe("/player");
+    expect(sanitizeClientPath("/player/Player%23Name/EUW1")).toBe("/player");
+  });
+
+  it("strips query strings that might contain identifiers", () => {
+    const result = sanitizeClientPath("/player/X?puuid=abc123&gameName=Secret");
+    expect(result).toBe("/player");
+  });
+
+  it("preserves non-player routes intact", () => {
+    expect(sanitizeClientPath("/")).toBe("/");
+    expect(sanitizeClientPath("/dashboard")).toBe("/dashboard");
+    expect(sanitizeClientPath("/api/match-performance")).toBe("/api/match-performance");
+  });
+
+  it("handles edge cases gracefully", () => {
+    expect(sanitizeClientPath("")).toBe("/");
+    expect(sanitizeClientPath("/player/")).toBe("/player");
+    expect(sanitizeClientPath("/player")).toBe("/player");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// VAL-CROSS-005: Identifier hashes are protected before persistence
+// ---------------------------------------------------------------------------
+
+describe("VAL-CROSS-005: client-derived hashes are non-reversible bounded references", () => {
+  it("client-side queryHash is a bounded non-reversible reference (not raw identifier)", async () => {
+    initAnalyticsSession();
+
+    // Two different players should produce different hashes
+    await trackSearchAttempt("PlayerA", "EUW1");
+    const hash1 = JSON.parse(getCallArgs(0).body).properties.queryHash;
+
+    mockFetch.mockClear();
+    await trackSearchAttempt("PlayerB", "EUW1");
+    const hash2 = JSON.parse(getCallArgs(0).body).properties.queryHash;
+
+    expect(hash1).not.toBe(hash2);
+    // Hash should be a short bounded string
+    expect(typeof hash1).toBe("string");
+    expect(hash1.length).toBeGreaterThan(0);
+    expect(hash1.length).toBeLessThan(64);
+    // Hash should not contain the raw identifier
+    expect(hash1).not.toContain("PlayerA");
+  });
+
+  it("client-side matchRef is a bounded non-reversible reference", async () => {
+    initAnalyticsSession();
+
+    await trackMatchDetailView("NA1_1111111111");
+    const ref1 = JSON.parse(getCallArgs(0).body).properties.matchRef;
+
+    mockFetch.mockClear();
+    await trackMatchDetailView("NA1_2222222222");
+    const ref2 = JSON.parse(getCallArgs(0).body).properties.matchRef;
+
+    expect(ref1).not.toBe(ref2);
+    expect(typeof ref1).toBe("string");
+    expect(ref1.length).toBeGreaterThan(0);
+    expect(ref1.length).toBeLessThan(64);
+    expect(ref1).not.toContain("NA1_1111111111");
+  });
+
+  it("client hashes are deterministic for same input", async () => {
+    initAnalyticsSession();
+
+    await trackSearchAttempt("SamePlayer", "EUW1");
+    const h1 = JSON.parse(getCallArgs(0).body).properties.queryHash;
+
+    mockFetch.mockClear();
+    await trackSearchAttempt("SamePlayer", "EUW1");
+    const h2 = JSON.parse(getCallArgs(0).body).properties.queryHash;
+
+    expect(h1).toBe(h2);
+  });
+
+  it("client hashes are case-insensitive for game names", async () => {
+    initAnalyticsSession();
+
+    await trackSearchAttempt("PlayerA", "euw1");
+    const h1 = JSON.parse(getCallArgs(0).body).properties.queryHash;
+
+    mockFetch.mockClear();
+    await trackSearchAttempt("playera", "EUW1");
+    const h2 = JSON.parse(getCallArgs(0).body).properties.queryHash;
+
+    expect(h1).toBe(h2);
   });
 });
