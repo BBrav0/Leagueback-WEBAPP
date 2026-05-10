@@ -19,7 +19,7 @@ import { getSql } from "@/lib/neon";
 import { checkSyncGate } from "@/lib/sync-gate";
 import type { PlayerMatchRow } from "@/lib/database-queries";
 import { selectCurrentRankSnapshot } from "@/lib/rank-snapshot";
-import { instrumentRoute } from "@/lib/analytics-instrumentation";
+import { instrumentRoute, analyticsNeonClient } from "@/lib/analytics-instrumentation";
 
 const CURRENT_DERIVATION_VERSION = "match-summary-v2";
 
@@ -245,11 +245,6 @@ async function _GET(request: NextRequest) {
       error: error instanceof Error ? error.message : "Unknown error",
     }, { status: 500 });
   }
-}
-
-/** Neon client factory for analytics instrumentation. */
-function analyticsNeonClient() {
-  return { sql: getSql() };
 }
 
 export const GET = instrumentRoute("/api/match-performance", _GET, analyticsNeonClient);

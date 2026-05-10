@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { getAnalyticsSummary } from "@/lib/analytics";
 import { getSql } from "@/lib/neon";
 
@@ -9,9 +10,22 @@ import { getSql } from "@/lib/neon";
  * Authorization header (bearer scheme with ANALYTICS_API_KEY).
  *
  * Returns aggregate-only daily metrics, event totals, search funnel,
- * failure categories, match/detail counts, endpoint errors, and
- * noisy traffic counts. Never returns raw event rows or identifiers.
+ * failure categories, match/detail counts, and endpoint errors. Never returns
+ * raw event rows or identifiers.
  */
+
+const BEARER_PREFIX = "Bearer ";
+const MIN_ANALYTICS_API_KEY_LENGTH = 32;
+
+function isValidAnalyticsApiKey(key: string | undefined): key is string {
+  return typeof key === "string" && key.length >= MIN_ANALYTICS_API_KEY_LENGTH;
+}
+
+function timingSafeApiKeyEqual(providedKey: string, configuredKey: string): boolean {
+  const providedDigest = createHash("sha256").update(providedKey).digest();
+  const configuredDigest = createHash("sha256").update(configuredKey).digest();
+  return timingSafeEqual(providedDigest, configuredDigest);
+}
 
 /** Derive search funnel counts from totals array. */
 function computeSearchFunnel(totals: Array<{ event_name: string; count: number }>) {
@@ -23,19 +37,22 @@ function computeSearchFunnel(totals: Array<{ event_name: string; count: number }
   };
 }
 
-/** Derive failure categories from totals. */
-function computeFailureCategories(totals: Array<{ event_name: string; count: number }>) {
-  const categories: Record<string, number> = {};
-  for (const t of totals) {
-    if (t.event_name === "lookup_failure") {
-      categories["lookup_failure"] = t.count;
+/** Derive bounded failure sub-categories from sanitized aggregate rows. */
+function computeFailureCategories(
+  rows: Array<{ event_name: string; category: string; count: number }>
+) {
+  const categories: Record<string, Record<string, number>> = {};
+  for (const row of rows) {
+    if (!["lookup_failure", "client_error", "endpoint_error"].includes(row.event_name)) {
+      continue;
     }
-    if (t.event_name === "client_error") {
-      categories["client_error"] = t.count;
+    const category = typeof row.category === "string" && row.category
+      ? row.category
+      : "unknown";
+    if (!categories[row.event_name]) {
+      categories[row.event_name] = {};
     }
-    if (t.event_name === "endpoint_error") {
-      categories["endpoint_error"] = t.count;
-    }
+    categories[row.event_name][category] = row.count;
   }
   return categories;
 }
@@ -56,24 +73,16 @@ function computeEndpointErrors(daily: Array<{ day: string; event_name: string; c
     .map((d) => ({ day: d.day, count: d.count }));
 }
 
-/** Derive noisy traffic counts from totals. */
-function computeNoisyTraffic(totals: Array<{ event_name: string; count: number }>) {
-  return {
-    rejectedEvents: totals.find((t) => t.event_name === "client_error")?.count ?? 0,
-  };
-}
-
 export async function GET(request: NextRequest) {
   // VAL-SUMMARY-001: Authenticate via bearer-scheme Authorization header
   const apiKey = process.env.ANALYTICS_API_KEY;
-  if (!apiKey) {
+  if (!isValidAnalyticsApiKey(apiKey)) {
     return NextResponse.json(
       { error: "Analytics API not configured" },
       { status: 401 }
     );
   }
 
-  const BEARER_PREFIX = ["Bearer", " "].join("");
   const authHeader = request.headers.get("Authorization");
   if (!authHeader || !authHeader.startsWith(BEARER_PREFIX)) {
     return NextResponse.json(
@@ -83,7 +92,10 @@ export async function GET(request: NextRequest) {
   }
 
   const providedKey = authHeader.slice(BEARER_PREFIX.length);
-  if (providedKey !== apiKey) {
+  if (
+    providedKey.length < MIN_ANALYTICS_API_KEY_LENGTH ||
+    !timingSafeApiKeyEqual(providedKey, apiKey)
+  ) {
     return NextResponse.json(
       { error: "Unauthorized" },
       { status: 401 }
@@ -149,16 +161,16 @@ export async function GET(request: NextRequest) {
 
   const daily = result.data?.daily ?? [];
   const totals = result.data?.totals ?? [];
+  const failureCategoryRows = result.data?.failureCategories ?? [];
 
   // VAL-SUMMARY-003: Return aggregate-only data
   return NextResponse.json({
     daily,
     totals,
     searchFunnel: computeSearchFunnel(totals),
-    failureCategories: computeFailureCategories(totals),
+    failureCategories: computeFailureCategories(failureCategoryRows),
     matchDetailCounts: computeMatchDetailCounts(totals),
     endpointErrors: computeEndpointErrors(daily),
-    noisyTraffic: computeNoisyTraffic(totals),
   });
 }
 

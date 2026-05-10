@@ -2,6 +2,8 @@
 vi.mock("server-only", () => ({}));
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   VALID_EVENT_NAMES,
   VALIDATE_PROPERTIES,
@@ -100,9 +102,9 @@ describe("sanitizeProperties", () => {
 
   it("scrubs secret-like values from properties", () => {
     const props = {
-      token: "sk_live_abcdef123456",
-      apiKey: "dGVzdA==",
-      auth_header: ["Bearer", "super-secret"].join("-") + "-key",
+      token: "<TOKEN_PLACEHOLDER>",
+      apiKey: "<API_KEY_PLACEHOLDER>",
+      auth_header: ["Bearer", "<SECRET_PLACEHOLDER>"].join("-"),
       cookie: "session=abc123",
       dbUrl: ["postgres", "//db-host/db"].join(":"),
     };
@@ -621,16 +623,19 @@ describe("getAnalyticsSummary", () => {
   });
 
   it("returns structured summary on success", async () => {
-    mockSql.mockResolvedValue([
-      {
-        event_name: "page_view",
-        day: "2026-05-10",
-        count: 10,
-      },
-    ]);
+    mockSql
+      .mockResolvedValueOnce([{ event_name: "page_view", day: "2026-05-10", count: 10 }])
+      .mockResolvedValueOnce([{ event_name: "page_view", count: 10 }])
+      .mockResolvedValueOnce([
+        { event_name: "lookup_failure", category: "account_not_found", count: 2 },
+      ]);
     const result = await getAnalyticsSummary(7, { sql: mockSql } as any);
     expect(result.success).toBe(true);
     expect(result.data).toBeDefined();
+    expect(result.data?.failureCategories).toEqual([
+      { event_name: "lookup_failure", category: "account_not_found", count: 2 },
+    ]);
+    expect(mockSql).toHaveBeenCalledTimes(3);
   });
 
   it("returns success false on database failure without throwing", async () => {
@@ -648,6 +653,22 @@ describe("getAnalyticsSummary", () => {
     const result = await getAnalyticsSummary(7, { sql: mockSql } as any);
     expect(result.success).toBe(true);
     expect(result.data).toBeDefined();
+  });
+
+  it("keeps analytics migration schema compatible with recordAnalyticsEvent inserts", () => {
+    const migrationSql = readFileSync(
+      join(process.cwd(), "supabase/migrations/20260510000000_create_analytics_events.sql"),
+      "utf8"
+    );
+    const writeSql = recordAnalyticsEvent.toString();
+
+    for (const column of ["event_name", "visitor_id", "session_id", "properties", "created_at"]) {
+      expect(migrationSql).toContain(column);
+      expect(writeSql).toContain(column);
+    }
+
+    expect(migrationSql).toMatch(/CREATE TABLE IF NOT EXISTS public\.analytics_events/);
+    expect(writeSql).toContain("INSERT INTO analytics_events");
   });
 });
 

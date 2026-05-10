@@ -9,6 +9,7 @@ vi.mock("@/lib/database-queries", () => ({
 
 vi.mock("@/lib/analytics-instrumentation", () => ({
   instrumentRoute: (_template: string, handler: any) => handler,
+  analyticsNeonClient: () => ({ sql: vi.fn() }),
 }));
 
 vi.mock("@/lib/neon", () => ({

@@ -2,13 +2,17 @@
 vi.mock("server-only", () => ({}));
 
 // Use vi.hoisted so the mock variable is available in vi.mock factory
-const { mockRecordEvent } = vi.hoisted(() => ({
+const { mockAfter, mockRecordEvent } = vi.hoisted(() => ({
+  mockAfter: vi.fn(),
   mockRecordEvent: vi.fn(),
+}));
+
+vi.mock("next/server", () => ({
+  after: mockAfter,
 }));
 
 vi.mock("./analytics", () => ({
   recordAnalyticsEvent: mockRecordEvent,
-  sanitizeRoutePath: vi.fn((path: string) => path),
   sanitizeProperties: vi.fn((props: unknown) => props),
 }));
 
@@ -21,6 +25,9 @@ describe("instrumentRoute", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRecordEvent.mockResolvedValue({ success: true });
+    mockAfter.mockImplementation((callback: () => unknown) => {
+      void callback();
+    });
   });
 
   // VAL-API-004: Emits exactly one endpoint outcome event per request
@@ -304,24 +311,59 @@ describe("instrumentRoute", () => {
     expect(mockRecordEvent).toHaveBeenCalledTimes(1);
   });
 
-  // Round-2 scrutiny: non-thrown success paths remain fire-and-forget
+  // Round-2 scrutiny: non-thrown success paths remain non-blocking but are scheduled.
   it("does not await analytics write for successful (non-thrown) responses", async () => {
-    let writeStarted = false;
     mockRecordEvent.mockImplementation(async () => {
-      writeStarted = true;
       await new Promise((r) => setTimeout(r, 100));
       return { success: true };
     });
+    mockAfter.mockImplementation(() => undefined);
 
     const handler = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
     const wrapped = instrumentRoute("/api/fire-forget", handler, mockNeonClient);
 
+    const start = Date.now();
     const response = await wrapped(new Request("http://localhost/api/fire-forget"));
+    const elapsed = Date.now() - start;
     expect(response.status).toBe(200);
+    expect(elapsed).toBeLessThan(50);
 
-    // Analytics was initiated (fire-and-forget)
-    await new Promise((r) => setTimeout(r, 150));
     expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+    expect(mockAfter).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses request waitUntil when available for successful responses", async () => {
+    const handler = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const wrapped = instrumentRoute("/api/wait-until", handler, mockNeonClient);
+    const waitUntil = vi.fn();
+    const request = Object.assign(
+      new Request("http://localhost/api/wait-until"),
+      { waitUntil }
+    );
+
+    const response = await wrapped(request);
+
+    expect(response.status).toBe(200);
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+    expect(waitUntil.mock.calls[0][0]).toBeInstanceOf(Promise);
+    expect(mockAfter).not.toHaveBeenCalled();
+  });
+
+  it("resolves analytics client factory per request", async () => {
+    const firstClient = { sql: vi.fn() };
+    const secondClient = { sql: vi.fn() };
+    const factory = vi.fn()
+      .mockReturnValueOnce(firstClient)
+      .mockReturnValueOnce(secondClient);
+    const handler = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const wrapped = instrumentRoute("/api/factory", handler, factory);
+
+    await wrapped(new Request("http://localhost/api/factory"));
+    await wrapped(new Request("http://localhost/api/factory"));
+
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(mockRecordEvent.mock.calls[0][4]).toBe(firstClient);
+    expect(mockRecordEvent.mock.calls[1][4]).toBe(secondClient);
   });
 });
 
@@ -332,6 +374,9 @@ describe("instrumentRouteModule", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRecordEvent.mockResolvedValue({ success: true });
+    mockAfter.mockImplementation((callback: () => unknown) => {
+      void callback();
+    });
   });
 
   it("instruments all HTTP method handlers in a route module", async () => {

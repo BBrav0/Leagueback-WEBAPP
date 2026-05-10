@@ -732,6 +732,26 @@ describe("POST /api/analytics/ingest", () => {
     expect(mockRecordEvent).toHaveBeenCalledTimes(1);
   });
 
+  it("rate limits excessive ingest attempts without recording rejected attempts", async () => {
+    mockRecordEvent.mockResolvedValue({ success: true });
+    const { POST } = await import("./route");
+
+    let response: Response | undefined;
+    for (let i = 0; i < 121; i++) {
+      response = await POST(
+        new Request("http://localhost/api/analytics/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(makeValidPayload()),
+        }) as never
+      );
+    }
+
+    expect(response?.status).toBe(429);
+    expect(await response?.json()).toEqual({ error: "Rate limit exceeded" });
+    expect(mockRecordEvent).toHaveBeenCalledTimes(120);
+  });
+
   it("filters load_more properties to offset, limit, source only", async () => {
     mockRecordEvent.mockResolvedValue({ success: true });
     const { POST } = await import("./route");
@@ -797,15 +817,15 @@ describe("POST /api/analytics/ingest", () => {
 });
 
 
-  // -----------------------------------------------------------------------
-  // VAL-CROSS-005: Server-side keyed protection for client-derived identifiers
-  // -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
+// VAL-CROSS-005: Server-side keyed protection for client-derived identifiers
+// -----------------------------------------------------------------------
 
-  describe("server-side queryHash/matchRef protection", () => {
-    beforeEach(() => {
-      vi.resetModules();
-      vi.clearAllMocks();
-    });
+describe("server-side queryHash/matchRef protection", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+  });
 
     it("transforms queryHash before storage — raw client value is not persisted", async () => {
       mockRecordEvent.mockResolvedValue({ success: true });
@@ -904,7 +924,7 @@ describe("POST /api/analytics/ingest", () => {
         expect.objectContaining({ queryHash: "testHash", hasTagLine: true })
       );
     });
-  });
+});
 
 // -----------------------------------------------------------------------
 // VAL-AN-006: Analytics never persists raw Riot identifiers

@@ -45,6 +45,9 @@ export function useAnalytics() {
     pageViewTrackedRef.current = sanitized
 
     if (sanitized === "/player") {
+      // Pass the raw path to the client helper intentionally: it performs the
+      // final sanitization before ingest, preserving privacy while allowing
+      // this hook to dedupe on the sanitized route template.
       void trackPlayerPageView(path)
     } else {
       void trackPageView(path)

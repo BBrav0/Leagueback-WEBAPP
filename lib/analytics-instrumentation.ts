@@ -1,6 +1,8 @@
 import "server-only";
 
-import { recordAnalyticsEvent, sanitizeRoutePath, sanitizeProperties } from "./analytics";
+import { after } from "next/server";
+import { recordAnalyticsEvent, sanitizeProperties } from "./analytics";
+import { getSql } from "./neon";
 
 /**
  * Route instrumentation helper for API routes.
@@ -37,6 +39,34 @@ function statusClass(status: number): string {
 /** Neon SQL client shape. */
 export interface NeonClient {
   sql: (...args: any[]) => Promise<any[]>;
+}
+
+/** Per-request Neon client factory for analytics instrumentation. */
+export function analyticsNeonClient(): NeonClient {
+  return { sql: getSql() };
+}
+
+type WaitUntilRequest = Request & {
+  waitUntil?: (promise: Promise<unknown>) => void;
+};
+
+function scheduleAnalyticsWrite<TReq extends Request>(
+  request: TReq,
+  writePromise: Promise<unknown>
+): void {
+  const safeWritePromise = writePromise.catch(() => {
+    // Suppress — analytics failure must never affect route behavior.
+  });
+
+  const maybeWaitUntil = (request as WaitUntilRequest).waitUntil;
+  if (typeof maybeWaitUntil === "function") {
+    maybeWaitUntil.call(request, safeWritePromise);
+    return;
+  }
+
+  after(async () => {
+    await safeWritePromise;
+  });
 }
 
 /**
@@ -125,17 +155,17 @@ export function instrumentRoute<
       throw thrownError;
     }
 
-    // Non-thrown case: fire-and-forget — never await in a way that could
-    // delay or throw to the caller.
-    recordAnalyticsEvent(
+    // Non-thrown case: schedule the write using waitUntil-style request
+    // lifetime extension where available (Vercel/Next `after` fallback),
+    // without delaying or throwing to the caller.
+    const writePromise = recordAnalyticsEvent(
       eventName,
       SERVER_VISITOR_ID,
       SERVER_SESSION_ID,
       properties,
       neonClient
-    ).catch(() => {
-      // Suppress — analytics failure must never affect route behavior
-    });
+    );
+    scheduleAnalyticsWrite(request, writePromise);
 
     return response;
   };

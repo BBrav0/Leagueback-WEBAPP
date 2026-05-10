@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSql } from "@/lib/neon";
-import { instrumentRoute } from "@/lib/analytics-instrumentation";
+import { instrumentRoute, analyticsNeonClient } from "@/lib/analytics-instrumentation";
 
 const MAX_IDS = 100;
 const MATCH_ID_PATTERN = /^[A-Z0-9_]+$/i;
@@ -58,11 +58,6 @@ async function _POST(request: NextRequest) {
       { status: 400 }
     );
   }
-}
-
-/** Neon client factory for analytics instrumentation. */
-function analyticsNeonClient() {
-  return { sql: getSql() };
 }
 
 export const POST = instrumentRoute("/api/player-matches/existing-ids", _POST, analyticsNeonClient);

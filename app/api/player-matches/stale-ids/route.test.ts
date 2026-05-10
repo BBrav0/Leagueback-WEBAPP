@@ -13,6 +13,7 @@ vi.mock("@/lib/neon", () => ({
 
 vi.mock("@/lib/analytics-instrumentation", () => ({
   instrumentRoute: (_template: string, handler: any) => handler,
+  analyticsNeonClient: () => ({ sql: vi.fn() }),
 }));
 
 describe("POST /api/player-matches/stale-ids", () => {

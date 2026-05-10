@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPlayerSyncMetadata, upsertPlayerSyncMetadata } from "@/lib/database-queries";
-import { instrumentRoute } from "@/lib/analytics-instrumentation";
-import { getSql } from "@/lib/neon";
+import { instrumentRoute, analyticsNeonClient } from "@/lib/analytics-instrumentation";
 
 function serializeLastSyncAt(lastSyncAt: string | Date | null | undefined): string | null {
   if (!lastSyncAt) return null;
@@ -98,11 +97,6 @@ async function _POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-/** Neon client factory for analytics instrumentation. */
-function analyticsNeonClient() {
-  return { sql: getSql() };
 }
 
 export const GET = instrumentRoute("/api/player-sync-status", _GET, analyticsNeonClient);

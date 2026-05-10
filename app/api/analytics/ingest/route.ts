@@ -27,6 +27,33 @@ import { getSql } from "@/lib/neon";
  * ok:true for valid events even if the write fails (fail-open).
  */
 
+const INGEST_RATE_LIMIT_WINDOW_MS = 60_000;
+const INGEST_RATE_LIMIT_MAX_EVENTS = 120;
+
+type RateLimitBucket = { windowStart: number; count: number };
+const ingestRateLimitBuckets = new Map<string, RateLimitBucket>();
+
+function ingestRateLimitKey(visitorId: string): string {
+  return `visitor:${visitorId}`;
+}
+
+function isIngestRateLimited(visitorId: string, now = Date.now()): boolean {
+  const key = ingestRateLimitKey(visitorId);
+  const current = ingestRateLimitBuckets.get(key);
+
+  if (!current || now - current.windowStart >= INGEST_RATE_LIMIT_WINDOW_MS) {
+    ingestRateLimitBuckets.set(key, { windowStart: now, count: 1 });
+    return false;
+  }
+
+  current.count += 1;
+  return current.count > INGEST_RATE_LIMIT_MAX_EVENTS;
+}
+
+export function resetAnalyticsIngestRateLimitForTests(): void {
+  ingestRateLimitBuckets.clear();
+}
+
 export async function POST(request: NextRequest) {
   // Parse JSON body
   let body: unknown;
@@ -68,6 +95,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "Missing or invalid sessionId" },
       { status: 400 }
+    );
+  }
+
+  if (isIngestRateLimited(visitorId)) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429 }
     );
   }
 

@@ -8,7 +8,7 @@
 -- RLS blocks any non-owner direct access.
 
 -- Main analytics events table
-CREATE TABLE public.analytics_events (
+CREATE TABLE IF NOT EXISTS public.analytics_events (
   id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   event_name    text NOT NULL,
   visitor_id    text NOT NULL,
@@ -18,19 +18,19 @@ CREATE TABLE public.analytics_events (
 );
 
 -- Index for summary queries: aggregate by day + event name
-CREATE INDEX idx_analytics_events_created_at_event
+CREATE INDEX IF NOT EXISTS idx_analytics_events_created_at_event
   ON public.analytics_events (created_at DESC, event_name);
 
 -- Index for session-scoped queries
-CREATE INDEX idx_analytics_events_session_id
+CREATE INDEX IF NOT EXISTS idx_analytics_events_session_id
   ON public.analytics_events (session_id, created_at DESC);
 
 -- Index for visitor-scoped deduplication queries
-CREATE INDEX idx_analytics_events_visitor_id
+CREATE INDEX IF NOT EXISTS idx_analytics_events_visitor_id
   ON public.analytics_events (visitor_id, created_at DESC);
 
 -- Index for filtering by event name alone (endpoint errors, categories)
-CREATE INDEX idx_analytics_events_event_name
+CREATE INDEX IF NOT EXISTS idx_analytics_events_event_name
   ON public.analytics_events (event_name, created_at DESC);
 
 -- Enable RLS (analytics writes are server-side only via the Neon connection role)
@@ -41,5 +41,17 @@ ALTER TABLE public.analytics_events ENABLE ROW LEVEL SECURITY;
 -- Default restrictive policy: block all non-owner access.
 -- The table owner (Neon connection role) bypasses RLS automatically.
 -- No additional GRANT is needed — ownership provides full access.
-CREATE POLICY "Owner bypass only" ON public.analytics_events
-  AS RESTRICTIVE FOR ALL TO PUBLIC USING (false) WITH CHECK (false);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'analytics_events'
+      AND policyname = 'Owner bypass only'
+  ) THEN
+    CREATE POLICY "Owner bypass only" ON public.analytics_events
+      AS RESTRICTIVE FOR ALL TO PUBLIC USING (false) WITH CHECK (false);
+  END IF;
+END
+$$;

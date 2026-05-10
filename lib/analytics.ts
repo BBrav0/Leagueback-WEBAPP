@@ -523,6 +523,7 @@ export interface AnalyticsSummaryResult {
   data?: {
     daily: Array<{ day: string; event_name: string; count: number }>;
     totals: Array<{ event_name: string; count: number }>;
+    failureCategories: Array<{ event_name: string; category: string; count: number }>;
   };
   error?: string;
 }
@@ -563,11 +564,29 @@ export async function getAnalyticsSummary(
       ORDER BY count DESC
     `;
 
+    const failureCategories = await neonClient.sql`
+      SELECT
+        event_name,
+        CASE
+          WHEN event_name = 'lookup_failure' THEN COALESCE(properties->>'failureCategory', 'unknown')
+          WHEN event_name = 'client_error' THEN COALESCE(properties->>'category', 'unknown')
+          WHEN event_name = 'endpoint_error' THEN COALESCE(properties->>'failureCategory', 'unknown')
+          ELSE 'unknown'
+        END AS category,
+        COUNT(*)::int AS count
+      FROM analytics_events
+      WHERE created_at >= NOW() - INTERVAL '1 day' * ${boundedDays}
+        AND event_name IN ('lookup_failure', 'client_error', 'endpoint_error')
+      GROUP BY event_name, category
+      ORDER BY event_name, count DESC, category
+    `;
+
     return {
       success: true,
       data: {
         daily: daily as Array<{ day: string; event_name: string; count: number }>,
         totals: totals as Array<{ event_name: string; count: number }>,
+        failureCategories: failureCategories as Array<{ event_name: string; category: string; count: number }>,
       },
     };
   } catch (error: unknown) {

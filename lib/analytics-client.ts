@@ -339,6 +339,9 @@ export async function trackLookupFailure(
   category: string,
   _rawMessage?: string
 ): Promise<void> {
+  // `_rawMessage` is accepted for call-site compatibility only. It is
+  // intentionally discarded so raw Riot IDs, backend details, or sensitive
+  // client error text are never sent to analytics storage.
   // Bound to approved categories
   const safeCategory = APPROVED_FAILURE_CATEGORIES.has(category)
     ? category

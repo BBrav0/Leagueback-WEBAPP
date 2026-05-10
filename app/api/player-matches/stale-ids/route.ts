@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSql } from "@/lib/neon";
 import { getPlayerMatchRowsForStaleCheck, type PlayerSyncMetadataRow } from "@/lib/database-queries";
-import { instrumentRoute } from "@/lib/analytics-instrumentation";
+import { instrumentRoute, analyticsNeonClient } from "@/lib/analytics-instrumentation";
 
 const CURRENT_DERIVATION_VERSION = "match-summary-v2";
 
@@ -140,11 +140,6 @@ async function _POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-/** Neon client factory for analytics instrumentation. */
-function analyticsNeonClient() {
-  return { sql: getSql() };
 }
 
 export const POST = instrumentRoute("/api/player-matches/stale-ids", _POST, analyticsNeonClient);

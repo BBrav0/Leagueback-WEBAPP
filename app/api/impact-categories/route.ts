@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getImpactCategoriesForUser, getRecentImpactCategories } from "@/lib/database-queries";
-import { instrumentRoute } from "@/lib/analytics-instrumentation";
-import { getSql } from "@/lib/neon";
+import { instrumentRoute, analyticsNeonClient } from "@/lib/analytics-instrumentation";
 
 async function _GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -34,11 +33,6 @@ async function _GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-/** Neon client factory for analytics instrumentation. */
-function analyticsNeonClient() {
-  return { sql: getSql() };
 }
 
 export const GET = instrumentRoute("/api/impact-categories", _GET, analyticsNeonClient);

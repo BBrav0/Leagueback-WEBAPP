@@ -19,6 +19,7 @@ vi.mock("@/lib/validation-fixture", () => ({
 
 vi.mock("@/lib/analytics-instrumentation", () => ({
   instrumentRoute: (_template: string, handler: any) => handler,
+  analyticsNeonClient: () => ({ sql: vi.fn() }),
 }));
 
 vi.mock("@/lib/neon", () => ({

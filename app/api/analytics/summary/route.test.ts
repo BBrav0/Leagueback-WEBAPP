@@ -18,7 +18,10 @@ vi.mock("@/lib/neon", () => ({
 }));
 
 // Helper to set ANALYTICS_API_KEY env var
-function setApiKey(key = "testkey") {
+const VALID_KEY = "a".repeat(32);
+const WRONG_VALID_LENGTH_KEY = "b".repeat(32);
+
+function setApiKey(key = VALID_KEY) {
   process.env["ANALYTICS_API_KEY"] = key;
 }
 
@@ -26,7 +29,7 @@ function clearApiKey() {
   delete process.env.ANALYTICS_API_KEY;
 }
 
-function makeAuthRequest(key = "testkey", days = "7") {
+function makeAuthRequest(key = VALID_KEY, days = "7") {
   return new Request(`http://localhost/api/analytics/summary?days=${days}`, {
     headers: { Authorization: ["Bearer", key].join(" ") },
   }) as never;
@@ -57,7 +60,7 @@ describe("GET /api/analytics/summary", () => {
   it("rejects requests with wrong API key with 401", async () => {
     const { GET } = await import("./route");
     const response = await GET(
-      makeAuthRequest("wrong-key-12345678")
+      makeAuthRequest(WRONG_VALID_LENGTH_KEY)
     );
 
     expect(response.status).toBe(401);
@@ -75,6 +78,23 @@ describe("GET /api/analytics/summary", () => {
     expect(mockGetSummary).not.toHaveBeenCalled();
   });
 
+  it("rejects requests when configured ANALYTICS_API_KEY is too short", async () => {
+    setApiKey("short-placeholder");
+    const { GET } = await import("./route");
+    const response = await GET(makeAuthRequest("short-placeholder"));
+
+    expect(response.status).toBe(401);
+    expect(mockGetSummary).not.toHaveBeenCalled();
+  });
+
+  it("rejects requests when provided ANALYTICS_API_KEY is too short", async () => {
+    const { GET } = await import("./route");
+    const response = await GET(makeAuthRequest("short-placeholder"));
+
+    expect(response.status).toBe(401);
+    expect(mockGetSummary).not.toHaveBeenCalled();
+  });
+
   it("accepts requests with correct auth credentials", async () => {
     mockGetSummary.mockResolvedValue({
       success: true,
@@ -82,10 +102,9 @@ describe("GET /api/analytics/summary", () => {
         daily: [],
         totals: [],
         searchFunnel: { attempts: 0, successes: 0, failures: 0 },
-        failureCategories: {},
+        failureCategories: [],
         matchDetailCounts: { matches: 0, details: 0 },
         endpointErrors: [],
-        noisyTraffic: { rejectedEvents: 0 },
       },
     });
 
@@ -104,17 +123,16 @@ describe("GET /api/analytics/summary", () => {
         daily: [],
         totals: [],
         searchFunnel: { attempts: 0, successes: 0, failures: 0 },
-        failureCategories: {},
+        failureCategories: [],
         matchDetailCounts: { matches: 0, details: 0 },
         endpointErrors: [],
-        noisyTraffic: { rejectedEvents: 0 },
       },
     });
 
     const { GET } = await import("./route");
     const response = await GET(
       new Request("http://localhost/api/analytics/summary", {
-        headers: { Authorization: ["Bearer", "testkey"].join(" ") },
+        headers: { Authorization: ["Bearer", VALID_KEY].join(" ") },
       }) as never
     );
 
@@ -125,7 +143,7 @@ describe("GET /api/analytics/summary", () => {
   // Scrutiny fix: days=0 returns 400 instead of silently clamping to 1
   it("rejects days=0 with 400", async () => {
     const { GET } = await import("./route");
-    const response = await GET(makeAuthRequest("testkey", "0"));
+    const response = await GET(makeAuthRequest(VALID_KEY, "0"));
 
     expect(response.status).toBe(400);
     const body = await response.json();
@@ -136,7 +154,7 @@ describe("GET /api/analytics/summary", () => {
   // Scrutiny fix: negative days returns 400 instead of silently clamping
   it("rejects negative days with 400", async () => {
     const { GET } = await import("./route");
-    const response = await GET(makeAuthRequest("testkey", "-5"));
+    const response = await GET(makeAuthRequest(VALID_KEY, "-5"));
 
     expect(response.status).toBe(400);
     const body = await response.json();
@@ -147,7 +165,7 @@ describe("GET /api/analytics/summary", () => {
   // Scrutiny fix: excessive days returns 400 instead of silently clamping
   it("rejects excessively large days with 400", async () => {
     const { GET } = await import("./route");
-    const response = await GET(makeAuthRequest("testkey", "9999"));
+    const response = await GET(makeAuthRequest(VALID_KEY, "9999"));
 
     expect(response.status).toBe(400);
     const body = await response.json();
@@ -158,7 +176,7 @@ describe("GET /api/analytics/summary", () => {
   // Scrutiny fix: non-numeric days returns 400 instead of defaulting
   it("rejects non-numeric days with 400", async () => {
     const { GET } = await import("./route");
-    const response = await GET(makeAuthRequest("testkey", "abc"));
+    const response = await GET(makeAuthRequest(VALID_KEY, "abc"));
 
     expect(response.status).toBe(400);
     const body = await response.json();
@@ -169,7 +187,7 @@ describe("GET /api/analytics/summary", () => {
   // Regression: fractional days rejected with 400
   it("rejects fractional days with 400", async () => {
     const { GET } = await import("./route");
-    const response = await GET(makeAuthRequest("testkey", "3.5"));
+    const response = await GET(makeAuthRequest(VALID_KEY, "3.5"));
 
     expect(response.status).toBe(400);
     const body = await response.json();
@@ -180,7 +198,7 @@ describe("GET /api/analytics/summary", () => {
   // Regression: Infinity rejected with 400
   it("rejects Infinity days with 400", async () => {
     const { GET } = await import("./route");
-    const response = await GET(makeAuthRequest("testkey", "Infinity"));
+    const response = await GET(makeAuthRequest(VALID_KEY, "Infinity"));
 
     expect(response.status).toBe(400);
     const body = await response.json();
@@ -194,13 +212,13 @@ describe("GET /api/analytics/summary", () => {
       success: true,
       data: {
         daily: [], totals: [], searchFunnel: { attempts: 0, successes: 0, failures: 0 },
-        failureCategories: {}, matchDetailCounts: { matches: 0, details: 0 },
-        endpointErrors: [], noisyTraffic: { rejectedEvents: 0 },
+        failureCategories: [], matchDetailCounts: { matches: 0, details: 0 },
+        endpointErrors: [],
       },
     });
 
     const { GET } = await import("./route");
-    const response = await GET(makeAuthRequest("testkey", "365"));
+    const response = await GET(makeAuthRequest(VALID_KEY, "365"));
 
     expect(response.status).toBe(200);
     expect(mockGetSummary).toHaveBeenCalledWith(365, expect.any(Object));
@@ -212,13 +230,13 @@ describe("GET /api/analytics/summary", () => {
       success: true,
       data: {
         daily: [], totals: [], searchFunnel: { attempts: 0, successes: 0, failures: 0 },
-        failureCategories: {}, matchDetailCounts: { matches: 0, details: 0 },
-        endpointErrors: [], noisyTraffic: { rejectedEvents: 0 },
+        failureCategories: [], matchDetailCounts: { matches: 0, details: 0 },
+        endpointErrors: [],
       },
     });
 
     const { GET } = await import("./route");
-    const response = await GET(makeAuthRequest("testkey", "1"));
+    const response = await GET(makeAuthRequest(VALID_KEY, "1"));
 
     expect(response.status).toBe(200);
     expect(mockGetSummary).toHaveBeenCalledWith(1, expect.any(Object));
@@ -231,6 +249,7 @@ describe("GET /api/analytics/summary", () => {
       data: {
         daily: [{ day: "2026-05-10", event_name: "page_view", count: 10 }],
         totals: [{ event_name: "page_view", count: 42 }],
+        failureCategories: [],
       },
     });
 
@@ -247,7 +266,6 @@ describe("GET /api/analytics/summary", () => {
     expect(body).toHaveProperty("failureCategories");
     expect(body).toHaveProperty("matchDetailCounts");
     expect(body).toHaveProperty("endpointErrors");
-    expect(body).toHaveProperty("noisyTraffic");
 
     // Must NOT have raw event rows or direct identifiers
     expect(body).not.toHaveProperty("events");
@@ -259,6 +277,34 @@ describe("GET /api/analytics/summary", () => {
     // Verify aggregate content
     expect(body.daily).toEqual([{ day: "2026-05-10", event_name: "page_view", count: 10 }]);
     expect(body.totals).toEqual([{ event_name: "page_view", count: 42 }]);
+  });
+
+  it("returns bounded failure sub-category detail without duplicating event totals", async () => {
+    mockGetSummary.mockResolvedValue({
+      success: true,
+      data: {
+        daily: [],
+        totals: [{ event_name: "lookup_failure", count: 5 }],
+        failureCategories: [
+          { event_name: "lookup_failure", category: "account_not_found", count: 3 },
+          { event_name: "lookup_failure", category: "rate_limited", count: 2 },
+          { event_name: "endpoint_error", category: "server_error", count: 1 },
+          { event_name: "client_error", category: "fetch_failure", count: 4 },
+        ],
+      },
+    });
+
+    const { GET } = await import("./route");
+    const response = await GET(makeAuthRequest());
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.failureCategories).toEqual({
+      lookup_failure: { account_not_found: 3, rate_limited: 2 },
+      endpoint_error: { server_error: 1 },
+      client_error: { fetch_failure: 4 },
+    });
+    expect(body.failureCategories).not.toEqual({ lookup_failure: 5 });
   });
 
   // VAL-SUMMARY-004: Handles empty/sparse data
@@ -282,7 +328,6 @@ describe("GET /api/analytics/summary", () => {
     expect(body.failureCategories).toEqual({});
     expect(body.matchDetailCounts).toEqual({ matches: 0, details: 0 });
     expect(body.endpointErrors).toEqual([]);
-    expect(body.noisyTraffic).toEqual({ rejectedEvents: 0 });
   });
 
   // VAL-SUMMARY-005: Error responses are safe
@@ -310,7 +355,7 @@ describe("GET /api/analytics/summary", () => {
     const response = await POST(
       new Request("http://localhost/api/analytics/summary", {
         method: "POST",
-        headers: { Authorization: ["Bearer", "testkey"].join(" ") },
+        headers: { Authorization: ["Bearer", VALID_KEY].join(" ") },
       }) as never
     );
     expect(response.status).toBe(405);
@@ -359,7 +404,7 @@ describe("GET /api/analytics/summary", () => {
 describe("unsupported HTTP methods on summary (VAL-AN-026)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env["ANALYTICS_API_KEY"] = "testkey";
+    process.env["ANALYTICS_API_KEY"] = VALID_KEY;
     mockGetSql.mockReturnValue({ sql: vi.fn() });
   });
 
@@ -417,7 +462,7 @@ describe("unsupported HTTP methods on summary (VAL-AN-026)", () => {
 describe("summary response privacy (VAL-AN-013 extended)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env["ANALYTICS_API_KEY"] = "testkey";
+    process.env["ANALYTICS_API_KEY"] = VALID_KEY;
     mockGetSql.mockReturnValue({ sql: vi.fn() });
   });
 
