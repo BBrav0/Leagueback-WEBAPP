@@ -9,6 +9,7 @@ import {
   isWithinNestingDepth,
   isBrowserEvent,
   filterPropertiesByEvent,
+  applyClientPropertyProtection,
   MAX_PROPERTY_KEY_LENGTH,
   MAX_PROPERTY_COUNT,
   MAX_NESTING_DEPTH,
@@ -140,6 +141,10 @@ export async function POST(request: NextRequest) {
   // Filter to event-specific property allowlist (VAL-API-004)
   const filteredProps = filterPropertiesByEvent(eventName, sanitizedProps);
 
+  // Apply server-side keyed protection to client-derived identifier references
+  // (queryHash, matchRef) so raw client-provided values are never persisted.
+  const protectedProps = applyClientPropertyProtection(filteredProps);
+
   // Record event (fail-open — storage failure does not affect response)
   try {
     const sql = getSql();
@@ -147,7 +152,7 @@ export async function POST(request: NextRequest) {
       eventName,
       visitorId,
       sessionId,
-      filteredProps,
+      protectedProps,
       { sql }
     );
   } catch {

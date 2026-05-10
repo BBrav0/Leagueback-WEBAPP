@@ -18,6 +18,9 @@ import {
   sanitizeRoutePath,
   recordAnalyticsEvent,
   getAnalyticsSummary,
+  protectClientDerivedValue,
+  applyClientPropertyProtection,
+  PROTECTED_CLIENT_PROPERTIES,
 } from "./analytics";
 
 // ---------------------------------------------------------------------------
@@ -645,5 +648,190 @@ describe("getAnalyticsSummary", () => {
     const result = await getAnalyticsSummary(7, { sql: mockSql } as any);
     expect(result.success).toBe(true);
     expect(result.data).toBeDefined();
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Server-side client-derived property protection (VAL-CROSS-005)
+// ---------------------------------------------------------------------------
+
+describe("protectClientDerivedValue", () => {
+  it("returns a keyed HMAC digest for a valid client hash", () => {
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-client-derived-value-prot";
+      const result = protectClientDerivedValue("clientHash123");
+      expect(result).toMatch(/^[0-9a-f]{64}$/);
+      expect(result).not.toBe("clientHash123");
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
+  });
+
+  it("produces different digests for different client values", () => {
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-client-derived-value-prot";
+      const a = protectClientDerivedValue("hashA");
+      const b = protectClientDerivedValue("hashB");
+      expect(a).not.toBe(b);
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
+  });
+
+  it("returns empty string when HMAC key is not set (fail-open)", () => {
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      delete process.env.ANALYTICS_HMAC_KEY;
+      const result = protectClientDerivedValue("someValue");
+      expect(result).toBe("");
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
+  });
+
+  it("returns empty string for empty input", () => {
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-client-derived-value-prot";
+      expect(protectClientDerivedValue("")).toBe("");
+      expect(protectClientDerivedValue(null as any)).toBe("");
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
+  });
+
+  it("raw client-provided value cannot reproduce the server digest", () => {
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-client-derived-value-prot";
+      const clientValue = "abc123clienthash";
+      const serverDigest = protectClientDerivedValue(clientValue);
+      // The server digest must not equal the raw client value
+      expect(serverDigest).not.toBe(clientValue);
+      // The server digest must be a proper hex HMAC, not just re-hashing
+      expect(serverDigest).toMatch(/^[0-9a-f]{64}$/);
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
+  });
+});
+
+describe("applyClientPropertyProtection", () => {
+  it("transforms queryHash from raw client value to server HMAC digest", () => {
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-client-derived-value-prot";
+      const input = { queryHash: "clientHash123", hasTagLine: true };
+      const result = applyClientPropertyProtection(input);
+      expect(result.queryHash).not.toBe("clientHash123");
+      expect(result.queryHash).toMatch(/^[0-9a-f]{64}$/);
+      expect(result.hasTagLine).toBe(true);
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
+  });
+
+  it("transforms matchRef from raw client value to server HMAC digest", () => {
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-client-derived-value-prot";
+      const input = { matchRef: "clientMatchRef456" };
+      const result = applyClientPropertyProtection(input);
+      expect(result.matchRef).not.toBe("clientMatchRef456");
+      expect(result.matchRef).toMatch(/^[0-9a-f]{64}$/);
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
+  });
+
+  it("does not modify non-protected properties", () => {
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-client-derived-value-prot";
+      const input = { page: "/dashboard", matchCount: 5, source: "stored" };
+      const result = applyClientPropertyProtection(input);
+      expect(result).toEqual(input);
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
+  });
+
+  it("clears protected values when HMAC key is unavailable (fail-open)", () => {
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      delete process.env.ANALYTICS_HMAC_KEY;
+      const input = { queryHash: "clientHash123", matchRef: "clientRef456" };
+      const result = applyClientPropertyProtection(input);
+      // Raw client values must not be persisted
+      expect(result.queryHash).not.toBe("clientHash123");
+      expect(result.matchRef).not.toBe("clientRef456");
+      // Should be empty strings instead
+      expect(result.queryHash).toBe("");
+      expect(result.matchRef).toBe("");
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
+  });
+
+  it("does not mutate the input object", () => {
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-client-derived-value-prot";
+      const input = { queryHash: "clientHash123" };
+      const result = applyClientPropertyProtection(input);
+      expect(input.queryHash).toBe("clientHash123");
+      expect(result.queryHash).not.toBe("clientHash123");
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
+  });
+
+  it("PROTECTED_CLIENT_PROPERTIES contains exactly queryHash and matchRef", () => {
+    expect(PROTECTED_CLIENT_PROPERTIES.has("queryHash")).toBe(true);
+    expect(PROTECTED_CLIENT_PROPERTIES.has("matchRef")).toBe(true);
+    expect(PROTECTED_CLIENT_PROPERTIES.size).toBe(2);
   });
 });

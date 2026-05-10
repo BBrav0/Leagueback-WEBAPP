@@ -333,6 +333,59 @@ export function hashIdentifier(
   return createHmac("sha256", key).update(input).digest("hex");
 }
 
+/**
+ * Client-derived property keys that require server-side keyed protection
+ * before persistence. These properties come from client-side hashing but
+ * must be re-hashed with the server HMAC key so raw client-provided values
+ * are never stored in analytics_events.
+ */
+export const PROTECTED_CLIENT_PROPERTIES: ReadonlySet<string> = new Set([
+  "queryHash",
+  "matchRef",
+]);
+
+/**
+ * Applies server-side keyed HMAC protection to a client-derived value.
+ * Returns the HMAC-SHA-256 hex digest using the server-only HMAC key.
+ * This ensures the raw client-provided hash is never persisted — only
+ * the server-keyed version is stored.
+ *
+ * If the HMAC key is unavailable or the value is empty, returns an empty
+ * string (fail-open: missing key must not break analytics).
+ */
+export function protectClientDerivedValue(clientValue: string): string {
+  if (!clientValue || typeof clientValue !== "string") return "";
+  try {
+    const key = getHmacKey();
+    return createHmac("sha256", key).update(clientValue).digest("hex");
+  } catch {
+    // Fail-open: if HMAC key is missing, drop the value rather than store raw
+    return "";
+  }
+}
+
+/**
+ * Applies server-side keyed protection to any protected client-derived
+ * properties in the filtered event properties. For each key in
+ * PROTECTED_CLIENT_PROPERTIES that exists in the properties object,
+ * replaces the raw client value with the server-keyed HMAC digest.
+ *
+ * Returns a new object; does not mutate the input.
+ */
+export function applyClientPropertyProtection(
+  properties: Record<string, unknown>
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(properties)) {
+    if (PROTECTED_CLIENT_PROPERTIES.has(key) && typeof value === "string") {
+      result[key] = protectClientDerivedValue(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Route path sanitization
 // ---------------------------------------------------------------------------

@@ -102,6 +102,19 @@ vi.mock("@/lib/analytics", () => ({
   isWithinNestingDepth: vi.fn(isWithinNestingDepthMock),
   isBrowserEvent: vi.fn(isBrowserEventMock),
   filterPropertiesByEvent: vi.fn(filterPropertiesByEventMock),
+  applyClientPropertyProtection: vi.fn((props: Record<string, unknown>) => {
+    // Mock: prefix protected keys with "server_" to simulate transformation
+    const PROTECTED_KEYS = new Set(["queryHash", "matchRef"]);
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(props)) {
+      if (PROTECTED_KEYS.has(key) && typeof value === "string") {
+        result[key] = `server_protected_${value}`;
+      } else {
+        result[key] = value;
+      }
+    }
+    return result;
+  }),
   MAX_PROPERTY_KEY_LENGTH,
   MAX_PROPERTY_COUNT,
   MAX_NESTING_DEPTH,
@@ -742,3 +755,113 @@ describe("POST /api/analytics/ingest", () => {
     );
   });
 });
+
+
+  // -----------------------------------------------------------------------
+  // VAL-CROSS-005: Server-side keyed protection for client-derived identifiers
+  // -----------------------------------------------------------------------
+
+  describe("server-side queryHash/matchRef protection", () => {
+    beforeEach(() => {
+      vi.resetModules();
+      vi.clearAllMocks();
+    });
+
+    it("transforms queryHash before storage — raw client value is not persisted", async () => {
+      mockRecordEvent.mockResolvedValue({ success: true });
+      const { POST } = await import("./route");
+
+      await POST(
+        new Request("http://localhost/api/analytics/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            makeValidPayload({
+              eventName: "search_attempt",
+              properties: { queryHash: "rawClientHash123", hasTagLine: true },
+            })
+          ),
+        }) as never
+      );
+
+      expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+      const storedProps = mockRecordEvent.mock.calls[0][3];
+      // The stored queryHash must be transformed, not the raw client value
+      expect(storedProps.queryHash).not.toBe("rawClientHash123");
+      expect(storedProps.queryHash).toBe("server_protected_rawClientHash123");
+      // Non-protected values should pass through
+      expect(storedProps.hasTagLine).toBe(true);
+    });
+
+    it("transforms matchRef before storage — raw client value is not persisted", async () => {
+      mockRecordEvent.mockResolvedValue({ success: true });
+      const { POST } = await import("./route");
+
+      await POST(
+        new Request("http://localhost/api/analytics/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            makeValidPayload({
+              eventName: "match_detail_view",
+              properties: { matchRef: "rawClientMatchRef456" },
+            })
+          ),
+        }) as never
+      );
+
+      expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+      const storedProps = mockRecordEvent.mock.calls[0][3];
+      // The stored matchRef must be transformed, not the raw client value
+      expect(storedProps.matchRef).not.toBe("rawClientMatchRef456");
+      expect(storedProps.matchRef).toBe("server_protected_rawClientMatchRef456");
+    });
+
+    it("does not transform non-protected properties", async () => {
+      mockRecordEvent.mockResolvedValue({ success: true });
+      const { POST } = await import("./route");
+
+      await POST(
+        new Request("http://localhost/api/analytics/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            makeValidPayload({
+              eventName: "page_view",
+              properties: { page: "/dashboard", referrer: "direct" },
+            })
+          ),
+        }) as never
+      );
+
+      expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+      const storedProps = mockRecordEvent.mock.calls[0][3];
+      expect(storedProps.page).toBe("/dashboard");
+      expect(storedProps.referrer).toBe("direct");
+    });
+
+    it("calls applyClientPropertyProtection on filtered properties", async () => {
+      mockRecordEvent.mockResolvedValue({ success: true });
+      const { POST } = await import("./route");
+
+      await POST(
+        new Request("http://localhost/api/analytics/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            makeValidPayload({
+              eventName: "search_attempt",
+              properties: { queryHash: "testHash", hasTagLine: true },
+            })
+          ),
+        }) as never
+      );
+
+      const { applyClientPropertyProtection } = await import("@/lib/analytics");
+      expect(applyClientPropertyProtection).toHaveBeenCalledTimes(1);
+      // Should be called with the filtered properties
+      expect(applyClientPropertyProtection).toHaveBeenCalledWith(
+        expect.objectContaining({ queryHash: "testHash", hasTagLine: true })
+      );
+    });
+  });
