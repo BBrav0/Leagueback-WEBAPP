@@ -202,28 +202,59 @@ describe("validateSessionId", () => {
 
 describe("hashIdentifier", () => {
   it("produces a deterministic hex hash for the same input", () => {
-    const a = hashIdentifier("player1", "tag1");
-    const b = hashIdentifier("player1", "tag1");
-    expect(a).toBe(b);
-    expect(a).toMatch(/^[0-9a-f]{64}$/); // SHA-256 hex
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-deterministic-test-1234";
+      const a = hashIdentifier("player1", "tag1");
+      const b = hashIdentifier("player1", "tag1");
+      expect(a).toBe(b);
+      expect(a).toMatch(/^[0-9a-f]{64}$/); // SHA-256 hex
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
   });
 
   it("produces different hashes for different inputs", () => {
-    const a = hashIdentifier("player1", "tag1");
-    const b = hashIdentifier("player2", "tag1");
-    expect(a).not.toBe(b);
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-different-inputs-xxxxx";
+      const a = hashIdentifier("player1", "tag1");
+      const b = hashIdentifier("player2", "tag1");
+      expect(a).not.toBe(b);
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
   });
 
   it("handles empty inputs", () => {
-    const hash = hashIdentifier("", "");
-    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-empty-input-test-xxxxxx";
+      const hash = hashIdentifier("", "");
+      expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
   });
 
   // Scrutiny regression: HMAC uses server-only key, not public salt
   it("produces different hashes when ANALYTICS_HMAC_KEY changes", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
-      // With default key
+      // With first explicit key
+      process.env.ANALYTICS_HMAC_KEY = "**************************************************";
       const a = hashIdentifier("player1", "tag1");
 
       // With a different explicit key
@@ -249,7 +280,7 @@ describe("hashIdentifier", () => {
       const hash1 = hashIdentifier("TestPlayer", "EUW1");
 
       // Reset to a different key
-      process.env.ANALYTICS_HMAC_KEY = "completely-different-key-98765";
+      process.env.ANALYTICS_HMAC_KEY = "completely-different-key-98765xx";
       const hash2 = hashIdentifier("TestPlayer", "EUW1");
 
       // Same input, different keys → different hashes
@@ -268,9 +299,72 @@ describe("hashIdentifier", () => {
 
   // Case normalization still applies
   it("normalizes gameName and tagLine to lowercase", () => {
-    const a = hashIdentifier("Player", "Tag");
-    const b = hashIdentifier("player", "tag");
-    expect(a).toBe(b);
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-case-normalization-test-x";
+      const a = hashIdentifier("Player", "Tag");
+      const b = hashIdentifier("player", "tag");
+      expect(a).toBe(b);
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
+  });
+
+  // Round-2 scrutiny regression: no public fallback key
+  it("throws when ANALYTICS_HMAC_KEY is not set", () => {
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      delete process.env.ANALYTICS_HMAC_KEY;
+      expect(() => hashIdentifier("player", "tag")).toThrow(
+        /ANALYTICS_HMAC_KEY is required/
+      );
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
+  });
+
+  // Round-2 scrutiny regression: short/weak keys are rejected
+  it("throws when ANALYTICS_HMAC_KEY is too short", () => {
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      process.env.ANALYTICS_HMAC_KEY = "short";
+      expect(() => hashIdentifier("player", "tag")).toThrow(
+        /ANALYTICS_HMAC_KEY is required/
+      );
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
+  });
+
+  // Round-2 scrutiny regression: valid key produces deterministic output
+  it("produces consistent output with a valid key", () => {
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      process.env.ANALYTICS_HMAC_KEY = "valid-test-key-at-least-32-chars-long!";
+      const hashes = new Set<string>();
+      for (let i = 0; i < 10; i++) {
+        hashes.add(hashIdentifier("player", "tag"));
+      }
+      expect(hashes.size).toBe(1);
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
   });
 });
 

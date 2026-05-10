@@ -5,6 +5,44 @@ vi.mock("server-only", () => ({}));
 
 const mockRecordEvent = vi.fn();
 
+// Secret key patterns matching the production implementation
+const SECRET_PATTERNS = [
+  /api[_-]?key/i,
+  /secret/i,
+  /token/i,
+  /auth/i,
+  /password/i,
+  /cookie/i,
+  /session/i,
+  /bearer/i,
+  /db[_-]?url/i,
+  /database[_-]?url/i,
+  /connection[_-]?string/i,
+  /postgres(ql)?:\/\//i,
+  /sk_live/i,
+  /sk_test/i,
+];
+
+function isSecretKeyMock(key: string): boolean {
+  return SECRET_PATTERNS.some((pattern) => pattern.test(key));
+}
+
+function isWithinNestingDepthMock(value: unknown, maxDepth: number): boolean {
+  if (maxDepth < 0) return false;
+  if (value === null || typeof value !== "object") return true;
+  if (Array.isArray(value)) {
+    return value.every((v) => isWithinNestingDepthMock(v, maxDepth - 1));
+  }
+  const record = value as Record<string, unknown>;
+  return Object.values(record).every((v) =>
+    isWithinNestingDepthMock(v, maxDepth - 1)
+  );
+}
+
+const MAX_PROPERTY_KEY_LENGTH = 48;
+const MAX_PROPERTY_COUNT = 24;
+const MAX_NESTING_DEPTH = 2;
+
 vi.mock("@/lib/analytics", () => ({
   recordAnalyticsEvent: mockRecordEvent,
   validateEventName: vi.fn((name: string) =>
@@ -20,6 +58,11 @@ vi.mock("@/lib/analytics", () => ({
     if (!props || typeof props !== "object" || Array.isArray(props)) return {};
     return props as Record<string, unknown>;
   }),
+  isSecretKey: vi.fn(isSecretKeyMock),
+  isWithinNestingDepth: vi.fn(isWithinNestingDepthMock),
+  MAX_PROPERTY_KEY_LENGTH,
+  MAX_PROPERTY_COUNT,
+  MAX_NESTING_DEPTH,
   VALID_EVENT_NAMES: [
     "page_view", "visitor_activity", "search_attempt", "lookup_success",
     "lookup_failure", "player_page_view", "match_detail_view", "load_more",
@@ -266,5 +309,126 @@ describe("POST /api/analytics/ingest", () => {
       expect.objectContaining({ page: "/" }),
       expect.any(Object)
     );
+  });
+
+  // -----------------------------------------------------------------------
+  // Round-2 scrutiny regression tests
+  // -----------------------------------------------------------------------
+
+  // Round-2: Secret-like property keys rejected before any write
+  it("rejects requests with secret-like property keys with 400 and does not call recordAnalyticsEvent", async () => {
+    const { POST } = await import("./route");
+
+    const secretKeyCases = [
+      { apiKey: "val" },
+      { secret: "val" },
+      { token: "val" },
+      { auth: "val" },
+      { password: "val" },
+      { cookie: "val" },
+      { bearer: "val" },
+      { db_url: "val" },
+      { database_url: "val" },
+      { connection_string: "val" },
+    ];
+
+    for (const props of secretKeyCases) {
+      vi.clearAllMocks();
+
+      const response = await POST(
+        new Request("http://localhost/api/analytics/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(makeValidPayload({ properties: props })),
+        }) as never
+      );
+
+      expect(response.status, `Expected 400 for properties ${JSON.stringify(props)}`).toBe(400);
+      const body = await response.json();
+      expect(body.error).toBe("Unsupported property");
+      expect(mockRecordEvent).not.toHaveBeenCalled();
+    }
+  });
+
+  // Round-2: Oversized property keys rejected before any write
+  it("rejects requests with oversized property keys with 400", async () => {
+    const { POST } = await import("./route");
+    const longKey = "k".repeat(MAX_PROPERTY_KEY_LENGTH + 1);
+
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({ properties: { [longKey]: "val" } })
+        ),
+      }) as never
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockRecordEvent).not.toHaveBeenCalled();
+  });
+
+  // Round-2: Too many properties rejected before any write
+  it("rejects requests with too many properties with 400", async () => {
+    const { POST } = await import("./route");
+    const props: Record<string, string> = {};
+    for (let i = 0; i < MAX_PROPERTY_COUNT + 1; i++) {
+      props[`prop_${i}`] = `val_${i}`;
+    }
+
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(makeValidPayload({ properties: props })),
+      }) as never
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockRecordEvent).not.toHaveBeenCalled();
+  });
+
+  // Round-2: Deeply nested properties rejected before any write
+  it("rejects requests with deeply nested property values with 400", async () => {
+    const { POST } = await import("./route");
+    let nested: Record<string, unknown> = { leaf: true };
+    for (let i = 0; i < MAX_NESTING_DEPTH + 2; i++) {
+      nested = { inner: nested };
+    }
+
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({ properties: { nested } })
+        ),
+      }) as never
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockRecordEvent).not.toHaveBeenCalled();
+  });
+
+  // Round-2: Valid properties still pass through after pre-write checks
+  it("accepts valid properties through the pre-write validation", async () => {
+    mockRecordEvent.mockResolvedValue({ success: true });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new Request("http://localhost/api/analytics/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          makeValidPayload({
+            properties: { page: "/dashboard", referrer: "direct", count: 5 },
+          })
+        ),
+      }) as never
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
   });
 });

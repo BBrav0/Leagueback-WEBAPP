@@ -83,7 +83,7 @@ export function validateEventName(name: string): boolean {
 /**
  * Checks nesting depth of a value. Returns true if within bounds.
  */
-function isWithinNestingDepth(value: unknown, maxDepth: number): boolean {
+export function isWithinNestingDepth(value: unknown, maxDepth: number): boolean {
   if (maxDepth < 0) return false;
   if (value === null || typeof value !== "object") return true;
   if (Array.isArray(value)) {
@@ -98,7 +98,7 @@ function isWithinNestingDepth(value: unknown, maxDepth: number): boolean {
 /**
  * Checks if a key looks like it might contain a secret/sensitive value.
  */
-function isSecretKey(key: string): boolean {
+export function isSecretKey(key: string): boolean {
   return SECRET_PATTERNS.some((pattern) => pattern.test(key));
 }
 
@@ -229,16 +229,25 @@ export function validateSessionId(id: string): boolean {
 // Identifier hashing
 // ---------------------------------------------------------------------------
 
-/** Fallback HMAC key used when ANALYTICS_HMAC_KEY is not configured. */
-const FALLBACK_HMAC_KEY = "leagueback-analytics-hmac-fallback";
+
+/** Minimum length for a valid ANALYTICS_HMAC_KEY. */
+const MIN_HMAC_KEY_LENGTH = 32;
 
 /**
  * Resolves the server-only HMAC key for identifier hashing.
- * Prefers ANALYTICS_HMAC_KEY env var; falls back to a compiled-in key.
- * The key is never exposed to the client.
+ * Requires ANALYTICS_HMAC_KEY env var — no public fallback.
+ * Throws if missing or too short so misconfigured servers fail loudly
+ * at hash time rather than silently producing publicly-reproducible hashes.
  */
 function getHmacKey(): string {
-  return process.env.ANALYTICS_HMAC_KEY || FALLBACK_HMAC_KEY;
+  const key = process.env.ANALYTICS_HMAC_KEY;
+  if (!key || key.length < MIN_HMAC_KEY_LENGTH) {
+    throw new Error(
+      "ANALYTICS_HMAC_KEY is required (min 32 chars) for identifier hashing. " +
+      "Set this server-only env var before running analytics."
+    );
+  }
+  return key;
 }
 
 /**

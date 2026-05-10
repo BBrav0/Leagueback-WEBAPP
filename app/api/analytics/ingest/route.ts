@@ -5,6 +5,11 @@ import {
   validateVisitorId,
   validateSessionId,
   sanitizeProperties,
+  isSecretKey,
+  isWithinNestingDepth,
+  MAX_PROPERTY_KEY_LENGTH,
+  MAX_PROPERTY_COUNT,
+  MAX_NESTING_DEPTH,
 } from "@/lib/analytics";
 import { getSql } from "@/lib/neon";
 
@@ -71,12 +76,56 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Sanitize properties (never write raw/secret-like properties)
-  const sanitizedProps = sanitizeProperties(
+  // Validate properties shape before any write:
+  // Reject secret-like keys, oversized keys, too many properties, and deeply nested values.
+  // This prevents bad payloads from reaching recordAnalyticsEvent.
+  const rawProps =
     typeof properties === "object" && properties !== null && !Array.isArray(properties)
-      ? properties
-      : {}
-  );
+      ? (properties as Record<string, unknown>)
+      : {};
+
+  // Check for secret-like keys — reject entire request
+  if (typeof properties === "object" && properties !== null && !Array.isArray(properties)) {
+    for (const key of Object.keys(properties as Record<string, unknown>)) {
+      if (isSecretKey(key)) {
+        return NextResponse.json(
+          { error: "Unsupported property" },
+          { status: 400 }
+        );
+      }
+    }
+  }
+
+  // Check for oversized keys — reject
+  for (const key of Object.keys(rawProps)) {
+    if (key.length > MAX_PROPERTY_KEY_LENGTH) {
+      return NextResponse.json(
+        { error: "Property key too long" },
+        { status: 400 }
+      );
+    }
+  }
+
+  // Check for too many properties — reject
+  if (Object.keys(rawProps).length > MAX_PROPERTY_COUNT) {
+    return NextResponse.json(
+      { error: "Too many properties" },
+      { status: 400 }
+    );
+  }
+
+  // Check for deeply nested values — reject
+  for (const value of Object.values(rawProps)) {
+    if (typeof value === "object" && value !== null && !isWithinNestingDepth(value, MAX_NESTING_DEPTH)) {
+      return NextResponse.json(
+        { error: "Property nesting too deep" },
+        { status: 400 }
+      );
+    }
+  }
+
+  // Sanitize properties (final safety pass — never write raw/secret-like properties)
+  const sanitizedProps = sanitizeProperties(rawProps);
 
   // Record event (fail-open — storage failure does not affect response)
   try {

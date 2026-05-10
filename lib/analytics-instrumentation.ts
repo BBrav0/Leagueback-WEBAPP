@@ -14,6 +14,9 @@ import { recordAnalyticsEvent, sanitizeRoutePath, sanitizeProperties } from "./a
 const SERVER_VISITOR_ID = "server-route-instrument";
 const SERVER_SESSION_ID = "server-route-session-01";
 
+/** Maximum time (ms) to wait for a thrown-error analytics write before rethrowing. */
+const ENDPOINT_ERROR_WRITE_TIMEOUT_MS = 2000;
+
 /** Derives a failure category from HTTP status code. */
 function failureCategory(status: number): string {
   if (status === 429) return "rate_limited";
@@ -41,6 +44,10 @@ export interface NeonClient {
  * after the handler completes, and never allows analytics failures to affect
  * the route response.
  *
+ * For thrown handler errors, the endpoint_error analytics write is awaited
+ * with a bounded timeout so the event is recorded before rethrowing,
+ * preserving both analytics reliability and original route error semantics.
+ *
  * @param routeTemplate - Scrubbed route identifier (e.g., "/api/account")
  * @param handler - The original Next.js route handler
  * @param neonClientOrFactory - Either a NeonClient or a function that returns one (may throw)
@@ -67,7 +74,7 @@ export function instrumentRoute<
       response = new Response(null, { status: 500 });
     }
 
-    // Emit analytics event in background (fire-and-forget, fail-open)
+    // Emit analytics event
     const status = response.status;
     const eventName = status >= 400 ? "endpoint_error" : "endpoint_outcome";
 
@@ -92,7 +99,34 @@ export function instrumentRoute<
       return response;
     }
 
-    // Fire-and-forget — never await in a way that could throw to the caller
+    if (thrownError !== undefined) {
+      // Thrown handler error: await the analytics write with bounded timeout
+      // so the endpoint_error event is recorded before rethrowing.
+      try {
+        const writePromise = recordAnalyticsEvent(
+          eventName,
+          SERVER_VISITOR_ID,
+          SERVER_SESSION_ID,
+          properties,
+          neonClient
+        );
+        await Promise.race([
+          writePromise,
+          new Promise<void>((resolve) =>
+            setTimeout(resolve, ENDPOINT_ERROR_WRITE_TIMEOUT_MS)
+          ),
+        ]);
+      } catch {
+        // Bounded fail-open: analytics write failure or timeout does not
+        // suppress the original error.
+      }
+
+      // Re-throw the original error to preserve route error semantics
+      throw thrownError;
+    }
+
+    // Non-thrown case: fire-and-forget — never await in a way that could
+    // delay or throw to the caller.
     recordAnalyticsEvent(
       eventName,
       SERVER_VISITOR_ID,
@@ -103,8 +137,6 @@ export function instrumentRoute<
       // Suppress — analytics failure must never affect route behavior
     });
 
-    // Re-throw the original error to preserve route error semantics
-    if (thrownError !== undefined) throw thrownError;
     return response;
   };
 }

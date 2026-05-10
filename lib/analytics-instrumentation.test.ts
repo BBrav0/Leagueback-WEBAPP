@@ -189,10 +189,7 @@ describe("instrumentRoute", () => {
       wrapped(new Request("http://localhost/api/test-throws"))
     ).rejects.toThrow("Unexpected internal failure");
 
-    // Wait for async analytics event
-    await new Promise((r) => setTimeout(r, 10));
-
-    // Should emit exactly one endpoint_error event
+    // The endpoint_error write is now awaited before rethrow, so no setTimeout needed
     expect(mockRecordEvent).toHaveBeenCalledTimes(1);
     expect(mockRecordEvent).toHaveBeenCalledWith(
       "endpoint_error",
@@ -245,7 +242,7 @@ describe("instrumentRoute", () => {
       expect((err as TypeError).message).toBe("Cannot read property of undefined");
     }
 
-    await new Promise((r) => setTimeout(r, 10));
+    // Write is awaited, no setTimeout needed
     expect(mockRecordEvent).toHaveBeenCalledTimes(1);
   });
 
@@ -260,8 +257,70 @@ describe("instrumentRoute", () => {
       wrapped(new Request("http://localhost/api/test"))
     ).rejects.toThrow("Route crashed");
 
-    await new Promise((r) => setTimeout(r, 10));
-    // Analytics was attempted even though it failed
+    // Write is awaited (fail-open), no setTimeout needed
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+  });
+
+  // Round-2 scrutiny regression: thrown-handler endpoint_error write is awaited
+  it("awaits the endpoint_error write for thrown handlers before rethrowing", async () => {
+    let writeResolved = false;
+    mockRecordEvent.mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+      writeResolved = true;
+      return { success: true };
+    });
+
+    const handler = vi.fn().mockRejectedValue(new Error("Handler crashed"));
+    const wrapped = instrumentRoute("/api/await-test", handler, mockNeonClient);
+
+    await expect(
+      wrapped(new Request("http://localhost/api/await-test"))
+    ).rejects.toThrow("Handler crashed");
+
+    // The write must have completed (not just started) because we awaited it
+    expect(writeResolved).toBe(true);
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+  });
+
+  // Round-2 scrutiny regression: bounded timeout on thrown-handler write
+  it("rethrows even if the endpoint_error write hangs beyond the timeout", async () => {
+    // Make the write hang for longer than the timeout
+    mockRecordEvent.mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 5000)); // 5s delay
+      return { success: true };
+    });
+
+    const handler = vi.fn().mockRejectedValue(new Error("Handler error"));
+    const wrapped = instrumentRoute("/api/timeout-test", handler, mockNeonClient);
+
+    const start = Date.now();
+    await expect(
+      wrapped(new Request("http://localhost/api/timeout-test"))
+    ).rejects.toThrow("Handler error");
+    const elapsed = Date.now() - start;
+
+    // Should not wait the full 5s — bounded by the timeout
+    expect(elapsed).toBeLessThan(3000);
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+  });
+
+  // Round-2 scrutiny: non-thrown success paths remain fire-and-forget
+  it("does not await analytics write for successful (non-thrown) responses", async () => {
+    let writeStarted = false;
+    mockRecordEvent.mockImplementation(async () => {
+      writeStarted = true;
+      await new Promise((r) => setTimeout(r, 100));
+      return { success: true };
+    });
+
+    const handler = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const wrapped = instrumentRoute("/api/fire-forget", handler, mockNeonClient);
+
+    const response = await wrapped(new Request("http://localhost/api/fire-forget"));
+    expect(response.status).toBe(200);
+
+    // Analytics was initiated (fire-and-forget)
+    await new Promise((r) => setTimeout(r, 150));
     expect(mockRecordEvent).toHaveBeenCalledTimes(1);
   });
 });

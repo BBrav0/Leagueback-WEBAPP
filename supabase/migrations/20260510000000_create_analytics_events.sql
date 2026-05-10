@@ -32,8 +32,14 @@ CREATE INDEX idx_analytics_events_event_name
 -- Enable RLS (analytics writes are server-side only via service_role key)
 ALTER TABLE public.analytics_events ENABLE ROW LEVEL SECURITY;
 
--- Server-side service_role can insert/select
-CREATE POLICY "Allow service_role full access" ON public.analytics_events
-  FOR ALL USING (true) WITH CHECK (true);
+-- Restrict all operations to the service_role (postgres role used by Neon serverless driver).
+-- anon/authenticated roles cannot read or write raw analytics rows.
+CREATE POLICY "Service role full access" ON public.analytics_events
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- No anon/public read — analytics data is protected
+-- Explicitly block anon and authenticated roles (defense in depth)
+CREATE POLICY "Block anon access" ON public.analytics_events
+  AS RESTRICTIVE FOR ALL TO anon USING (false) WITH CHECK (false);
+
+CREATE POLICY "Block authenticated access" ON public.analytics_events
+  AS RESTRICTIVE FOR ALL TO authenticated USING (false) WITH CHECK (false);
