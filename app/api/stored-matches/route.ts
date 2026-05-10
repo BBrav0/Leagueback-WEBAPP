@@ -4,8 +4,9 @@ import {
   getValidationFixtureStoredMatches,
   VALIDATION_FIXTURE_ACCOUNT,
 } from "@/lib/validation-fixture";
+import { instrumentRoute, analyticsNeonClient } from "@/lib/analytics-instrumentation";
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const puuid = searchParams.get("puuid");
   const limitParam = searchParams.get("limit");
@@ -52,3 +53,5 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+export const GET = instrumentRoute("/api/stored-matches", _GET, analyticsNeonClient);

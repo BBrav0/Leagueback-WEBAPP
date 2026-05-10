@@ -6,8 +6,9 @@ import {
 } from "@/lib/validation-fixture";
 import { getPlayerSyncMetadata } from "@/lib/database-queries";
 import { checkSyncGate } from "@/lib/sync-gate";
+import { instrumentRoute, analyticsNeonClient } from "@/lib/analytics-instrumentation";
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const puuid = searchParams.get("puuid");
   const count = parseInt(searchParams.get("count") ?? "10", 10);
@@ -40,3 +41,5 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+export const GET = instrumentRoute("/api/match-history", _GET, analyticsNeonClient);

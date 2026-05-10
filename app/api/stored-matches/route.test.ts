@@ -11,6 +11,15 @@ vi.mock("@/lib/validation-fixture", () => ({
   getValidationFixtureStoredMatches: vi.fn(),
 }));
 
+vi.mock("@/lib/analytics-instrumentation", () => ({
+  instrumentRoute: (_template: string, handler: any) => handler,
+  analyticsNeonClient: () => ({ sql: vi.fn() }),
+}));
+
+vi.mock("@/lib/neon", () => ({
+  getSql: () => vi.fn(),
+}));
+
 describe("GET /api/stored-matches", () => {
   beforeEach(() => {
     vi.resetModules();

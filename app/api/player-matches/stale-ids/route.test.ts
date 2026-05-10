@@ -11,6 +11,11 @@ vi.mock("@/lib/neon", () => ({
   getSql: () => mockSql,
 }));
 
+vi.mock("@/lib/analytics-instrumentation", () => ({
+  instrumentRoute: (_template: string, handler: any) => handler,
+  analyticsNeonClient: () => ({ sql: vi.fn() }),
+}));
+
 describe("POST /api/player-matches/stale-ids", () => {
   beforeEach(() => {
     vi.resetModules();

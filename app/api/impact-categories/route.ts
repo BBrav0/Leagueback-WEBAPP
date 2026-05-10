@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getImpactCategoriesForUser, getRecentImpactCategories } from "@/lib/database-queries";
+import { instrumentRoute, analyticsNeonClient } from "@/lib/analytics-instrumentation";
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const puuid = searchParams.get("puuid");
   const limitParam = searchParams.get("limit");
@@ -33,3 +34,5 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+export const GET = instrumentRoute("/api/impact-categories", _GET, analyticsNeonClient);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSql } from "@/lib/neon";
 import { getPlayerMatchRowsForStaleCheck, type PlayerSyncMetadataRow } from "@/lib/database-queries";
+import { instrumentRoute, analyticsNeonClient } from "@/lib/analytics-instrumentation";
 
 const CURRENT_DERIVATION_VERSION = "match-summary-v2";
 
@@ -22,7 +23,7 @@ function readPerMatchRecord(
   );
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   try {
     const body = (await request.json()) as {
       puuid?: string;
@@ -140,3 +141,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export const POST = instrumentRoute("/api/player-matches/stale-ids", _POST, analyticsNeonClient);

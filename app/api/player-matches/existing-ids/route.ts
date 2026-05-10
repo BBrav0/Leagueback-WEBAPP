@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSql } from "@/lib/neon";
+import { instrumentRoute, analyticsNeonClient } from "@/lib/analytics-instrumentation";
 
 const MAX_IDS = 100;
 const MATCH_ID_PATTERN = /^[A-Z0-9_]+$/i;
@@ -8,7 +9,7 @@ function isValidMatchId(matchId: string): boolean {
   return MATCH_ID_PATTERN.test(matchId);
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   try {
     const body = await request.json();
     const puuid = typeof body?.puuid === "string" ? body.puuid : undefined;
@@ -58,3 +59,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export const POST = instrumentRoute("/api/player-matches/existing-ids", _POST, analyticsNeonClient);

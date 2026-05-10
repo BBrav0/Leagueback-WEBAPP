@@ -18,7 +18,7 @@ TypeScript types are included — no `@types/pg` needed.
 ## Connection String Format
 
 ```
-postgresql://username:password@ep-adjective-noun-123456.us-east-2.aws.neon.tech/neondb?sslmode=require
+<NEON_DATABASE_URL>
 ```
 
 Environment variable: `DATABASE_URL`

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPlayerSyncMetadata, upsertPlayerSyncMetadata } from "@/lib/database-queries";
+import { instrumentRoute, analyticsNeonClient } from "@/lib/analytics-instrumentation";
 
 function serializeLastSyncAt(lastSyncAt: string | Date | null | undefined): string | null {
   if (!lastSyncAt) return null;
@@ -7,7 +8,7 @@ function serializeLastSyncAt(lastSyncAt: string | Date | null | undefined): stri
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const puuid = searchParams.get("puuid");
 
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   let body: { puuid?: string };
   try {
     body = await request.json();
@@ -97,3 +98,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export const GET = instrumentRoute("/api/player-sync-status", _GET, analyticsNeonClient);
+export const POST = instrumentRoute("/api/player-sync-status", _POST, analyticsNeonClient);

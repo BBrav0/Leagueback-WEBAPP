@@ -4,8 +4,9 @@ import {
   VALIDATION_FIXTURE_ACCOUNT,
   VALIDATION_FIXTURE_DETAILS,
 } from "@/lib/validation-fixture";
+import { instrumentRoute, analyticsNeonClient } from "@/lib/analytics-instrumentation";
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const matchId = searchParams.get("matchId");
   const userPuuid = searchParams.get("userPuuid");
@@ -34,3 +35,5 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+export const GET = instrumentRoute("/api/match-details", _GET, analyticsNeonClient);

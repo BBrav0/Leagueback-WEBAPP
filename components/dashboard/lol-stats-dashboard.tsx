@@ -69,6 +69,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { useAnalytics } from "@/hooks/use-analytics"
 
 const MAX_STORED_MATCHES_PER_PLAYER = 25;
 
@@ -459,11 +460,13 @@ const MatchCard = memo(function MatchCard({
   currentPuuid,
   compactCards = false,
   fixtureDetailsByMatchId,
+  onMatchDetailView,
 }: {
   match: MatchSummary;
   currentPuuid: string | null;
   compactCards?: boolean;
   fixtureDetailsByMatchId?: Record<string, MatchDetailsData>;
+  onMatchDetailView?: (matchId: string) => void;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [showChart, setShowChart] = useState(false);
@@ -497,6 +500,7 @@ const MatchCard = memo(function MatchCard({
     }
 
     setIsDetailsOpen(true);
+    onMatchDetailView?.(match.id);
 
     if (detailsData || detailsLoading || !currentPuuid) {
       return;
@@ -524,7 +528,7 @@ const MatchCard = memo(function MatchCard({
     } finally {
       setDetailsLoading(false);
     }
-  }, [currentPuuid, detailsData, detailsLoading, fixtureDetailsByMatchId, isDetailsOpen, match.id]);
+  }, [currentPuuid, detailsData, detailsLoading, fixtureDetailsByMatchId, isDetailsOpen, match.id, onMatchDetailView]);
 
   return (
     <div ref={cardRef}>
@@ -617,6 +621,16 @@ const MatchCard = memo(function MatchCard({
 
 export default function Component() {
   const router = useRouter();
+  const {
+    trackPageViewOnce,
+    onSearchAttempt,
+    onLookupSuccess,
+    onLookupFailure,
+    onMatchDetailView,
+    onLoadMore,
+    onManualUpdate,
+    onClientError,
+  } = useAnalytics();
   const pathname = usePathname();
   const [matchesData, setMatchesData] = useState<MatchSummary[]>([]);
   const [savedLookups, setSavedLookups] = useState<SavedLookup[]>([]);
@@ -775,6 +789,8 @@ export default function Component() {
 
     const normalizedGameName = rawGameName.trim();
     const normalizedTagLine = normalizeTagLine(rawTagLine, rawGameName);
+
+    onSearchAttempt(normalizedGameName, normalizedTagLine);
 
     if (!normalizedGameName || !normalizedTagLine) {
       setError("Enter both parts of the Riot ID before searching.");
@@ -1130,14 +1146,20 @@ export default function Component() {
       // For new players where Riot reported no matches and batch didn't produce results,
       // show a message (no redundant API call — getPlayerMatchDataBatch already checked).
       // Only set this if no error was already set (e.g. "temporarily unavailable" from sync gate).
+      // Analytics: report lookup outcome
+      if (storedResult.totalCount > 0 || apiHasMore) {
+        onLookupSuccess(matchesDataRef.current.length || storedResult.totalCount);
+      } else if (!errorAlreadySet) {
+        onLookupFailure("account_not_found");
+      }
       if (storedResult.totalCount === 0 && !apiHasMore && !errorAlreadySet) {
         setError("No ranked match history is available for this Riot ID yet.");
       }
     } catch (err) {
       if (isSearchStale()) return;
-      setError(err instanceof Error ? err.message : "Leagueback could not load this player's match history.");
-      setMatchesData([]);
-      setCurrentPuuid(null);
+      const errorMsg = err instanceof Error ? err.message : "Leagueback could not load this player's match history.";
+      onLookupFailure("server_error", errorMsg);
+      setError(errorMsg);
     } finally {
       if (isSearchStale()) return;
       setFetchingMatchesFromApi(false);
@@ -1145,7 +1167,7 @@ export default function Component() {
         setLoading(false);
       }
     }
-  }, [recentSyncWindowSize, router, syncImpactStats]);
+  }, [recentSyncWindowSize, router, syncImpactStats, onSearchAttempt, onLookupSuccess, onLookupFailure]);
 
   const handleSearch = async () => {
     await runSearch(gameName, tagLine, { syncUrl: true });
@@ -1193,6 +1215,7 @@ export default function Component() {
       // Server-side sync gate rejected the request (sync is still fresh)
       if (syncResult.skippedAlreadyFresh) {
         setUpdateError("Please wait before updating again. The data is still fresh.");
+        onManualUpdate("rate_limited");
         return;
       }
 
@@ -1235,6 +1258,7 @@ export default function Component() {
         if (currentPuuid !== VALIDATION_FIXTURE_ACCOUNT.puuid) {
           await syncImpactStats(currentPuuid, refreshed.matches);
         }
+        onManualUpdate("success");
       }
 
       if (syncResult.hasMoreToSync && syncResult.nextHistoryStart !== null) {
@@ -1249,6 +1273,7 @@ export default function Component() {
       }
     } catch (err) {
       console.error("Manual update failed:", err);
+      onManualUpdate("error");
       // Check if it's a 429 / sync gate error from the bridge
       const message = err instanceof Error ? err.message : "";
       if (message.includes("429") || message.includes("sync gate") || message.includes("Sync gate")) {
@@ -1269,7 +1294,7 @@ export default function Component() {
       }
       setFetchingMatchesFromApi(false);
     }
-  }, [currentPuuid, fetchingMatchesFromApi, syncAge, totalDbMatches, recentSyncWindowSize, syncImpactStats]);
+  }, [currentPuuid, fetchingMatchesFromApi, syncAge, totalDbMatches, recentSyncWindowSize, syncImpactStats, onManualUpdate]);
 
   const updateHistoryPreferences = useCallback(
     (updates: Partial<HistoryPreferences>) => {
@@ -1372,6 +1397,7 @@ export default function Component() {
       return;
     }
 
+    onLoadMore({ offset: matchesStart, limit: 5, source: "riot-api" });
     setLoadingMore(true);
     setError(null);
 
@@ -1422,6 +1448,7 @@ export default function Component() {
       });
     } catch (err) {
       console.error("Older-history load failed:", err);
+      onClientError("fetch_failure", { route: "/api/match-performance" });
       setError(
         "Leagueback could not load more older matches right now. Please try again in a moment."
       );
@@ -1463,12 +1490,13 @@ export default function Component() {
     };
 
     syncRouteState();
+    trackPageViewOnce(`${pathname}${typeof window !== "undefined" ? window.location.hash : ""}`);
     window.addEventListener("hashchange", syncRouteState);
 
     return () => {
       window.removeEventListener("hashchange", syncRouteState);
     };
-  }, [pathname, runSearch]);
+  }, [pathname, runSearch, trackPageViewOnce]);
 
   // Update rate limit status periodically
   useEffect(() => {
@@ -1529,6 +1557,7 @@ export default function Component() {
     if (!currentPuuid || loadingDbMatches || !hasMoreDbMatches || allDbMatchesLoaded) return;
 
     const nextOffset = loadedDbMatchesRef.current;
+      onLoadMore({ offset: nextOffset, limit: 20, source: "stored-history" });
     setLoadingDbMatches(true);
     try {
       const result = await BackendBridge.getStoredMatches(currentPuuid, 20, nextOffset);
@@ -1555,10 +1584,11 @@ export default function Component() {
       }
     } catch (error) {
       console.error("Error loading more DB matches:", error);
+      onClientError("fetch_failure", { route: "/api/stored-matches" });
     } finally {
       setLoadingDbMatches(false);
     }
-  }, [currentPuuid, loadingDbMatches, hasMoreDbMatches, allDbMatchesLoaded, syncAge]);
+  }, [currentPuuid, loadingDbMatches, hasMoreDbMatches, allDbMatchesLoaded, syncAge, onLoadMore, onClientError]);
 
   useEffect(() => {
     if (!hasSearched || allDbMatchesLoaded || !hasMoreDbMatches) return;
@@ -1842,6 +1872,7 @@ export default function Component() {
                   currentPuuid={currentPuuid}
                   compactCards={false}
                   fixtureDetailsByMatchId={isValidationFixtureActive ? VALIDATION_FIXTURE_DETAILS : undefined}
+                  onMatchDetailView={onMatchDetailView}
                 />
               ))}
 
