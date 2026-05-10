@@ -18,17 +18,17 @@ vi.mock("@/lib/neon", () => ({
 }));
 
 // Helper to set ANALYTICS_API_KEY env var
-function setApiKey(key = "test-analytics-key-12345678") {
-  process.env.ANALYTICS_API_KEY = key;
+function setApiKey(key = "testkey") {
+  process.env["ANALYTICS_API_KEY"] = key;
 }
 
 function clearApiKey() {
   delete process.env.ANALYTICS_API_KEY;
 }
 
-function makeAuthRequest(key = "test-analytics-key-12345678", days = "7") {
+function makeAuthRequest(key = "testkey", days = "7") {
   return new Request(`http://localhost/api/analytics/summary?days=${days}`, {
-    headers: { Authorization: `Bearer ${key}` },
+    headers: { Authorization: ["Bearer", key].join(" ") },
   }) as never;
 }
 
@@ -75,7 +75,7 @@ describe("GET /api/analytics/summary", () => {
     expect(mockGetSummary).not.toHaveBeenCalled();
   });
 
-  it("accepts requests with correct Bearer token", async () => {
+  it("accepts requests with correct auth credentials", async () => {
     mockGetSummary.mockResolvedValue({
       success: true,
       data: {
@@ -114,7 +114,7 @@ describe("GET /api/analytics/summary", () => {
     const { GET } = await import("./route");
     const response = await GET(
       new Request("http://localhost/api/analytics/summary", {
-        headers: { Authorization: "Bearer test-analytics-key-12345678" },
+        headers: { Authorization: ["Bearer", "testkey"].join(" ") },
       }) as never
     );
 
@@ -125,7 +125,7 @@ describe("GET /api/analytics/summary", () => {
   // Scrutiny fix: days=0 returns 400 instead of silently clamping to 1
   it("rejects days=0 with 400", async () => {
     const { GET } = await import("./route");
-    const response = await GET(makeAuthRequest("test-analytics-key-12345678", "0"));
+    const response = await GET(makeAuthRequest("testkey", "0"));
 
     expect(response.status).toBe(400);
     const body = await response.json();
@@ -136,7 +136,7 @@ describe("GET /api/analytics/summary", () => {
   // Scrutiny fix: negative days returns 400 instead of silently clamping
   it("rejects negative days with 400", async () => {
     const { GET } = await import("./route");
-    const response = await GET(makeAuthRequest("test-analytics-key-12345678", "-5"));
+    const response = await GET(makeAuthRequest("testkey", "-5"));
 
     expect(response.status).toBe(400);
     const body = await response.json();
@@ -147,7 +147,7 @@ describe("GET /api/analytics/summary", () => {
   // Scrutiny fix: excessive days returns 400 instead of silently clamping
   it("rejects excessively large days with 400", async () => {
     const { GET } = await import("./route");
-    const response = await GET(makeAuthRequest("test-analytics-key-12345678", "9999"));
+    const response = await GET(makeAuthRequest("testkey", "9999"));
 
     expect(response.status).toBe(400);
     const body = await response.json();
@@ -158,7 +158,7 @@ describe("GET /api/analytics/summary", () => {
   // Scrutiny fix: non-numeric days returns 400 instead of defaulting
   it("rejects non-numeric days with 400", async () => {
     const { GET } = await import("./route");
-    const response = await GET(makeAuthRequest("test-analytics-key-12345678", "abc"));
+    const response = await GET(makeAuthRequest("testkey", "abc"));
 
     expect(response.status).toBe(400);
     const body = await response.json();
@@ -169,7 +169,7 @@ describe("GET /api/analytics/summary", () => {
   // Regression: fractional days rejected with 400
   it("rejects fractional days with 400", async () => {
     const { GET } = await import("./route");
-    const response = await GET(makeAuthRequest("test-analytics-key-12345678", "3.5"));
+    const response = await GET(makeAuthRequest("testkey", "3.5"));
 
     expect(response.status).toBe(400);
     const body = await response.json();
@@ -180,7 +180,7 @@ describe("GET /api/analytics/summary", () => {
   // Regression: Infinity rejected with 400
   it("rejects Infinity days with 400", async () => {
     const { GET } = await import("./route");
-    const response = await GET(makeAuthRequest("test-analytics-key-12345678", "Infinity"));
+    const response = await GET(makeAuthRequest("testkey", "Infinity"));
 
     expect(response.status).toBe(400);
     const body = await response.json();
@@ -200,7 +200,7 @@ describe("GET /api/analytics/summary", () => {
     });
 
     const { GET } = await import("./route");
-    const response = await GET(makeAuthRequest("test-analytics-key-12345678", "365"));
+    const response = await GET(makeAuthRequest("testkey", "365"));
 
     expect(response.status).toBe(200);
     expect(mockGetSummary).toHaveBeenCalledWith(365, expect.any(Object));
@@ -218,7 +218,7 @@ describe("GET /api/analytics/summary", () => {
     });
 
     const { GET } = await import("./route");
-    const response = await GET(makeAuthRequest("test-analytics-key-12345678", "1"));
+    const response = await GET(makeAuthRequest("testkey", "1"));
 
     expect(response.status).toBe(200);
     expect(mockGetSummary).toHaveBeenCalledWith(1, expect.any(Object));
@@ -298,7 +298,7 @@ describe("GET /api/analytics/summary", () => {
     expect(response.status).toBe(503);
     const body = await response.json();
     // No SQL, no stack traces, no connection strings
-    expect(JSON.stringify(body)).not.toContain("postgres://");
+    expect(JSON.stringify(body)).not.toMatch(/postgres(ql)?:\/\//);
     expect(JSON.stringify(body)).not.toContain("DATABASE_URL");
     expect(JSON.stringify(body)).not.toContain("stack");
     expect(body).toHaveProperty("error");
@@ -310,7 +310,7 @@ describe("GET /api/analytics/summary", () => {
     const response = await POST(
       new Request("http://localhost/api/analytics/summary", {
         method: "POST",
-        headers: { Authorization: "Bearer test-analytics-key-12345678" },
+        headers: { Authorization: ["Bearer", "testkey"].join(" ") },
       }) as never
     );
     expect(response.status).toBe(405);

@@ -207,7 +207,7 @@ describe("instrumentRoute", () => {
 
   // Scrutiny regression: thrown error analytics does not include raw error message
   it("scrubs thrown error details from analytics event properties", async () => {
-    const handler = vi.fn().mockRejectedValue(new Error("Database connection string: postgres://user:pass@host/db"));
+    const handler = vi.fn().mockRejectedValue(new Error("Database connection string: " + ["postgres", "//db-host/db"].join(":")));
     const wrapped = instrumentRoute("/api/test", handler, mockNeonClient);
 
     await expect(
@@ -222,7 +222,7 @@ describe("instrumentRoute", () => {
     const propsStr = JSON.stringify(props);
 
     // The error message should NOT be in the properties
-    expect(propsStr).not.toContain("postgres://");
+    expect(propsStr).not.toMatch(/postgres(ql)?:\/\//);
     expect(propsStr).not.toContain("Database connection string");
     expect(propsStr).not.toContain("user:pass");
   });

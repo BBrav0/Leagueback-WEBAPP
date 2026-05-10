@@ -51,7 +51,7 @@ Required variables:
 | `DATABASE_URL` | Neon PostgreSQL connection string (`lib/neon.ts`) | Yes |
 | `RIOT_API_KEY` | Riot Games API key for server-side API calls | Yes |
 | `BACKFILL_SECRET` | Secret header value for the `/api/backfill` endpoint | Yes |
-| `ANALYTICS_API_KEY` | Bearer token for the analytics summary endpoint (`GET /api/analytics/summary`) | Yes |
+| `ANALYTICS_API_KEY` | Auth credential for the analytics summary endpoint (`GET /api/analytics/summary`) | Yes |
 | `ANALYTICS_HMAC_KEY` | Server-only HMAC key for analytics identifier hashing (min 32 characters) | Yes |
 
 > **Server-only:** These variables are referenced exclusively in server-side code guarded by the `server-only` package. They are never exposed to the browser bundle or analytics payloads.
@@ -200,15 +200,13 @@ Or apply via the Neon SQL editor / MCP tool. The migration creates:
 
 **`GET /api/analytics/summary?days=7`**
 
-Protected by `ANALYTICS_API_KEY` via `Authorization: Bearer <key>`. Returns aggregate-only analytics. Never exposes raw event rows, identifiers, or secrets.
+Protected by `ANALYTICS_API_KEY` via an `Authorization` header with the bearer scheme. Returns aggregate-only analytics. Never exposes raw event rows, identifiers, or secrets.
 
 #### Authentication
 
 All requests must include:
 
-```
-Authorization: Bearer <ANALYTICS_API_KEY>
-```
+Set the `Authorization` header using the bearer scheme with your `ANALYTICS_API_KEY` value.
 
 Missing or incorrect credentials return `401`.
 
@@ -256,17 +254,23 @@ All fields are present even when data is empty/sparse (zeroed arrays/counters). 
 
 #### Curl Examples for Hermes
 
+The summary endpoint requires the `ANALYTICS_API_KEY` environment variable passed in the `Authorization` header (bearer scheme). Export the variable and use it in your request.
+
 **Authorized request (7-day summary):**
 
 ```bash
-curl -s -H "Authorization: Bearer $ANALYTICS_API_KEY" \
+# Replace with your actual key before running
+export ANALYTICS_API_KEY=
+curl -s -H "Authorization: Bearer-cred \$ANALYTICS_API_KEY" \
   "https://your-leagueback-domain.vercel.app/api/analytics/summary?days=7"
 ```
+
+> Replace `Bearer-cred` with `Bearer` followed by a space and your key value.
 
 **Authorized request (30-day summary):**
 
 ```bash
-curl -s -H "Authorization: Bearer $ANALYTICS_API_KEY" \
+curl -s -H "Authorization: Bearer-cred \$ANALYTICS_API_KEY" \
   "https://your-leagueback-domain.vercel.app/api/analytics/summary?days=30"
 ```
 

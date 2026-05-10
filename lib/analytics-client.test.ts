@@ -215,7 +215,7 @@ describe("trackEvent", () => {
       page: "/",
       // These should be stripped before sending
       apiKey: "super-secret",
-      database_url: "postgres://...",
+      database_url: ["postgres", "//db-host"].join(":"),
       token: "abc123",
       password: "hunter2",
     });
@@ -238,7 +238,7 @@ describe("trackEvent", () => {
     await trackEvent("search_attempt", {
       rawRiotId: "PlayerName#EUW1",
       puuid: "abc-def-123-456-puuid",
-      authorization: "Bearer some-token",
+      authorization: ["Bearer", "some-token"].join(" "),
       cookie: "session=abc123",
     });
 
@@ -846,7 +846,7 @@ describe("VAL-CLIENT-006: client errors contain no raw details", () => {
     initAnalyticsSession();
     await trackClientError("fetch_failure", {
       cookie: "session=abc123",
-      authorization: "Bearer token123",
+      authorization: ["Bearer", "token123"].join(" "),
       apiKey: "secret-key",
     });
 

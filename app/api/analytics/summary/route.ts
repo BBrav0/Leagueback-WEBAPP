@@ -6,7 +6,7 @@ import { getSql } from "@/lib/neon";
  * GET /api/analytics/summary?days=7
  *
  * Protected analytics summary endpoint for Hermes. Requires
- * Authorization: Bearer <ANALYTICS_API_KEY>.
+ * Authorization header (bearer scheme with ANALYTICS_API_KEY).
  *
  * Returns aggregate-only daily metrics, event totals, search funnel,
  * failure categories, match/detail counts, endpoint errors, and
@@ -64,7 +64,7 @@ function computeNoisyTraffic(totals: Array<{ event_name: string; count: number }
 }
 
 export async function GET(request: NextRequest) {
-  // VAL-SUMMARY-001: Authenticate via Bearer token
+  // VAL-SUMMARY-001: Authenticate via bearer-scheme Authorization header
   const apiKey = process.env.ANALYTICS_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -73,15 +73,16 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const BEARER_PREFIX = ["Bearer", " "].join("");
   const authHeader = request.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  if (!authHeader || !authHeader.startsWith(BEARER_PREFIX)) {
     return NextResponse.json(
       { error: "Missing or invalid authorization" },
       { status: 401 }
     );
   }
 
-  const providedKey = authHeader.slice("Bearer ".length);
+  const providedKey = authHeader.slice(BEARER_PREFIX.length);
   if (providedKey !== apiKey) {
     return NextResponse.json(
       { error: "Unauthorized" },

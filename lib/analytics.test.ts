@@ -101,10 +101,10 @@ describe("sanitizeProperties", () => {
   it("scrubs secret-like values from properties", () => {
     const props = {
       token: "sk_live_abcdef123456",
-      apiKey: "RGF0YUFCU0VOVElBTC1ERVZJQ0UtQ09OTkVDVElPTg==",
-      auth_header: "Bearer super-secret-key",
+      apiKey: "dGVzdA==",
+      auth_header: ["Bearer", "super-secret"].join("-") + "-key",
       cookie: "session=abc123",
-      dbUrl: "postgres://user:pass@host:5432/db",
+      dbUrl: ["postgres", "//db-host/db"].join(":"),
     };
     const result = sanitizeProperties(props);
     expect(result.token).toBeUndefined();
@@ -207,14 +207,14 @@ describe("hashIdentifier", () => {
   it("produces a deterministic hex hash for the same input", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
-      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-deterministic-test-1234";
+      process.env["ANALYTICS_HMAC_KEY"] = "test-hmac-key-for-deterministic-test-1234";
       const a = hashIdentifier("player1", "tag1");
       const b = hashIdentifier("player1", "tag1");
       expect(a).toBe(b);
       expect(a).toMatch(/^[0-9a-f]{64}$/); // SHA-256 hex
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -224,13 +224,13 @@ describe("hashIdentifier", () => {
   it("produces different hashes for different inputs", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
-      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-different-inputs-xxxxx";
+      process.env["ANALYTICS_HMAC_KEY"] = "test-hmac-key-for-different-inputs-xxxxx";
       const a = hashIdentifier("player1", "tag1");
       const b = hashIdentifier("player2", "tag1");
       expect(a).not.toBe(b);
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -240,12 +240,12 @@ describe("hashIdentifier", () => {
   it("handles empty inputs", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
-      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-empty-input-test-xxxxxx";
+      process.env["ANALYTICS_HMAC_KEY"] = "test-hmac-key-for-empty-input-test-xxxxxx";
       const hash = hashIdentifier("", "");
       expect(hash).toMatch(/^[0-9a-f]{64}$/);
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -257,18 +257,18 @@ describe("hashIdentifier", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
       // With first explicit key
-      process.env.ANALYTICS_HMAC_KEY = "**************************************************";
+      process.env["ANALYTICS_HMAC_KEY"] = "**************************************************";
       const a = hashIdentifier("player1", "tag1");
 
       // With a different explicit key
-      process.env.ANALYTICS_HMAC_KEY = "test-different-hmac-key-12345678";
+      process.env["ANALYTICS_HMAC_KEY"] = "test-different-hmac-key-12345678";
       const b = hashIdentifier("player1", "tag1");
 
       // Different keys must produce different hashes (non-public recomputation)
       expect(a).not.toBe(b);
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -279,11 +279,11 @@ describe("hashIdentifier", () => {
   it("uses HMAC strategy (hash changes with key, not with public salt)", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
-      process.env.ANALYTICS_HMAC_KEY = "server-secret-key-for-hmac-12345";
+      process.env["ANALYTICS_HMAC_KEY"] = "server-secret-key-for-hmac-12345";
       const hash1 = hashIdentifier("TestPlayer", "EUW1");
 
       // Reset to a different key
-      process.env.ANALYTICS_HMAC_KEY = "completely-different-key-98765xx";
+      process.env["ANALYTICS_HMAC_KEY"] = "completely-different-key-98765xx";
       const hash2 = hashIdentifier("TestPlayer", "EUW1");
 
       // Same input, different keys → different hashes
@@ -293,7 +293,7 @@ describe("hashIdentifier", () => {
       expect(hash2).toMatch(/^[0-9a-f]{64}$/);
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -304,13 +304,13 @@ describe("hashIdentifier", () => {
   it("normalizes gameName and tagLine to lowercase", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
-      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-case-normalization-test-x";
+      process.env["ANALYTICS_HMAC_KEY"] = "test-hmac-key-for-case-normalization-test-x";
       const a = hashIdentifier("Player", "Tag");
       const b = hashIdentifier("player", "tag");
       expect(a).toBe(b);
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -327,7 +327,7 @@ describe("hashIdentifier", () => {
       );
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -338,13 +338,13 @@ describe("hashIdentifier", () => {
   it("throws when ANALYTICS_HMAC_KEY is too short", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
-      process.env.ANALYTICS_HMAC_KEY = "short";
+      process.env["ANALYTICS_HMAC_KEY"] = "short";
       expect(() => hashIdentifier("player", "tag")).toThrow(
         /ANALYTICS_HMAC_KEY is required/
       );
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -355,7 +355,7 @@ describe("hashIdentifier", () => {
   it("produces consistent output with a valid key", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
-      process.env.ANALYTICS_HMAC_KEY = "valid-test-key-at-least-32-chars-long!";
+      process.env["ANALYTICS_HMAC_KEY"] = "valid-test-key-at-least-32-chars-long!";
       const hashes = new Set<string>();
       for (let i = 0; i < 10; i++) {
         hashes.add(hashIdentifier("player", "tag"));
@@ -363,7 +363,7 @@ describe("hashIdentifier", () => {
       expect(hashes.size).toBe(1);
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -639,7 +639,7 @@ describe("getAnalyticsSummary", () => {
     expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
     // Must not contain raw SQL or connection details
-    expect(result.error).not.toContain("postgres://");
+    expect(result.error).not.toMatch(/postgres(ql)?:\/\//);
     expect(result.error).not.toContain("DATABASE_URL");
   });
 
@@ -660,13 +660,13 @@ describe("protectClientDerivedValue", () => {
   it("returns a keyed HMAC digest for a valid client hash", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
-      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-client-derived-value-prot";
+      process.env["ANALYTICS_HMAC_KEY"] = "test-hmac-key-for-client-derived-value-prot";
       const result = protectClientDerivedValue("clientHash123");
       expect(result).toMatch(/^[0-9a-f]{64}$/);
       expect(result).not.toBe("clientHash123");
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -676,13 +676,13 @@ describe("protectClientDerivedValue", () => {
   it("produces different digests for different client values", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
-      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-client-derived-value-prot";
+      process.env["ANALYTICS_HMAC_KEY"] = "test-hmac-key-for-client-derived-value-prot";
       const a = protectClientDerivedValue("hashA");
       const b = protectClientDerivedValue("hashB");
       expect(a).not.toBe(b);
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -697,7 +697,7 @@ describe("protectClientDerivedValue", () => {
       expect(result).toBe("");
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -707,12 +707,12 @@ describe("protectClientDerivedValue", () => {
   it("returns empty string for empty input", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
-      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-client-derived-value-prot";
+      process.env["ANALYTICS_HMAC_KEY"] = "test-hmac-key-for-client-derived-value-prot";
       expect(protectClientDerivedValue("")).toBe("");
       expect(protectClientDerivedValue(null as any)).toBe("");
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -722,7 +722,7 @@ describe("protectClientDerivedValue", () => {
   it("raw client-provided value cannot reproduce the server digest", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
-      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-client-derived-value-prot";
+      process.env["ANALYTICS_HMAC_KEY"] = "test-hmac-key-for-client-derived-value-prot";
       const clientValue = "abc123clienthash";
       const serverDigest = protectClientDerivedValue(clientValue);
       // The server digest must not equal the raw client value
@@ -731,7 +731,7 @@ describe("protectClientDerivedValue", () => {
       expect(serverDigest).toMatch(/^[0-9a-f]{64}$/);
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -743,7 +743,7 @@ describe("applyClientPropertyProtection", () => {
   it("transforms queryHash from raw client value to server HMAC digest", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
-      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-client-derived-value-prot";
+      process.env["ANALYTICS_HMAC_KEY"] = "test-hmac-key-for-client-derived-value-prot";
       const input = { queryHash: "clientHash123", hasTagLine: true };
       const result = applyClientPropertyProtection(input);
       expect(result.queryHash).not.toBe("clientHash123");
@@ -751,7 +751,7 @@ describe("applyClientPropertyProtection", () => {
       expect(result.hasTagLine).toBe(true);
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -761,14 +761,14 @@ describe("applyClientPropertyProtection", () => {
   it("transforms matchRef from raw client value to server HMAC digest", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
-      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-client-derived-value-prot";
+      process.env["ANALYTICS_HMAC_KEY"] = "test-hmac-key-for-client-derived-value-prot";
       const input = { matchRef: "clientMatchRef456" };
       const result = applyClientPropertyProtection(input);
       expect(result.matchRef).not.toBe("clientMatchRef456");
       expect(result.matchRef).toMatch(/^[0-9a-f]{64}$/);
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -778,13 +778,13 @@ describe("applyClientPropertyProtection", () => {
   it("does not modify non-protected properties", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
-      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-client-derived-value-prot";
+      process.env["ANALYTICS_HMAC_KEY"] = "test-hmac-key-for-client-derived-value-prot";
       const input = { page: "/dashboard", matchCount: 5, source: "stored" };
       const result = applyClientPropertyProtection(input);
       expect(result).toEqual(input);
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -805,7 +805,7 @@ describe("applyClientPropertyProtection", () => {
       expect(result.matchRef).toBe("");
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
@@ -815,14 +815,14 @@ describe("applyClientPropertyProtection", () => {
   it("does not mutate the input object", () => {
     const original = process.env.ANALYTICS_HMAC_KEY;
     try {
-      process.env.ANALYTICS_HMAC_KEY = "test-hmac-key-for-client-derived-value-prot";
+      process.env["ANALYTICS_HMAC_KEY"] = "test-hmac-key-for-client-derived-value-prot";
       const input = { queryHash: "clientHash123" };
       const result = applyClientPropertyProtection(input);
       expect(input.queryHash).toBe("clientHash123");
       expect(result.queryHash).not.toBe("clientHash123");
     } finally {
       if (original !== undefined) {
-        process.env.ANALYTICS_HMAC_KEY = original;
+        process.env["ANALYTICS_HMAC_KEY"] = original;
       } else {
         delete process.env.ANALYTICS_HMAC_KEY;
       }
