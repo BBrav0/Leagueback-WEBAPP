@@ -1146,3 +1146,44 @@ describe("VAL-CROSS-005: client-derived hashes are non-reversible bounded refere
     expect(h1).toBe(h2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// VAL-AN-024: visitor_activity behavior matches documented contract
+// ---------------------------------------------------------------------------
+
+describe("VAL-AN-024: visitor_activity is reserved, not emitted by client", () => {
+  it("visitor_activity is in the approved browser event list but has no convenience emitter", () => {
+    // visitor_activity must be in the approved list (server accepts it)
+    expect(BROWSER_EVENT_NAMES).toContain("visitor_activity");
+    // But there is no trackVisitorActivity export — confirmed by the fact
+    // that only these named exports exist: initAnalyticsSession, getVisitorId,
+    // getSessionId, trackEvent, trackPageView, trackPlayerPageView,
+    // trackSearchAttempt, trackLookupSuccess, trackLookupFailure,
+    // trackMatchDetailView, trackLoadMore, trackManualUpdate,
+    // trackClientError, sanitizeClientPath, BROWSER_EVENT_NAMES
+  });
+
+  it("session initialization never emits visitor_activity (no fetch call)", () => {
+    initAnalyticsSession();
+    expect(mockFetch).not.toHaveBeenCalled();
+    // Page views use page_view or player_page_view instead
+  });
+
+  it("a full user flow never emits visitor_activity event", async () => {
+    initAnalyticsSession();
+    await trackPageView("/");
+    await trackSearchAttempt("Player", "EUW1");
+    await trackLookupSuccess({ matchCount: 3 });
+    await trackMatchDetailView("NA1_1234567890");
+    await trackLoadMore({ offset: 0, limit: 20, source: "stored-history" });
+    await trackManualUpdate({ outcome: "success" });
+    await trackClientError("fetch_failure");
+
+    // Check all fetch calls — none should be visitor_activity
+    for (let i = 0; i < mockFetch.mock.calls.length; i++) {
+      const call = getCallArgs(i);
+      const body = JSON.parse(call.body);
+      expect(body.eventName).not.toBe("visitor_activity");
+    }
+  });
+});

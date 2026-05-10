@@ -171,7 +171,7 @@ Or apply via the Neon SQL editor / MCP tool. The migration creates:
 - `idx_analytics_events_session_id` — index for session-scoped queries
 - `idx_analytics_events_visitor_id` — index for visitor-scoped queries
 - `idx_analytics_events_event_name` — index for event name filtering
-- Row-level security policies restricting access to the `service_role` only
+- Row-level security enabled: the table owner (Neon connection role) bypasses RLS; all other roles are blocked
 
 > **Note:** The migration is idempotent-safe for review but should be applied once. Existing product tables (`accounts`, `match_cache`, `player_matches`) are not modified.
 
@@ -180,7 +180,7 @@ Or apply via the Neon SQL editor / MCP tool. The migration creates:
 | Event Name | Trigger Point | Allowed Properties | Privacy Treatment |
 |---|---|---|---|
 | `page_view` | Homepage or generic page load | `page` (sanitized path), `referrer` (coarse category) | Route paths stripped of player identifiers; no raw Riot IDs |
-| `visitor_activity` | Session initialization | Same as `page_view` | Anonymous visitor/session IDs only |
+| `visitor_activity` | Reserved (not currently emitted) | Same as `page_view` | Accepted by ingest but not emitted by the browser client; session initialization uses `page_view` instead |
 | `search_attempt` | User submits Riot ID search | `queryHash` (client-side hash), `hasTagLine` | Raw game name / tag line never sent; client-side hash + server HMAC |
 | `lookup_success` | Account/match data resolve | `matchCount` | No raw PUUID, Riot ID, or match IDs |
 | `lookup_failure` | Lookup fails with reason | `failureCategory` (bounded enum) | Bounded to approved categories; no raw error messages |

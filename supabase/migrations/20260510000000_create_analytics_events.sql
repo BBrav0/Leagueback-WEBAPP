@@ -2,6 +2,10 @@
 --
 -- Stores privacy-light, first-party analytics events for Leagueback.
 -- Dedicated analytics objects — does not modify existing product cache tables.
+--
+-- Neon/PostgreSQL-compatible: the table owner role bypasses RLS by default,
+-- so server-side writes via the Neon connection role are unaffected.
+-- RLS blocks any non-owner direct access.
 
 -- Main analytics events table
 CREATE TABLE public.analytics_events (
@@ -29,17 +33,13 @@ CREATE INDEX idx_analytics_events_visitor_id
 CREATE INDEX idx_analytics_events_event_name
   ON public.analytics_events (event_name, created_at DESC);
 
--- Enable RLS (analytics writes are server-side only via service_role key)
+-- Enable RLS (analytics writes are server-side only via the Neon connection role)
+-- The table owner bypasses RLS, so server-side code using the connection role
+-- can read and write freely. RLS blocks non-owner roles from accessing data.
 ALTER TABLE public.analytics_events ENABLE ROW LEVEL SECURITY;
 
--- Restrict all operations to the service_role (postgres role used by Neon serverless driver).
--- anon/authenticated roles cannot read or write raw analytics rows.
-CREATE POLICY "Service role full access" ON public.analytics_events
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
-
--- Explicitly block anon and authenticated roles (defense in depth)
-CREATE POLICY "Block anon access" ON public.analytics_events
-  AS RESTRICTIVE FOR ALL TO anon USING (false) WITH CHECK (false);
-
-CREATE POLICY "Block authenticated access" ON public.analytics_events
-  AS RESTRICTIVE FOR ALL TO authenticated USING (false) WITH CHECK (false);
+-- Default restrictive policy: block all non-owner access.
+-- The table owner (Neon connection role) bypasses RLS automatically.
+-- No additional GRANT is needed — ownership provides full access.
+CREATE POLICY "Owner bypass only" ON public.analytics_events
+  AS RESTRICTIVE FOR ALL TO PUBLIC USING (false) WITH CHECK (false);
