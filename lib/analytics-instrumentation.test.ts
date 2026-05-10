@@ -177,7 +177,95 @@ describe("instrumentRoute", () => {
     expect(propsStr).not.toContain("gameName");
     expect(propsStr).not.toContain("tagLine");
   });
+
+  // Scrutiny regression: thrown handler errors emit exactly one sanitized endpoint_error
+  it("emits one endpoint_error event when handler throws", async () => {
+    const handlerError = new Error("Unexpected internal failure");
+    const handler = vi.fn().mockRejectedValue(handlerError);
+    const wrapped = instrumentRoute("/api/test-throws", handler, mockNeonClient);
+
+    // The wrapped handler should re-throw the error (preserve route semantics)
+    await expect(
+      wrapped(new Request("http://localhost/api/test-throws"))
+    ).rejects.toThrow("Unexpected internal failure");
+
+    // Wait for async analytics event
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Should emit exactly one endpoint_error event
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+    expect(mockRecordEvent).toHaveBeenCalledWith(
+      "endpoint_error",
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({
+        route: "/api/test-throws",
+        status: 500,
+        statusClass: "5xx",
+        failureCategory: "unhandled_exception",
+      }),
+      mockNeonClient
+    );
+  });
+
+  // Scrutiny regression: thrown error analytics does not include raw error message
+  it("scrubs thrown error details from analytics event properties", async () => {
+    const handler = vi.fn().mockRejectedValue(new Error("Database connection string: postgres://user:pass@host/db"));
+    const wrapped = instrumentRoute("/api/test", handler, mockNeonClient);
+
+    await expect(
+      wrapped(new Request("http://localhost/api/test"))
+    ).rejects.toThrow();
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+    const callArgs = mockRecordEvent.mock.calls[0];
+    const props = callArgs[3];
+    const propsStr = JSON.stringify(props);
+
+    // The error message should NOT be in the properties
+    expect(propsStr).not.toContain("postgres://");
+    expect(propsStr).not.toContain("Database connection string");
+    expect(propsStr).not.toContain("user:pass");
+  });
+
+  // Scrutiny regression: thrown error still re-throws (preserves route semantics)
+  it("preserves original thrown error type and message", async () => {
+    const originalError = new TypeError("Cannot read property of undefined");
+    const handler = vi.fn().mockRejectedValue(originalError);
+    const wrapped = instrumentRoute("/api/test", handler, mockNeonClient);
+
+    try {
+      await wrapped(new Request("http://localhost/api/test"));
+      expect.fail("Should have thrown");
+    } catch (err) {
+      expect(err).toBe(originalError);
+      expect(err).toBeInstanceOf(TypeError);
+      expect((err as TypeError).message).toBe("Cannot read property of undefined");
+    }
+
+    await new Promise((r) => setTimeout(r, 10));
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+  });
+
+  // Scrutiny regression: analytics failure during thrown error handling does not suppress the original error
+  it("still re-throws original error when analytics write fails during thrown error", async () => {
+    mockRecordEvent.mockRejectedValue(new Error("Analytics DB down"));
+    const originalError = new Error("Route crashed");
+    const handler = vi.fn().mockRejectedValue(originalError);
+    const wrapped = instrumentRoute("/api/test", handler, mockNeonClient);
+
+    await expect(
+      wrapped(new Request("http://localhost/api/test"))
+    ).rejects.toThrow("Route crashed");
+
+    await new Promise((r) => setTimeout(r, 10));
+    // Analytics was attempted even though it failed
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+  });
 });
+
 
 describe("instrumentRouteModule", () => {
   const mockNeonClient = { sql: vi.fn() };

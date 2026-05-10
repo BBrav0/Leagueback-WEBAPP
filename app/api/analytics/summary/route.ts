@@ -94,16 +94,35 @@ export async function GET(request: NextRequest) {
   const daysParam = searchParams.get("days");
   let days: number;
   if (!daysParam) {
-    days = 7;
+    days = 7; // default
   } else {
+    // Reject non-conforming values with 400 instead of silently clamping
     const parsed = Number(daysParam);
     if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
-      days = 7;
-    } else {
-      days = Math.round(parsed);
+      return NextResponse.json(
+        { error: "Invalid days parameter: must be a finite number" },
+        { status: 400 }
+      );
     }
-    // Clamp to valid range
-    days = Math.min(Math.max(days, 1), 365);
+    if (parsed !== Math.round(parsed)) {
+      return NextResponse.json(
+        { error: "Invalid days parameter: must be an integer" },
+        { status: 400 }
+      );
+    }
+    if (parsed <= 0) {
+      return NextResponse.json(
+        { error: "Invalid days parameter: must be positive" },
+        { status: 400 }
+      );
+    }
+    if (parsed > 365) {
+      return NextResponse.json(
+        { error: "Invalid days parameter: must be at most 365" },
+        { status: 400 }
+      );
+    }
+    days = parsed;
   }
 
   // Query analytics summary

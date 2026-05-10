@@ -218,6 +218,60 @@ describe("hashIdentifier", () => {
     const hash = hashIdentifier("", "");
     expect(hash).toMatch(/^[0-9a-f]{64}$/);
   });
+
+  // Scrutiny regression: HMAC uses server-only key, not public salt
+  it("produces different hashes when ANALYTICS_HMAC_KEY changes", () => {
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      // With default key
+      const a = hashIdentifier("player1", "tag1");
+
+      // With a different explicit key
+      process.env.ANALYTICS_HMAC_KEY = "test-different-hmac-key-12345678";
+      const b = hashIdentifier("player1", "tag1");
+
+      // Different keys must produce different hashes (non-public recomputation)
+      expect(a).not.toBe(b);
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
+  });
+
+  // Scrutiny regression: hash cannot be reproduced without the HMAC key
+  it("uses HMAC strategy (hash changes with key, not with public salt)", () => {
+    const original = process.env.ANALYTICS_HMAC_KEY;
+    try {
+      process.env.ANALYTICS_HMAC_KEY = "server-secret-key-for-hmac-12345";
+      const hash1 = hashIdentifier("TestPlayer", "EUW1");
+
+      // Reset to a different key
+      process.env.ANALYTICS_HMAC_KEY = "completely-different-key-98765";
+      const hash2 = hashIdentifier("TestPlayer", "EUW1");
+
+      // Same input, different keys → different hashes
+      expect(hash1).not.toBe(hash2);
+      // Both must still be valid hex
+      expect(hash1).toMatch(/^[0-9a-f]{64}$/);
+      expect(hash2).toMatch(/^[0-9a-f]{64}$/);
+    } finally {
+      if (original !== undefined) {
+        process.env.ANALYTICS_HMAC_KEY = original;
+      } else {
+        delete process.env.ANALYTICS_HMAC_KEY;
+      }
+    }
+  });
+
+  // Case normalization still applies
+  it("normalizes gameName and tagLine to lowercase", () => {
+    const a = hashIdentifier("Player", "Tag");
+    const b = hashIdentifier("player", "tag");
+    expect(a).toBe(b);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -328,6 +382,121 @@ describe("recordAnalyticsEvent (fail-open)", () => {
     // In the neon sql tagged template, values are the interpolated expressions
     // We just need to verify sql was called (properties sanitization already tested above)
     expect(sqlTemplate).toBeDefined();
+  });
+
+  // Scrutiny regression: client timestamps are bounded at write time
+  it("applies boundTimestamp to client-provided timestamps", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-10T12:00:00.000Z"));
+
+    const sql = vi.fn().mockResolvedValue([{ id: 1 }]);
+
+    // A future timestamp should be clamped to server now
+    const futureTs = "2027-01-01T00:00:00.000Z";
+    await recordAnalyticsEvent(
+      "page_view",
+      "visitor-12345678",
+      "session-12345678",
+      { page: "/" },
+      { sql } as any,
+      futureTs
+    );
+
+    expect(sql).toHaveBeenCalledTimes(1);
+    // The timestamp in the SQL call should be server now, not the future timestamp
+    const callArgs = sql.mock.calls[0];
+    // Timestamp is the 5th interpolated value in the tagged template
+    const storedTs = callArgs[5]; // eventName, visitorId, sessionId, properties, timestamp
+    // Server now = 2026-05-10T12:00:00.000Z
+    expect(new Date(storedTs).getTime()).toBeLessThanOrEqual(
+      new Date("2026-05-10T12:00:00.000Z").getTime() + 1000
+    );
+
+    vi.useRealTimers();
+  });
+
+  // Scrutiny regression: very old client timestamps are replaced with server now
+  it("replaces timestamps older than 24 hours with server now", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-10T12:00:00.000Z"));
+
+    const sql = vi.fn().mockResolvedValue([{ id: 1 }]);
+
+    // A timestamp from 10 days ago should be replaced with server now
+    const oldTs = "2026-04-30T00:00:00.000Z";
+    await recordAnalyticsEvent(
+      "page_view",
+      "visitor-12345678",
+      "session-12345678",
+      { page: "/" },
+      { sql } as any,
+      oldTs
+    );
+
+    expect(sql).toHaveBeenCalledTimes(1);
+    const callArgs = sql.mock.calls[0];
+    const storedTs = callArgs[5];
+    const storedDate = new Date(storedTs);
+    // Should be server now (2026-05-10), not the old date (2026-04-30)
+    expect(storedDate.getTime()).toBeGreaterThanOrEqual(
+      new Date("2026-05-09T12:00:00.000Z").getTime()
+    );
+
+    vi.useRealTimers();
+  });
+
+  // Scrutiny regression: no client timestamp uses server now
+  it("uses server now when no client timestamp is provided", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-10T12:00:00.000Z"));
+
+    const sql = vi.fn().mockResolvedValue([{ id: 1 }]);
+
+    await recordAnalyticsEvent(
+      "page_view",
+      "visitor-12345678",
+      "session-12345678",
+      { page: "/" },
+      { sql } as any
+      // No clientTimestamp
+    );
+
+    expect(sql).toHaveBeenCalledTimes(1);
+    const callArgs = sql.mock.calls[0];
+    const storedTs = callArgs[5];
+    const storedDate = new Date(storedTs);
+    expect(storedDate.getTime()).toBeGreaterThanOrEqual(
+      new Date("2026-05-10T12:00:00.000Z").getTime()
+    );
+
+    vi.useRealTimers();
+  });
+
+  // Scrutiny regression: valid recent client timestamps are preserved
+  it("preserves valid recent client timestamps", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-10T12:00:00.000Z"));
+
+    const sql = vi.fn().mockResolvedValue([{ id: 1 }]);
+
+    // A timestamp from 5 minutes ago should be preserved
+    const recentTs = "2026-05-10T11:55:00.000Z";
+    await recordAnalyticsEvent(
+      "page_view",
+      "visitor-12345678",
+      "session-12345678",
+      { page: "/" },
+      { sql } as any,
+      recentTs
+    );
+
+    expect(sql).toHaveBeenCalledTimes(1);
+    const callArgs = sql.mock.calls[0];
+    const storedTs = callArgs[5];
+    // Should preserve the client timestamp (within 1 second tolerance)
+    expect(Math.abs(new Date(storedTs).getTime() - new Date(recentTs).getTime())).toBeLessThan(1000);
+
+    vi.useRealTimers();
   });
 });
 

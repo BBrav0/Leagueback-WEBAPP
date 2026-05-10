@@ -122,39 +122,74 @@ describe("GET /api/analytics/summary", () => {
     expect(mockGetSummary).toHaveBeenCalledWith(7, expect.any(Object));
   });
 
-  it("clamps days=0 to 1", async () => {
-    mockGetSummary.mockResolvedValue({
-      success: true,
-      data: {
-        daily: [], totals: [], searchFunnel: { attempts: 0, successes: 0, failures: 0 },
-        failureCategories: {}, matchDetailCounts: { matches: 0, details: 0 },
-        endpointErrors: [], noisyTraffic: { rejectedEvents: 0 },
-      },
-    });
-
+  // Scrutiny fix: days=0 returns 400 instead of silently clamping to 1
+  it("rejects days=0 with 400", async () => {
     const { GET } = await import("./route");
-    await GET(makeAuthRequest("test-analytics-key-12345678", "0"));
+    const response = await GET(makeAuthRequest("test-analytics-key-12345678", "0"));
 
-    expect(mockGetSummary).toHaveBeenCalledWith(1, expect.any(Object));
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body).toHaveProperty("error");
+    expect(mockGetSummary).not.toHaveBeenCalled();
   });
 
-  it("clamps negative days to 1", async () => {
-    mockGetSummary.mockResolvedValue({
-      success: true,
-      data: {
-        daily: [], totals: [], searchFunnel: { attempts: 0, successes: 0, failures: 0 },
-        failureCategories: {}, matchDetailCounts: { matches: 0, details: 0 },
-        endpointErrors: [], noisyTraffic: { rejectedEvents: 0 },
-      },
-    });
-
+  // Scrutiny fix: negative days returns 400 instead of silently clamping
+  it("rejects negative days with 400", async () => {
     const { GET } = await import("./route");
-    await GET(makeAuthRequest("test-analytics-key-12345678", "-5"));
+    const response = await GET(makeAuthRequest("test-analytics-key-12345678", "-5"));
 
-    expect(mockGetSummary).toHaveBeenCalledWith(1, expect.any(Object));
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body).toHaveProperty("error");
+    expect(mockGetSummary).not.toHaveBeenCalled();
   });
 
-  it("clamps excessively large days to 365", async () => {
+  // Scrutiny fix: excessive days returns 400 instead of silently clamping
+  it("rejects excessively large days with 400", async () => {
+    const { GET } = await import("./route");
+    const response = await GET(makeAuthRequest("test-analytics-key-12345678", "9999"));
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body).toHaveProperty("error");
+    expect(mockGetSummary).not.toHaveBeenCalled();
+  });
+
+  // Scrutiny fix: non-numeric days returns 400 instead of defaulting
+  it("rejects non-numeric days with 400", async () => {
+    const { GET } = await import("./route");
+    const response = await GET(makeAuthRequest("test-analytics-key-12345678", "abc"));
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body).toHaveProperty("error");
+    expect(mockGetSummary).not.toHaveBeenCalled();
+  });
+
+  // Regression: fractional days rejected with 400
+  it("rejects fractional days with 400", async () => {
+    const { GET } = await import("./route");
+    const response = await GET(makeAuthRequest("test-analytics-key-12345678", "3.5"));
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body).toHaveProperty("error");
+    expect(mockGetSummary).not.toHaveBeenCalled();
+  });
+
+  // Regression: Infinity rejected with 400
+  it("rejects Infinity days with 400", async () => {
+    const { GET } = await import("./route");
+    const response = await GET(makeAuthRequest("test-analytics-key-12345678", "Infinity"));
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body).toHaveProperty("error");
+    expect(mockGetSummary).not.toHaveBeenCalled();
+  });
+
+  // Regression: days=365 is the maximum valid value
+  it("accepts days=365 as maximum valid value", async () => {
     mockGetSummary.mockResolvedValue({
       success: true,
       data: {
@@ -165,12 +200,14 @@ describe("GET /api/analytics/summary", () => {
     });
 
     const { GET } = await import("./route");
-    await GET(makeAuthRequest("test-analytics-key-12345678", "9999"));
+    const response = await GET(makeAuthRequest("test-analytics-key-12345678", "365"));
 
+    expect(response.status).toBe(200);
     expect(mockGetSummary).toHaveBeenCalledWith(365, expect.any(Object));
   });
 
-  it("handles non-numeric days by defaulting to 7", async () => {
+  // Regression: days=1 is the minimum valid value
+  it("accepts days=1 as minimum valid value", async () => {
     mockGetSummary.mockResolvedValue({
       success: true,
       data: {
@@ -181,9 +218,10 @@ describe("GET /api/analytics/summary", () => {
     });
 
     const { GET } = await import("./route");
-    await GET(makeAuthRequest("test-analytics-key-12345678", "abc"));
+    const response = await GET(makeAuthRequest("test-analytics-key-12345678", "1"));
 
-    expect(mockGetSummary).toHaveBeenCalledWith(7, expect.any(Object));
+    expect(response.status).toBe(200);
+    expect(mockGetSummary).toHaveBeenCalledWith(1, expect.any(Object));
   });
 
   // VAL-SUMMARY-003: Summary response exposes aggregate analytics only

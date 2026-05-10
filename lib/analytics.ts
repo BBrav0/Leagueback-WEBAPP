@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -229,18 +229,31 @@ export function validateSessionId(id: string): boolean {
 // Identifier hashing
 // ---------------------------------------------------------------------------
 
+/** Fallback HMAC key used when ANALYTICS_HMAC_KEY is not configured. */
+const FALLBACK_HMAC_KEY = "leagueback-analytics-hmac-fallback";
+
 /**
- * Keyed SHA-256 hash for Riot identifiers.
- * Uses a fixed application salt to produce deterministic but non-reversible hashes.
- * The salt is not a secret — it exists to prevent trivial rainbow table attacks.
+ * Resolves the server-only HMAC key for identifier hashing.
+ * Prefers ANALYTICS_HMAC_KEY env var; falls back to a compiled-in key.
+ * The key is never exposed to the client.
+ */
+function getHmacKey(): string {
+  return process.env.ANALYTICS_HMAC_KEY || FALLBACK_HMAC_KEY;
+}
+
+/**
+ * Keyed HMAC-SHA-256 hash for Riot identifiers.
+ * Uses a server-only key (ANALYTICS_HMAC_KEY env var) to produce
+ * non-reversible, non-publicly-reproducible hashes. Callers without
+ * the server key cannot recompute the hash.
  */
 export function hashIdentifier(
   gameName: string,
   tagLine: string
 ): string {
-  const salt = "leagueback-analytics-id-v1";
-  const input = `${salt}:${gameName.toLowerCase()}#${tagLine.toLowerCase()}`;
-  return createHash("sha256").update(input).digest("hex");
+  const key = getHmacKey();
+  const input = `${gameName.toLowerCase()}#${tagLine.toLowerCase()}`;
+  return createHmac("sha256", key).update(input).digest("hex");
 }
 
 // ---------------------------------------------------------------------------
@@ -304,13 +317,15 @@ export interface AnalyticsWriteResult {
  * @param sessionId - Client session ID (validated)
  * @param properties - Raw properties (sanitized before storage)
  * @param neonClient - Neon SQL client (mockable for tests)
+ * @param clientTimestamp - Optional client-provided ISO timestamp (bounded server-side)
  */
 export async function recordAnalyticsEvent(
   eventName: string,
   visitorId: string,
   sessionId: string,
   properties: Record<string, unknown>,
-  neonClient: { sql: (...args: any[]) => Promise<any[]> }
+  neonClient: { sql: (...args: any[]) => Promise<any[]> },
+  clientTimestamp?: string
 ): Promise<AnalyticsWriteResult> {
   // Validate event name
   if (!validateEventName(eventName)) {
@@ -325,8 +340,9 @@ export async function recordAnalyticsEvent(
   // Sanitize properties
   const sanitizedProps = sanitizeProperties(properties);
 
-  // Bound timestamp (server-side)
-  const timestamp = new Date();
+  // Normalize and bound timestamp: if client provides one, clamp it;
+  // otherwise use server time. This prevents unbounded historical/future records.
+  const timestamp = boundTimestamp(clientTimestamp);
 
   // Fail-open write
   try {

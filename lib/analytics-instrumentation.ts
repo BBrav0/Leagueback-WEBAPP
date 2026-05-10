@@ -54,8 +54,18 @@ export function instrumentRoute<
   neonClientOrFactory: NeonClient | (() => NeonClient)
 ): (request: TReq) => Promise<Response> {
   return async (request: TReq): Promise<Response> => {
-    // Execute the original handler first — analytics must not interfere
-    const response = await handler(request);
+    let response: Response;
+    let thrownError: unknown = undefined;
+
+    // Execute the original handler — catch throws so we can emit analytics
+    // before re-throwing, preserving route error semantics.
+    try {
+      response = await handler(request);
+    } catch (err: unknown) {
+      thrownError = err;
+      // Construct a synthetic 500 response for analytics purposes
+      response = new Response(null, { status: 500 });
+    }
 
     // Emit analytics event in background (fire-and-forget, fail-open)
     const status = response.status;
@@ -66,7 +76,7 @@ export function instrumentRoute<
       method: request.method || "GET",
       status,
       statusClass: statusClass(status),
-      ...(status >= 400 ? { failureCategory: failureCategory(status) } : {}),
+      ...(status >= 400 ? { failureCategory: thrownError ? "unhandled_exception" : failureCategory(status) } : {}),
     });
 
     // Resolve the neon client lazily — if factory throws (e.g. no DATABASE_URL),
@@ -78,6 +88,7 @@ export function instrumentRoute<
         : neonClientOrFactory;
     } catch {
       // Cannot obtain a DB client — skip analytics, preserve route response
+      if (thrownError !== undefined) throw thrownError;
       return response;
     }
 
@@ -92,6 +103,8 @@ export function instrumentRoute<
       // Suppress — analytics failure must never affect route behavior
     });
 
+    // Re-throw the original error to preserve route error semantics
+    if (thrownError !== undefined) throw thrownError;
     return response;
   };
 }
