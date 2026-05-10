@@ -172,3 +172,33 @@ export async function GET(_request: NextRequest) {
     { status: 405 }
   );
 }
+
+/**
+ * PUT /api/analytics/ingest — rejected (POST only)
+ */
+export async function PUT(_request: NextRequest) {
+  return NextResponse.json(
+    { error: "Method not allowed" },
+    { status: 405 }
+  );
+}
+
+/**
+ * DELETE /api/analytics/ingest — rejected (POST only)
+ */
+export async function DELETE(_request: NextRequest) {
+  return NextResponse.json(
+    { error: "Method not allowed" },
+    { status: 405 }
+  );
+}
+
+/**
+ * PATCH /api/analytics/ingest — rejected (POST only)
+ */
+export async function PATCH(_request: NextRequest) {
+  return NextResponse.json(
+    { error: "Method not allowed" },
+    { status: 405 }
+  );
+}

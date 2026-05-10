@@ -171,3 +171,33 @@ export async function POST(_request: NextRequest) {
     { status: 405 }
   );
 }
+
+/**
+ * PUT /api/analytics/summary — rejected (GET only)
+ */
+export async function PUT(_request: NextRequest) {
+  return NextResponse.json(
+    { error: "Method not allowed" },
+    { status: 405 }
+  );
+}
+
+/**
+ * DELETE /api/analytics/summary — rejected (GET only)
+ */
+export async function DELETE(_request: NextRequest) {
+  return NextResponse.json(
+    { error: "Method not allowed" },
+    { status: 405 }
+  );
+}
+
+/**
+ * PATCH /api/analytics/summary — rejected (GET only)
+ */
+export async function PATCH(_request: NextRequest) {
+  return NextResponse.json(
+    { error: "Method not allowed" },
+    { status: 405 }
+  );
+}

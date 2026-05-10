@@ -351,3 +351,106 @@ describe("GET /api/analytics/summary", () => {
     expect(bodyStr).not.toContain("sessionId");
   });
 });
+
+// -----------------------------------------------------------------------
+// VAL-AN-026: Summary rejects all unsupported HTTP methods
+// -----------------------------------------------------------------------
+
+describe("unsupported HTTP methods on summary (VAL-AN-026)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env["ANALYTICS_API_KEY"] = "testkey";
+    mockGetSql.mockReturnValue({ sql: vi.fn() });
+  });
+
+  it("rejects PUT requests with 405", async () => {
+    const { PUT } = await import("./route");
+    const response = await PUT(
+      new Request("http://localhost/api/analytics/summary", { method: "PUT" }) as never
+    );
+    expect(response.status).toBe(405);
+    const body = await response.json();
+    expect(body.error).toBe("Method not allowed");
+    // Must not query analytics storage
+    expect(mockGetSummary).not.toHaveBeenCalled();
+  });
+
+  it("rejects DELETE requests with 405", async () => {
+    const { DELETE } = await import("./route");
+    const response = await DELETE(
+      new Request("http://localhost/api/analytics/summary", { method: "DELETE" }) as never
+    );
+    expect(response.status).toBe(405);
+    const body = await response.json();
+    expect(body.error).toBe("Method not allowed");
+    expect(mockGetSummary).not.toHaveBeenCalled();
+  });
+
+  it("rejects PATCH requests with 405", async () => {
+    const { PATCH } = await import("./route");
+    const response = await PATCH(
+      new Request("http://localhost/api/analytics/summary", { method: "PATCH" }) as never
+    );
+    expect(response.status).toBe(405);
+    const body = await response.json();
+    expect(body.error).toBe("Method not allowed");
+    expect(mockGetSummary).not.toHaveBeenCalled();
+  });
+
+  it("405 responses contain no sensitive details", async () => {
+    const { PUT } = await import("./route");
+    const response = await PUT(
+      new Request("http://localhost/api/analytics/summary", { method: "PUT" }) as never
+    );
+    const body = await response.json();
+    const bodyStr = JSON.stringify(body);
+    expect(bodyStr).not.toContain("DATABASE_URL");
+    expect(bodyStr).not.toContain("ANALYTICS");
+    expect(bodyStr).not.toContain("stack");
+  });
+});
+
+// -----------------------------------------------------------------------
+// VAL-AN-013 extended: Verify aggregate response contains no raw identifiers
+// -----------------------------------------------------------------------
+
+describe("summary response privacy (VAL-AN-013 extended)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env["ANALYTICS_API_KEY"] = "testkey";
+    mockGetSql.mockReturnValue({ sql: vi.fn() });
+  });
+
+  it("response body contains no Riot-shaped identifiers even when summary has data", async () => {
+    mockGetSummary.mockResolvedValue({
+      success: true,
+      data: {
+        daily: [
+          { day: "2026-05-10", event_name: "page_view", count: 42 },
+          { day: "2026-05-10", event_name: "search_attempt", count: 15 },
+        ],
+        totals: [
+          { event_name: "page_view", count: 100 },
+          { event_name: "search_attempt", count: 30 },
+        ],
+      },
+    });
+
+    const { GET } = await import("./route");
+    const response = await GET(makeAuthRequest());
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    const bodyStr = JSON.stringify(body);
+
+    // No Riot-shaped identifiers
+    expect(bodyStr).not.toMatch(/NA1_\d+/);
+    expect(bodyStr).not.toContain("puuid");
+    expect(bodyStr).not.toContain("summonerId");
+    expect(bodyStr).not.toContain("game_name");
+    expect(bodyStr).not.toContain("tag_line");
+    // No secrets or SQL
+    expect(bodyStr).not.toContain("SELECT");
+    expect(bodyStr).not.toContain("INSERT");
+    expect(bodyStr).not.toMatch(/postgres(ql)?:\/\//);
+  });
+});
