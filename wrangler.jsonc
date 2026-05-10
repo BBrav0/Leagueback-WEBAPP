@@ -13,3 +13,5 @@
 // - DATABASE_URL (Neon PostgreSQL connection string)
 // - BACKFILL_SECRET
 // - RIOT_API_KEY (calls Riot API directly from server-side routes)
+// - ANALYTICS_API_KEY (bearer token for GET /api/analytics/summary)
+// - ANALYTICS_HMAC_KEY (min 32 chars; server-side HMAC for analytics identifier hashing)
