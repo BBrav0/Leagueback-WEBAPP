@@ -4,6 +4,8 @@ import {
   isValidationFixtureIdentity,
   VALIDATION_FIXTURE_ACCOUNT,
 } from "@/lib/validation-fixture";
+import { instrumentRoute } from "@/lib/analytics-instrumentation";
+import { getSql } from "@/lib/neon";
 
 function canServeValidationFixture(request: NextRequest): boolean {
   if (process.env.NODE_ENV !== "development" && process.env.NODE_ENV !== "test") {
@@ -14,7 +16,7 @@ function canServeValidationFixture(request: NextRequest): boolean {
   return host === "localhost" || host === "127.0.0.1";
 }
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const rawGameName = searchParams.get("gameName");
   const rawTagLine = searchParams.get("tagLine");
@@ -51,3 +53,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+/** Neon client factory for analytics instrumentation. */
+function analyticsNeonClient() {
+  return { sql: getSql() };
+}
+
+export const GET = instrumentRoute("/api/account", _GET, analyticsNeonClient);

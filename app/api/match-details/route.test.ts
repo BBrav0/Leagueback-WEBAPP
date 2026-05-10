@@ -7,6 +7,14 @@ vi.mock("@/lib/database-queries", () => ({
   getMatchDetailsData,
 }));
 
+vi.mock("@/lib/analytics-instrumentation", () => ({
+  instrumentRoute: (_template: string, handler: any) => handler,
+}));
+
+vi.mock("@/lib/neon", () => ({
+  getSql: () => vi.fn(),
+}));
+
 describe("GET /api/match-details", () => {
   beforeEach(() => {
     getMatchDetailsData.mockReset();

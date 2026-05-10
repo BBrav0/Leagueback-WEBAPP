@@ -4,8 +4,10 @@ import {
   VALIDATION_FIXTURE_ACCOUNT,
   VALIDATION_FIXTURE_DETAILS,
 } from "@/lib/validation-fixture";
+import { instrumentRoute } from "@/lib/analytics-instrumentation";
+import { getSql } from "@/lib/neon";
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const matchId = searchParams.get("matchId");
   const userPuuid = searchParams.get("userPuuid");
@@ -34,3 +36,10 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+/** Neon client factory for analytics instrumentation. */
+function analyticsNeonClient() {
+  return { sql: getSql() };
+}
+
+export const GET = instrumentRoute("/api/match-details", _GET, analyticsNeonClient);

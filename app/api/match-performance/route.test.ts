@@ -40,6 +40,10 @@ vi.mock("@/lib/neon", () => ({
   getSql: () => mockSql,
 }));
 
+vi.mock("@/lib/analytics-instrumentation", () => ({
+  instrumentRoute: (_template: string, handler: any) => handler,
+}));
+
 describe("GET /api/match-performance", () => {
   beforeEach(() => {
     vi.resetModules();

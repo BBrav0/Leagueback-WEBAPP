@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getImpactCategoriesForUser, getRecentImpactCategories } from "@/lib/database-queries";
+import { instrumentRoute } from "@/lib/analytics-instrumentation";
+import { getSql } from "@/lib/neon";
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const puuid = searchParams.get("puuid");
   const limitParam = searchParams.get("limit");
@@ -33,3 +35,10 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+/** Neon client factory for analytics instrumentation. */
+function analyticsNeonClient() {
+  return { sql: getSql() };
+}
+
+export const GET = instrumentRoute("/api/impact-categories", _GET, analyticsNeonClient);

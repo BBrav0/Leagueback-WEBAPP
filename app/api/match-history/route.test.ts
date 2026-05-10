@@ -17,6 +17,14 @@ vi.mock("@/lib/validation-fixture", () => ({
   getValidationFixtureMatchHistory: () => ["FIXTURE_MATCH"],
 }));
 
+vi.mock("@/lib/analytics-instrumentation", () => ({
+  instrumentRoute: (_template: string, handler: any) => handler,
+}));
+
+vi.mock("@/lib/neon", () => ({
+  getSql: () => vi.fn(),
+}));
+
 describe("GET /api/match-history — sync gate", () => {
   beforeEach(() => {
     vi.resetModules();
