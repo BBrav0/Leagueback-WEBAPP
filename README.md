@@ -233,9 +233,9 @@ Missing or incorrect credentials return `401`.
     "failures": 8
   },
   "failureCategories": {
-    "lookup_failure": 8,
-    "client_error": 3,
-    "endpoint_error": 2
+    "lookup_failure": { "account_not_found": 5, "rate_limited": 3 },
+    "client_error": { "fetch_failure": 3 },
+    "endpoint_error": { "server_error": 2 }
   },
   "matchDetailCounts": {
     "matches": 95,
@@ -243,10 +243,7 @@ Missing or incorrect credentials return `401`.
   },
   "endpointErrors": [
     { "day": "2026-05-09", "count": 1 }
-  ],
-  "noisyTraffic": {
-    "rejectedEvents": 3
-  }
+  ]
 }
 ```
 
