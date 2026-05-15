@@ -499,3 +499,103 @@ describe("summary response privacy (VAL-AN-013 extended)", () => {
     expect(bodyStr).not.toMatch(/postgres(ql)?:\/\//);
   });
 });
+
+// -----------------------------------------------------------------------
+// VAL-SUMMARY-001 extended: Malformed authorization patterns
+// -----------------------------------------------------------------------
+
+describe("malformed authorization patterns (VAL-SUMMARY-001)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env["ANALYTICS_API_KEY"] = VALID_KEY;
+    mockGetSql.mockReturnValue({ sql: vi.fn() });
+  });
+
+  it("rejects Basic scheme with 401", async () => {
+    const { GET } = await import("./route");
+    const response = await GET(
+      new Request("http://localhost/api/analytics/summary?days=7", {
+        headers: { Authorization: "Basic dXNlcjpwYXNz" },
+      }) as never
+    );
+
+    expect(response.status).toBe(401);
+    expect(mockGetSummary).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty Bearer token with 401", async () => {
+    const { GET } = await import("./route");
+    const response = await GET(
+      new Request("http://localhost/api/analytics/summary?days=7", {
+        headers: { Authorization: "Bearer " },
+      }) as never
+    );
+
+    expect(response.status).toBe(401);
+    expect(mockGetSummary).not.toHaveBeenCalled();
+  });
+
+  it("rejects Authorization header without scheme with 401", async () => {
+    const { GET } = await import("./route");
+    const response = await GET(
+      new Request("http://localhost/api/analytics/summary?days=7", {
+        headers: { Authorization: "just-a-raw-token-value" },
+      }) as never
+    );
+
+    expect(response.status).toBe(401);
+    expect(mockGetSummary).not.toHaveBeenCalled();
+  });
+});
+
+// -----------------------------------------------------------------------
+// VAL-SUMMARY-011: Storage completely unavailable (getSql throws)
+// -----------------------------------------------------------------------
+
+describe("storage completely unavailable (VAL-SUMMARY-011)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env["ANALYTICS_API_KEY"] = VALID_KEY;
+  });
+
+  it("returns 503 when getSql throws without leaking details", async () => {
+    mockGetSql.mockImplementation(() => {
+      throw new Error("Neon client not available");
+    });
+
+    const { GET } = await import("./route");
+    const response = await GET(makeAuthRequest());
+
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body).toHaveProperty("error");
+    // No SQL, no stack traces, no connection strings
+    const bodyStr = JSON.stringify(body);
+    expect(bodyStr).not.toMatch(/postgres(ql)?:\/\//);
+    expect(bodyStr).not.toContain("DATABASE_URL");
+    expect(bodyStr).not.toContain("stack");
+    expect(bodyStr).not.toContain("Neon");
+    expect(mockGetSummary).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 when getAnalyticsSummary resolves with success false and a long error", async () => {
+    mockGetSql.mockReturnValue({ sql: vi.fn() });
+    mockGetSummary.mockResolvedValue({
+      success: false,
+      error: "Analytics summary query failed: connection refused at postgres://user:pass@host/db with very long detail that should be truncated safely without leaking internals",
+    });
+
+    const { GET } = await import("./route");
+    const response = await GET(makeAuthRequest());
+
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body).toHaveProperty("error");
+    // The route returns a generic "Analytics summary unavailable" — no leaked detail
+    expect(body.error).toBe("Analytics summary unavailable");
+    const bodyStr = JSON.stringify(body);
+    expect(bodyStr).not.toMatch(/postgres(ql)?:\/\//);
+    expect(bodyStr).not.toContain("user:pass");
+    expect(bodyStr).not.toContain("DATABASE_URL");
+  });
+});
